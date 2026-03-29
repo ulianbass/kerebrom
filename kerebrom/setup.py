@@ -406,6 +406,11 @@ def run_setup(
         _FIRST_RUN_MARKER.parent.mkdir(parents=True, exist_ok=True)
         _FIRST_RUN_MARKER.write_text("1")
 
+    # On fresh install, check for backup to restore.
+    backup_msg = _check_and_restore_backup(db_path, quiet=quiet)
+    if backup_msg:
+        results["backup_restore"] = backup_msg
+
     if not quiet:
         if first_run and configured > 0:
             tool_names = [name for name, info in results["tools"].items() if info["configured"]]
@@ -418,6 +423,66 @@ def run_setup(
             print("No se detectaron AI tools instalados.")
 
     return results
+
+
+def _check_and_restore_backup(
+    db_path: Path,
+    passphrase: Optional[str] = None,
+    quiet: bool = False,
+) -> Optional[str]:
+    """Search for .kbk backup files and restore organically if found.
+
+    Only triggers on fresh installs (empty database).
+    """
+    from .backup import find_latest_backup, restore_organic, validate_backup
+    from .store import KerebromStore
+
+    # Only restore on fresh DB (no memories yet).
+    if db_path.exists():
+        try:
+            store = KerebromStore(db_path, passphrase=passphrase)
+            store.initialize()
+            existing = store.export_memories(include_inactive=False)
+            store.close()
+            if existing:
+                return None  # DB already has memories, skip.
+        except Exception:
+            return None
+
+    backup_path = find_latest_backup()
+    if not backup_path:
+        return None
+
+    info = validate_backup(backup_path)
+    if not info.get("valid"):
+        return None
+
+    if not quiet:
+        print("\n  Backup encontrado: {} ({} memorias, {})".format(
+            backup_path.name,
+            info["memory_count"],
+            info["created_at"],
+        ))
+        print("  Restaurando orgánicamente...")
+
+    try:
+        store = KerebromStore(db_path, passphrase=passphrase)
+        store.initialize()
+        result = restore_organic(store, backup_path)
+        store.close()
+
+        msg = "Backup restaurado: {} memorias ingresadas, {} duplicados saltados".format(
+            result["restored"],
+            result["skipped_duplicate"],
+        )
+        if not quiet:
+            print("  {}".format(msg))
+        return msg
+    except Exception as exc:
+        msg = "Error al restaurar backup: {}".format(str(exc)[:100])
+        if not quiet:
+            print("  {}".format(msg))
+        return msg
 
 
 def ensure_setup(

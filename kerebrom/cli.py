@@ -107,6 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
     capture_parser.add_argument("--project", default=DEFAULT_PROJECT, help="Logical project namespace.")
     add_crypto_arguments(capture_parser)
 
+    snapshot_parser = subparsers.add_parser("snapshot", help="Create a portable .kbk backup of all memories.")
+    add_common_arguments(snapshot_parser)
+    snapshot_parser.add_argument("--output", help="Output path for the .kbk file (default: ~/Documents/).")
+
+    revive_parser = subparsers.add_parser("revive", help="Restore memories organically from a .kbk backup.")
+    add_common_arguments(revive_parser)
+    revive_parser.add_argument("--input", help="Path to a .kbk file. If omitted, searches the computer automatically.")
+    revive_parser.add_argument("--no-dedup", action="store_true", help="Skip duplicate checking (faster but may create duplicates).")
+
     sopor_parser = subparsers.add_parser("sopor", help="Run Sopor Plenus — consolidate transcript memories.")
     add_common_arguments(sopor_parser)
     sopor_group = sopor_parser.add_mutually_exclusive_group()
@@ -334,6 +343,45 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 min_importance=args.min_importance,
             )
             print_json(data)
+            return 0
+
+        if args.command == "snapshot":
+            from .backup import create_backup
+            output = Path(args.output) if args.output else None
+            backup_path = create_backup(store, output_path=output, project=args.project)
+            memories = store.export_memories(project=args.project, include_inactive=False)
+            print_json({
+                "backup_path": str(backup_path),
+                "memory_count": len(memories),
+                "message": "Snapshot creado exitosamente.",
+            })
+            return 0
+
+        if args.command == "revive":
+            from .backup import find_latest_backup, restore_organic, validate_backup
+            if args.input:
+                backup_path = Path(args.input)
+                if not backup_path.exists():
+                    raise SystemExit("Archivo no encontrado: {}".format(args.input))
+            else:
+                print("Buscando backups en la computadora...")
+                backup_path = find_latest_backup()
+                if not backup_path:
+                    raise SystemExit("No se encontró ningún archivo .kbk de Kerebrom.")
+                info = validate_backup(backup_path)
+                if not info.get("valid"):
+                    raise SystemExit("Backup inválido: {}".format(info.get("error")))
+                print("Encontrado: {} ({} memorias, {})".format(
+                    backup_path.name, info["memory_count"], info["created_at"],
+                ))
+
+            print("Restaurando orgánicamente...")
+            result = restore_organic(
+                store, backup_path,
+                project=args.project,
+                skip_duplicates=not args.no_dedup,
+            )
+            print_json(result)
             return 0
 
         if args.command == "sopor":

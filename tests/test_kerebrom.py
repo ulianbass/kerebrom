@@ -1393,6 +1393,145 @@ class SoporTests(unittest.TestCase):
         self.assertLess(score, 0.35, "Trivial messages should score below threshold")
 
 
+class OrganicBackupTests(unittest.TestCase):
+    """Test the portable .kbk backup and organic restore system."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tempdir.name) / "kerebrom.db"
+        self.store = KerebromStore(self.db_path)
+        self.store.initialize()
+        # Seed some memories.
+        self.store.remember("Me llamo Pedro Julián Arribas Monzón.", kind="core", importance=1.0, tags=["preference"])
+        self.store.remember("Quamtos usa Node.js y PostgreSQL.", kind="semantic", importance=0.8, tags=["discovery"])
+        self.store.remember("Decidí migrar a Tailwind.", kind="episodic", importance=0.6, tags=["decision", "design"])
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_create_backup(self) -> None:
+        from kerebrom.backup import create_backup, FORMAT_VERSION
+        backup_path = create_backup(self.store, output_path=Path(self.tempdir.name) / "test.kbk")
+        self.assertTrue(backup_path.exists())
+        data = json.loads(backup_path.read_text())
+        self.assertEqual(data["format"], FORMAT_VERSION)
+        self.assertEqual(data["memory_count"], 3)
+        self.assertEqual(len(data["memories"]), 3)
+        # Verify memory fields are present.
+        mem = data["memories"][0]
+        self.assertIn("content", mem)
+        self.assertIn("kind", mem)
+        self.assertIn("importance", mem)
+        self.assertIn("tags", mem)
+
+    def test_validate_backup(self) -> None:
+        from kerebrom.backup import create_backup, validate_backup
+        backup_path = create_backup(self.store, output_path=Path(self.tempdir.name) / "test.kbk")
+        info = validate_backup(backup_path)
+        self.assertTrue(info["valid"])
+        self.assertEqual(info["memory_count"], 3)
+
+    def test_validate_invalid_file(self) -> None:
+        from kerebrom.backup import validate_backup
+        bad_file = Path(self.tempdir.name) / "bad.kbk"
+        bad_file.write_text('{"format": "wrong"}')
+        info = validate_backup(bad_file)
+        self.assertFalse(info["valid"])
+
+    def test_restore_organic(self) -> None:
+        from kerebrom.backup import create_backup, restore_organic
+        # Create backup from store with 3 memories.
+        backup_path = create_backup(self.store, output_path=Path(self.tempdir.name) / "test.kbk")
+
+        # Create a fresh empty store.
+        new_db = Path(self.tempdir.name) / "fresh.db"
+        new_store = KerebromStore(new_db)
+        new_store.initialize()
+
+        # Restore organically.
+        result = restore_organic(new_store, backup_path)
+        self.assertEqual(result["restored"], 3)
+        self.assertEqual(result["skipped_duplicate"], 0)
+
+        # Verify memories are searchable in the new store.
+        results = new_store.recall("Pedro Julián", limit=5)
+        self.assertGreaterEqual(len(results), 1)
+        self.assertIn("Pedro", results[0].content)
+
+    def test_restore_deduplicates(self) -> None:
+        from kerebrom.backup import create_backup, restore_organic
+        backup_path = create_backup(self.store, output_path=Path(self.tempdir.name) / "test.kbk")
+        # Restore into the SAME store (already has the memories).
+        result = restore_organic(self.store, backup_path, skip_duplicates=True)
+        self.assertEqual(result["restored"], 0)
+        self.assertEqual(result["skipped_duplicate"], 3)
+
+    def test_find_backups(self) -> None:
+        from kerebrom.backup import create_backup, find_backups
+        backup_path = create_backup(self.store, output_path=Path(self.tempdir.name) / "test.kbk")
+        found = find_backups(search_dirs=[Path(self.tempdir.name)])
+        self.assertIn(backup_path.resolve(), found)
+
+    def test_snapshot_cli(self) -> None:
+        from kerebrom.cli import main
+        output_path = Path(self.tempdir.name) / "cli-test.kbk"
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            ret = main(["snapshot", "--db", str(self.db_path), "--output", str(output_path)])
+        self.assertEqual(ret, 0)
+        self.assertTrue(output_path.exists())
+        output = json.loads(stdout.getvalue())
+        self.assertEqual(output["memory_count"], 3)
+
+    def test_revive_cli(self) -> None:
+        from kerebrom.backup import create_backup
+        from kerebrom.cli import main
+        # Create a backup.
+        backup_path = create_backup(self.store, output_path=Path(self.tempdir.name) / "test.kbk")
+        # Create a fresh DB.
+        fresh_db = Path(self.tempdir.name) / "fresh.db"
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            ret = main(["revive", "--db", str(fresh_db), "--input", str(backup_path)])
+        self.assertEqual(ret, 0)
+        output_text = stdout.getvalue()
+        # The output has print lines + JSON from print_json — parse the JSON part.
+        self.assertIn("restored", output_text)
+        # Extract JSON by finding the last { ... } block.
+        json_start = output_text.rfind("{\n")
+        if json_start >= 0:
+            result = json.loads(output_text[json_start:])
+            self.assertEqual(result["restored"], 3)
+
+    def test_uninstall_creates_auto_backup(self) -> None:
+        from unittest.mock import patch
+        from kerebrom.uninstall import _auto_backup
+
+        fake_home = Path(self.tempdir.name) / "fakehome"
+        fake_home.mkdir()
+        kerebrom_dir = fake_home / ".kerebrom"
+        kerebrom_dir.mkdir()
+        docs_dir = fake_home / "Documents"
+        docs_dir.mkdir()
+
+        # Create a real DB in the fake home.
+        db_path = kerebrom_dir / "kerebrom.db"
+        store = KerebromStore(db_path)
+        store.initialize()
+        store.remember("Test memory for backup.")
+        store.close()
+
+        with patch("kerebrom.uninstall.Path.home", return_value=fake_home), \
+             patch("kerebrom.backup.Path.home", return_value=fake_home), \
+             patch("kerebrom.backup.DEFAULT_BACKUP_DIR", docs_dir):
+            msg = _auto_backup()
+
+        self.assertIn("respaldadas", msg)
+        # Verify .kbk file was created.
+        kbk_files = list(docs_dir.glob("*.kbk"))
+        self.assertEqual(len(kbk_files), 1)
+
+
 class HookSetupTests(unittest.TestCase):
     """Test that setup.py configures hooks in settings.json."""
 

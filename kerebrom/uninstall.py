@@ -25,6 +25,32 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
+def _auto_backup() -> str:
+    """Create an automatic backup before uninstall."""
+    kerebrom_dir = Path.home() / ".kerebrom"
+    db_path = kerebrom_dir / "kerebrom.db"
+
+    if not db_path.exists():
+        return "Backup: no hay base de datos, nada que respaldar"
+
+    try:
+        from .backup import create_backup
+        from .store import KerebromStore
+
+        store = KerebromStore(db_path)
+        store.initialize()
+        memories = store.export_memories(include_inactive=False)
+        if not memories:
+            store.close()
+            return "Backup: base de datos vacía, nada que respaldar"
+
+        backup_path = create_backup(store)
+        store.close()
+        return "Backup: {} memorias respaldadas en {}".format(len(memories), backup_path)
+    except Exception as exc:
+        return "Backup: error al respaldar ({})".format(str(exc)[:100])
+
+
 def _remove_kerebrom_db() -> str:
     """Remove ~/.kerebrom/ entirely."""
     kerebrom_dir = Path.home() / ".kerebrom"
@@ -251,6 +277,7 @@ def run_uninstall(skip_pip: bool = False, quiet: bool = False) -> Dict[str, Any]
     Returns a summary dict with results per step.
     """
     steps = [
+        ("Backup automático", _auto_backup),
         ("Base de datos", _remove_kerebrom_db),
         ("Claude Code MCP", _clean_claude_mcp),
         ("Claude Code CLAUDE.md", _clean_claude_md),
