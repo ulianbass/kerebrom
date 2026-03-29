@@ -36,29 +36,48 @@ def _remove_kerebrom_db() -> str:
 
 
 def _clean_claude_mcp() -> str:
-    """Remove kerebrom entry from ~/.claude/.mcp.json."""
+    """Remove kerebrom entry from ~/.claude.json mcpServers and legacy ~/.claude/.mcp.json."""
+    messages = []
+
+    # ── New location: ~/.claude.json ──
+    claude_json = Path.home() / ".claude.json"
+    if claude_json.exists():
+        try:
+            data = json.loads(claude_json.read_text(encoding="utf-8"))
+            mcp_servers = data.get("mcpServers", {})
+            if "kerebrom" in mcp_servers:
+                del mcp_servers["kerebrom"]
+                if not mcp_servers:
+                    data.pop("mcpServers", None)
+                else:
+                    data["mcpServers"] = mcp_servers
+                claude_json.write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+                messages.append("claude.json: MCP removido")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # ── Legacy location: ~/.claude/.mcp.json ──
     mcp_file = Path.home() / ".claude" / ".mcp.json"
-    if not mcp_file.exists():
-        return ".mcp.json: no existe"
+    if mcp_file.exists():
+        try:
+            data = json.loads(mcp_file.read_text(encoding="utf-8"))
+            if "kerebrom" in data:
+                del data["kerebrom"]
+                if not data:
+                    mcp_file.unlink()
+                else:
+                    mcp_file.write_text(
+                        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8",
+                    )
+                messages.append(".mcp.json: entrada legacy removida")
+        except (json.JSONDecodeError, OSError):
+            pass
 
-    try:
-        data = json.loads(mcp_file.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return ".mcp.json: no se pudo leer"
-
-    if "kerebrom" not in data:
-        return ".mcp.json: kerebrom no estaba configurado"
-
-    del data["kerebrom"]
-    if not data:
-        mcp_file.unlink()
-        return ".mcp.json: eliminado (solo contenía kerebrom)"
-    else:
-        mcp_file.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        return ".mcp.json: entrada kerebrom removida"
+    return " + ".join(messages) if messages else "MCP: kerebrom no estaba configurado"
 
 
 def _clean_claude_md() -> str:

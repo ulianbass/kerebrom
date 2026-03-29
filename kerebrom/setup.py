@@ -140,22 +140,26 @@ def _setup_claude_code(
 
     messages: List[str] = []
 
-    # ── .mcp.json: register MCP server ──
-    mcp_file = claude_dir / ".mcp.json"
-    existing: Dict[str, Any] = {}
-    if mcp_file.exists():
+    # ── ~/.claude.json: register MCP server globally ──
+    # Claude Code reads global MCP servers from ~/.claude.json under "mcpServers",
+    # NOT from ~/.claude/.mcp.json (which is project-scoped).
+    claude_json = Path.home() / ".claude.json"
+    claude_config: Dict[str, Any] = {}
+    if claude_json.exists():
         try:
-            existing = json.loads(mcp_file.read_text(encoding="utf-8"))
+            claude_config = json.loads(claude_json.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            existing = {}
+            claude_config = {}
 
     entry = _mcp_entry(db_path, passphrase_env=passphrase_env, passphrase_file=passphrase_file)
-    if existing.get("kerebrom") == entry:
+    mcp_servers = claude_config.get("mcpServers", {})
+    if mcp_servers.get("kerebrom") == entry:
         messages.append("MCP: ya configurado")
     else:
-        existing["kerebrom"] = entry
-        mcp_file.write_text(
-            json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
+        mcp_servers["kerebrom"] = entry
+        claude_config["mcpServers"] = mcp_servers
+        claude_json.write_text(
+            json.dumps(claude_config, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
         messages.append("MCP: configurado")

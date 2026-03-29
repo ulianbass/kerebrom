@@ -466,12 +466,13 @@ class SetupTests(unittest.TestCase):
         ensure_setup(db_path=db_path, passphrase_env="KEREBROM_PASSPHRASE")
 
         codex_config = (codex_dir / "config.toml").read_text(encoding="utf-8")
-        claude_config = json.loads((claude_dir / ".mcp.json").read_text(encoding="utf-8"))
+        claude_json = Path(self.tempdir.name) / ".claude.json"
+        claude_config = json.loads(claude_json.read_text(encoding="utf-8"))
 
         self.assertIn("--passphrase-env", codex_config)
         self.assertIn("KEREBROM_PASSPHRASE", codex_config)
-        self.assertIn("--passphrase-env", claude_config["kerebrom"]["args"])
-        self.assertIn("KEREBROM_PASSPHRASE", claude_config["kerebrom"]["args"])
+        self.assertIn("--passphrase-env", claude_config["mcpServers"]["kerebrom"]["args"])
+        self.assertIn("KEREBROM_PASSPHRASE", claude_config["mcpServers"]["kerebrom"]["args"])
 
 
 class CLITests(unittest.TestCase):
