@@ -205,9 +205,19 @@ class SentenceTransformerModel:
 def auto_select_model() -> EmbeddingModel:
     """Pick the best available embedding model automatically.
 
-    Priority: ONNX > sentence-transformers > hash (always available).
+    Default: ONNX (included in pip install kerebrom).
+    Upgrade: sentence-transformers if installed (pip install kerebrom[ml]).
+    Fallback: hash model if ONNX somehow unavailable.
     """
-    # Tier 1: ONNX (lightweight, real semantics)
+    # Prefer sentence-transformers if user explicitly installed it.
+    try:
+        import sentence_transformers  # noqa: F401
+
+        return SentenceTransformerModel()
+    except ImportError:
+        pass
+
+    # Default: ONNX (ships with kerebrom).
     try:
         import onnxruntime  # noqa: F401
         import tokenizers  # noqa: F401
@@ -216,15 +226,7 @@ def auto_select_model() -> EmbeddingModel:
     except ImportError:
         pass
 
-    # Tier 2: sentence-transformers (heavy but full)
-    try:
-        import sentence_transformers  # noqa: F401
-
-        return SentenceTransformerModel()
-    except ImportError:
-        pass
-
-    # Tier 3: hash (zero deps, always works)
+    # Fallback: hash (should never happen in normal install).
     return HashEmbeddingModel()
 
 

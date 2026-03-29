@@ -12,13 +12,15 @@ license = { text = "Proprietary" }
 authors = [
   { name = "Ulian Bass" }
 ]
-dependencies = []
+dependencies = [
+  "onnxruntime>=1.16",
+  "tokenizers>=0.15",
+  "numpy>=1.24",
+]
 
 [project.optional-dependencies]
-onnx = ["onnxruntime>=1.16", "tokenizers>=0.15", "numpy>=1.24"]
 ml = ["sentence-transformers>=2.2"]
 crypto = ["cryptography>=41.0"]
-all = ["onnxruntime>=1.16", "tokenizers>=0.15", "numpy>=1.24", "cryptography>=41.0"]
 
 [project.scripts]
 kerebrom = "kerebrom.cli:main"
