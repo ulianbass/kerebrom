@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kerebrom"
+version = "0.1.0"
+description = "Local-first persistent memory engine for AI workflows."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Proprietary" }
+authors = [
+  { name = "Ulian Bass" }
+]
+dependencies = []
+
+[project.scripts]
+kerebrom = "kerebrom.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["kerebrom*"]
