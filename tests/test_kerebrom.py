@@ -1071,5 +1071,51 @@ class UninstallTests(unittest.TestCase):
         self.assertIn("desinstalado", result.stdout.lower())
 
 
+class EmbeddingAutoSelectTests(unittest.TestCase):
+    """Test the embedding model auto-selection and pluggable interface."""
+
+    def test_hash_model_is_default_fallback(self) -> None:
+        from kerebrom.embeddings import HashEmbeddingModel, auto_select_model
+
+        model = auto_select_model()
+        # In this test environment (no onnxruntime, no sentence-transformers),
+        # we should get the hash model.
+        self.assertIsInstance(model, HashEmbeddingModel)
+
+    def test_hash_model_produces_stable_embeddings(self) -> None:
+        from kerebrom.embeddings import HashEmbeddingModel
+
+        model = HashEmbeddingModel()
+        a = model.embed("Vivo en Guatemala")
+        b = model.embed("Vivo en Guatemala")
+        self.assertEqual(a, b)
+
+    def test_char_ngrams_improve_partial_matching(self) -> None:
+        from kerebrom.embeddings import HashEmbeddingModel, cosine_similarity
+
+        model = HashEmbeddingModel()
+        guatemala = model.embed("Guatemala")
+        guatemalteco = model.embed("guatemalteco")
+        espana = model.embed("España")
+
+        sim_related = cosine_similarity(guatemala, guatemalteco)
+        sim_unrelated = cosine_similarity(guatemala, espana)
+        self.assertGreater(
+            sim_related, sim_unrelated,
+            "Related words (Guatemala/guatemalteco) should be more similar than unrelated (Guatemala/España)",
+        )
+
+    def test_embedding_model_protocol(self) -> None:
+        """Verify any model satisfying the protocol works with the store."""
+        from kerebrom.embeddings import HashEmbeddingModel
+
+        model = HashEmbeddingModel()
+        with tempfile.TemporaryDirectory() as td:
+            store = KerebromStore(Path(td) / "test.db", embedding_model=model)
+            store.initialize()
+            result = store.remember("Test memory")
+            self.assertTrue(result["inserted"])
+
+
 if __name__ == "__main__":
     unittest.main()

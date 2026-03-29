@@ -157,6 +157,15 @@ def _clean_temp_runtime() -> str:
     return "Temp: sin residuos runtime"
 
 
+def _clean_model_cache() -> str:
+    """Remove downloaded ONNX model files from ~/.cache/kerebrom/."""
+    cache_dir = Path.home() / ".cache" / "kerebrom"
+    if not cache_dir.exists():
+        return "Cache: sin modelo descargado"
+    shutil.rmtree(cache_dir)
+    return "Cache: modelo ONNX eliminado (~80MB liberados)"
+
+
 def _pip_uninstall() -> str:
     """Uninstall the kerebrom Python package."""
     result = subprocess.run(
@@ -183,6 +192,7 @@ def run_uninstall(skip_pip: bool = False, quiet: bool = False) -> Dict[str, Any]
         ("Codex config.toml", _clean_codex_config),
         ("Codex AGENTS.md", _clean_codex_agents_md),
         ("Archivos temporales", _clean_temp_runtime),
+        ("Modelo ONNX", _clean_model_cache),
     ]
     if not skip_pip:
         steps.append(("Paquete Python", _pip_uninstall))
