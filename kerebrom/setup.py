@@ -13,6 +13,7 @@ so newly installed tools get configured without a separate manual step.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -119,7 +120,7 @@ def _mcp_entry(
     if passphrase_file:
         args.extend(["--passphrase-file", passphrase_file])
     return {
-        "command": "python3",
+        "command": sys.executable,
         "args": args,
     }
 
@@ -213,7 +214,7 @@ def _setup_claude_code(
     if already_hooked:
         messages.append("Hooks: ya configurados")
     else:
-        capture_cmd = "kerebrom capture --db {}".format(db_path)
+        capture_cmd = "{} -m kerebrom capture --db {}".format(sys.executable, db_path)
 
         # PostToolUse: capture file edits, bash commands, etc.
         post_tool_hook = {
@@ -272,9 +273,9 @@ def _setup_codex(
         args.extend(['"--passphrase-file"', '"{}"'.format(passphrase_file)])
     toml_block = (
         "\n[mcp_servers.kerebrom]\n"
-        'command = "python3"\n'
+        'command = "{}"\n'
         "args = [{}]\n"
-    ).format(", ".join(args))
+    ).format(sys.executable, ", ".join(args))
 
     if config_file.exists():
         content = config_file.read_text(encoding="utf-8")
