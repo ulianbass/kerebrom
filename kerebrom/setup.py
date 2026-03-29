@@ -187,6 +187,16 @@ def _setup_claude_code(
         except (json.JSONDecodeError, OSError):
             existing_settings = {}
 
+    # ── Disable Claude Code's built-in file-based auto-memory ──
+    # Kerebrom replaces it — all memory goes through MCP tools.
+    if existing_settings.get("autoMemoryEnabled") is not False:
+        existing_settings["autoMemoryEnabled"] = False
+        settings_changed = True
+        messages.append("Auto-memory deshabilitado (Kerebrom lo reemplaza)")
+    else:
+        settings_changed = False
+        messages.append("Auto-memory: ya deshabilitado")
+
     hooks = existing_settings.get("hooks", {})
     kerebrom_hook_marker = "kerebrom capture"
 
@@ -225,11 +235,15 @@ def _setup_claude_code(
         hooks["Stop"].append(stop_hook)
 
         existing_settings["hooks"] = hooks
+        settings_changed = True
+        messages.append("Hooks: configurados (PostToolUse + Stop)")
+
+    # Write settings.json if anything changed.
+    if settings_changed:
         settings_file.write_text(
             json.dumps(existing_settings, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        messages.append("Hooks: configurados (PostToolUse + Stop)")
 
     return True, "Claude Code: " + "; ".join(messages)
 

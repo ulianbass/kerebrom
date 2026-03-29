@@ -103,8 +103,14 @@ def _clean_claude_hooks() -> str:
     except (json.JSONDecodeError, OSError):
         return "settings.json: no se pudo leer"
 
-    hooks = data.get("hooks", {})
     changed = False
+
+    # Restore auto-memory if we disabled it.
+    if data.get("autoMemoryEnabled") is False:
+        del data["autoMemoryEnabled"]
+        changed = True
+
+    hooks = data.get("hooks", {})
     for event_type in list(hooks.keys()):
         if isinstance(hooks[event_type], list):
             original_len = len(hooks[event_type])
