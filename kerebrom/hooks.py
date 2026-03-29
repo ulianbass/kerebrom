@@ -75,13 +75,7 @@ def _summarize_tool_event(event: Dict[str, Any]) -> Optional[str]:
         if tool_name == "NotebookEdit":
             return "[auto-capture] Celda de notebook editada"
 
-    # Stop events — capture session summary if present
-    stop_reason = event.get("stop_reason", "")
-    if stop_reason:
-        message = str(event.get("message", ""))[:_MAX_CONTENT_LEN]
-        if message and len(message) > 50:
-            return "[auto-capture] Sesión finalizada: {}".format(message[:500])
-
+    # Stop events are handled separately (Sopor trigger).
     return None
 
 
@@ -103,6 +97,16 @@ def handle_capture(
         event = json.loads(raw)
     except (json.JSONDecodeError, OSError):
         # Malformed input — silently ignore (hooks must not block the AI tool).
+        return 0
+
+    # Stop event → trigger Sopor on the current session transcript.
+    stop_reason = event.get("stop_reason", "")
+    session_id = event.get("session_id", "")
+    if stop_reason and session_id:
+        try:
+            _trigger_sopor(db_path, session_id, project, passphrase)
+        except Exception:
+            pass
         return 0
 
     summary = _summarize_tool_event(event)
@@ -131,3 +135,40 @@ def handle_capture(
         pass
 
     return 0
+
+
+# Minimum transcript size to trigger Sopor automatically (bytes).
+_SOPOR_AUTO_THRESHOLD = 100_000  # ~100KB ≈ substantial conversation
+
+
+def _trigger_sopor(
+    db_path: str,
+    session_id: str,
+    project: str,
+    passphrase: Optional[str],
+) -> None:
+    """Run Sopor on the session transcript if it's large enough.
+
+    This is called from the Stop hook — it must be fast and silent.
+    """
+    from .sopor import find_transcripts, run_sopor
+
+    # Find the transcript file for this session.
+    claude_projects = Path.home() / ".claude" / "projects"
+    candidates = list(claude_projects.rglob("{}.jsonl".format(session_id)))
+
+    if not candidates:
+        return
+
+    transcript = candidates[0]
+
+    # Only trigger Sopor for substantial conversations.
+    if transcript.stat().st_size < _SOPOR_AUTO_THRESHOLD:
+        return
+
+    store = KerebromStore(Path(db_path), passphrase=passphrase)
+    store.initialize(project=project)
+    try:
+        run_sopor(store, transcript, project=project)
+    finally:
+        store.close()

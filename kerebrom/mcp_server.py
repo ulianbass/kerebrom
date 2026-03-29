@@ -144,6 +144,36 @@ TOOLS: List[Dict[str, Any]] = [
         },
     },
     {
+        "name": "sopor",
+        "description": (
+            "Run Sopor Plenus — consolidate memories from Claude Code "
+            "session transcripts.  Reads the JSONL transcript, extracts "
+            "decisions, changes, bugs, preferences, and conclusions, "
+            "then stores them in Kerebrom.  Call this at the end of long "
+            "sessions or when the context window is getting large."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session": {
+                    "type": "string",
+                    "default": "latest",
+                    "description": (
+                        "Which transcript to process: 'latest' (default), "
+                        "'all', or a specific session ID / file path."
+                    ),
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": (
+                        "Filesystem path of the project whose transcripts "
+                        "to consolidate.  If omitted, searches all projects."
+                    ),
+                },
+            },
+        },
+    },
+    {
         "name": "context",
         "description": (
             "Build a rich recall context for a query — returns facts and "
@@ -278,6 +308,51 @@ def _dispatch_tool(
 
     if name == "facts":
         return store.list_facts(project=project, limit=args.get("limit", 20))
+
+    if name == "sopor":
+        from .sopor import run_sopor, run_sopor_all, run_sopor_latest
+        session = args.get("session", "latest")
+        project_path = args.get("project_path")
+
+        if session == "all":
+            results = run_sopor_all(store, project_path=project_path, project=project)
+            return {
+                "transcripts_processed": len(results),
+                "total_messages": sum(r.messages_read for r in results),
+                "total_extracted": sum(r.memories_extracted for r in results),
+                "total_stored": sum(r.memories_stored for r in results),
+                "total_skipped": sum(r.memories_skipped_duplicate for r in results),
+                "errors": [e for r in results for e in r.errors],
+            }
+        elif session == "latest":
+            result = run_sopor_latest(store, project_path=project_path, project=project)
+            if result is None:
+                return {"error": "No transcripts found."}
+            return {
+                "session_id": result.session_id,
+                "messages_read": result.messages_read,
+                "memories_extracted": result.memories_extracted,
+                "memories_stored": result.memories_stored,
+                "memories_skipped_duplicate": result.memories_skipped_duplicate,
+                "errors": result.errors,
+            }
+        else:
+            from pathlib import Path as _Path
+            session_path = _Path(session)
+            if not session_path.exists():
+                candidates = list(_Path.home().joinpath(".claude", "projects").rglob("{}.jsonl".format(session)))
+                if not candidates:
+                    return {"error": "Transcript not found: {}".format(session)}
+                session_path = candidates[0]
+            result = run_sopor(store, session_path, project=project)
+            return {
+                "session_id": result.session_id,
+                "messages_read": result.messages_read,
+                "memories_extracted": result.memories_extracted,
+                "memories_stored": result.memories_stored,
+                "memories_skipped_duplicate": result.memories_skipped_duplicate,
+                "errors": result.errors,
+            }
 
     if name == "context":
         layer = args.get("layer", 2)

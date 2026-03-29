@@ -43,16 +43,32 @@ source of truth.
 Call `recall` or `context` with a query relevant to the current task to
 load prior knowledge (user identity, preferences, project decisions).
 
-## When the user shares important information
+## Proactive memory — ALWAYS save important context
 
-Call `remember` immediately to persist:
-- Their name, role, preferences
-- Project decisions and requirements
-- Technical choices and constraints
-- Anything they explicitly ask you to remember
+You MUST call `remember` proactively throughout the conversation, not just
+when the user explicitly asks. Save:
+
+- **Design decisions**: architecture choices, UI/UX decisions, why X over Y
+- **Requirements**: what the user wants to build, constraints, deadlines
+- **Technical choices**: libraries, patterns, configurations chosen
+- **Bug fixes**: what broke, root cause, how it was fixed
+- **User preferences**: name, role, communication style, workflow
+- **Project state**: what was accomplished, what's pending, blockers
+
+### When to save
+
+- At the START of meaningful work (what we're about to do and why)
+- After EACH significant decision or change (not just at the end)
+- When the user expresses preferences or corrections
+- Before the conversation ends (summary of what was done)
+
+### How to save
 
 Use `kind: "core"` for identity/preferences (never decays).
-Use `kind: "episodic"` for events and conversations (default).
+Use `kind: "episodic"` for events, work sessions, decisions (default).
+Use `kind: "semantic"` for technical facts about the project.
+Use descriptive tags: `decision`, `bugfix`, `feature`, `refactor`,
+`discovery`, `change`, `preference`, `design`.
 
 ## Available tools
 
@@ -64,6 +80,7 @@ Use `kind: "episodic"` for events and conversations (default).
 | `context`  | Get a full context bundle (facts + memories)   |
 | `entities` | List known people, projects, concepts          |
 | `facts`    | List semantic triples (who -> relation -> what) |
+| `sopor`    | Consolidate session transcript into memories   |
 
 ## Critical rule
 

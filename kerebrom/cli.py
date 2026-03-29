@@ -107,6 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
     capture_parser.add_argument("--project", default=DEFAULT_PROJECT, help="Logical project namespace.")
     add_crypto_arguments(capture_parser)
 
+    sopor_parser = subparsers.add_parser("sopor", help="Run Sopor Plenus — consolidate transcript memories.")
+    add_common_arguments(sopor_parser)
+    sopor_group = sopor_parser.add_mutually_exclusive_group()
+    sopor_group.add_argument("--session", help="Session ID or path to a specific .jsonl transcript.")
+    sopor_group.add_argument("--latest", action="store_true", help="Process only the most recent transcript.")
+    sopor_group.add_argument("--all", action="store_true", help="Process all transcripts.")
+    sopor_parser.add_argument("--project-path", help="Filesystem path of the project (to find its transcripts).")
+    sopor_parser.add_argument("--threshold", type=float, default=0.35, help="Score threshold for extraction (0-1).")
+
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove all traces of Kerebrom from this machine.")
     uninstall_parser.add_argument("--keep-pip", action="store_true", help="Skip pip uninstall (keep the Python package).")
     uninstall_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt.")
@@ -325,6 +334,55 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 min_importance=args.min_importance,
             )
             print_json(data)
+            return 0
+
+        if args.command == "sopor":
+            from .sopor import find_transcripts, run_sopor, run_sopor_all, run_sopor_latest
+            print("Kerebrom — Sopor Plenus\n")
+
+            if args.session:
+                # Direct path or session ID.
+                session_path = Path(args.session)
+                if not session_path.exists():
+                    # Try finding it in the projects dir.
+                    candidates = list(Path.home().joinpath(".claude", "projects").rglob("{}.jsonl".format(args.session)))
+                    if not candidates:
+                        raise SystemExit("Transcript not found: {}".format(args.session))
+                    session_path = candidates[0]
+                result = run_sopor(store, session_path, project=args.project, score_threshold=args.threshold)
+                print_json({
+                    "session_id": result.session_id,
+                    "messages_read": result.messages_read,
+                    "memories_extracted": result.memories_extracted,
+                    "memories_stored": result.memories_stored,
+                    "memories_skipped_duplicate": result.memories_skipped_duplicate,
+                    "errors": result.errors,
+                })
+            elif args.all:
+                results = run_sopor_all(store, project_path=args.project_path, project=args.project, score_threshold=args.threshold)
+                summary = {
+                    "transcripts_processed": len(results),
+                    "total_messages": sum(r.messages_read for r in results),
+                    "total_extracted": sum(r.memories_extracted for r in results),
+                    "total_stored": sum(r.memories_stored for r in results),
+                    "total_skipped": sum(r.memories_skipped_duplicate for r in results),
+                    "errors": [e for r in results for e in r.errors],
+                }
+                print_json(summary)
+            else:
+                # Default: --latest
+                result = run_sopor_latest(store, project_path=args.project_path, project=args.project, score_threshold=args.threshold)
+                if result is None:
+                    print("No transcripts found.")
+                    return 0
+                print_json({
+                    "session_id": result.session_id,
+                    "messages_read": result.messages_read,
+                    "memories_extracted": result.memories_extracted,
+                    "memories_stored": result.memories_stored,
+                    "memories_skipped_duplicate": result.memories_skipped_duplicate,
+                    "errors": result.errors,
+                })
             return 0
 
         if args.command == "setup":

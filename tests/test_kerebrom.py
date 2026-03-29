@@ -1253,6 +1253,146 @@ class PassiveCaptureTests(unittest.TestCase):
         self.assertEqual(ret, 0)
 
 
+class SoporTests(unittest.TestCase):
+    """Test the Sopor Plenus transcript consolidation engine."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tempdir.name) / "kerebrom.db"
+        self.store = KerebromStore(self.db_path)
+        self.store.initialize()
+
+        # Create a synthetic JSONL transcript.
+        self.transcript_path = Path(self.tempdir.name) / "test-session.jsonl"
+        messages = [
+            {"type": "user", "message": {"role": "user", "content": "Decidí cambiar el diseño del frontend. Vamos con Tailwind en vez de CSS puro."}, "timestamp": "2026-03-29T10:00:00Z", "sessionId": "test-session"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Perfecto, voy a migrar los estilos a Tailwind. Esta decisión simplifica el mantenimiento."}]}, "timestamp": "2026-03-29T10:01:00Z", "sessionId": "test-session"},
+            {"type": "user", "message": {"role": "user", "content": "También encontré un bug: el trailing stop no se activa cuando el precio sube más de 3%."}, "timestamp": "2026-03-29T10:05:00Z", "sessionId": "test-session"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "El problema era que la condición comparaba el porcentaje absoluto en vez del relativo. Ya lo corregí en trading_engine.py línea 245."}]}, "timestamp": "2026-03-29T10:06:00Z", "sessionId": "test-session"},
+            {"type": "user", "message": {"role": "user", "content": "Perfecto, confirmado que funciona. Siempre quiero que los trailing stops se calculen con porcentaje relativo."}, "timestamp": "2026-03-29T10:10:00Z", "sessionId": "test-session"},
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Listo, actualizado y verificado."}]}, "timestamp": "2026-03-29T10:11:00Z", "sessionId": "test-session"},
+            # Some low-value messages that should be skipped.
+            {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "name": "Read", "input": {"file_path": "/foo.py"}}]}, "timestamp": "2026-03-29T10:12:00Z", "sessionId": "test-session"},
+            {"type": "system", "message": {"role": "system", "content": ""}, "timestamp": "2026-03-29T10:13:00Z", "sessionId": "test-session"},
+        ]
+        with open(self.transcript_path, "w") as f:
+            for msg in messages:
+                f.write(json.dumps(msg) + "\n")
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_parse_transcript(self) -> None:
+        from kerebrom.sopor import parse_transcript
+        messages = parse_transcript(self.transcript_path)
+        # Should have user + assistant text messages (not tool-only or empty system).
+        self.assertGreaterEqual(len(messages), 5)
+        roles = [m.role for m in messages]
+        self.assertIn("user", roles)
+        self.assertIn("assistant", roles)
+
+    def test_extract_blocks(self) -> None:
+        from kerebrom.sopor import extract_consolidation_blocks, parse_transcript
+        messages = parse_transcript(self.transcript_path)
+        blocks = extract_consolidation_blocks(messages)
+        self.assertGreater(len(blocks), 0)
+        # Blocks should have tags inferred.
+        all_tags = [tag for b in blocks for tag in b["tags"]]
+        self.assertTrue(len(all_tags) > 0)
+
+    def test_run_sopor_stores_memories(self) -> None:
+        from kerebrom.sopor import run_sopor
+        result = run_sopor(self.store, self.transcript_path)
+        self.assertGreater(result.messages_read, 0)
+        self.assertGreater(result.memories_extracted, 0)
+        self.assertGreater(result.memories_stored, 0)
+        self.assertEqual(len(result.errors), 0)
+
+        # Verify memories are in the store.
+        all_memories = self.store.recall("diseño frontend Tailwind", limit=10)
+        self.assertGreaterEqual(len(all_memories), 1)
+
+    def test_run_sopor_deduplicates(self) -> None:
+        from kerebrom.sopor import run_sopor
+        # Run twice on the same transcript.
+        result1 = run_sopor(self.store, self.transcript_path)
+        result2 = run_sopor(self.store, self.transcript_path)
+        # Second run should skip most as duplicates.
+        self.assertGreater(result2.memories_skipped_duplicate, 0)
+        self.assertLessEqual(result2.memories_stored, result1.memories_stored)
+
+    def test_run_sopor_skips_compaction_summaries(self) -> None:
+        from kerebrom.sopor import parse_transcript, extract_consolidation_blocks
+        # Add a compaction summary to the transcript.
+        compaction_path = Path(self.tempdir.name) / "compacted.jsonl"
+        with open(compaction_path, "w") as f:
+            f.write(json.dumps({
+                "type": "user",
+                "message": {"role": "user", "content": "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion..."},
+                "timestamp": "2026-03-29T11:00:00Z",
+                "sessionId": "compacted",
+            }) + "\n")
+            f.write(json.dumps({
+                "type": "user",
+                "message": {"role": "user", "content": "Decidí usar Redis para el cache."},
+                "timestamp": "2026-03-29T11:01:00Z",
+                "sessionId": "compacted",
+            }) + "\n")
+        messages = parse_transcript(compaction_path)
+        blocks = extract_consolidation_blocks(messages)
+        # The compaction summary should not become a block.
+        for block in blocks:
+            self.assertNotIn("continued from a previous conversation", block["text"])
+
+    def test_sopor_via_mcp(self) -> None:
+        from kerebrom.mcp_server import handle_tools_call
+        resp = handle_tools_call(
+            1,
+            {"name": "sopor", "arguments": {"session": str(self.transcript_path)}},
+            self.store,
+            "default",
+        )
+        data = json.loads(resp["result"]["content"][0]["text"])
+        self.assertIn("memories_stored", data)
+        self.assertGreater(data["memories_stored"], 0)
+
+    def test_sopor_via_cli(self) -> None:
+        from kerebrom.cli import main
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            ret = main([
+                "sopor",
+                "--db", str(self.db_path),
+                "--session", str(self.transcript_path),
+            ])
+        self.assertEqual(ret, 0)
+        output = json.loads(stdout.getvalue().split("\n", 1)[1])  # Skip header line.
+        self.assertGreater(output["memories_stored"], 0)
+
+    def test_infer_tags_decision(self) -> None:
+        from kerebrom.sopor import _infer_tags
+        tags = _infer_tags("Decidí usar Tailwind para el diseño del frontend")
+        self.assertIn("decision", tags)
+        self.assertIn("design", tags)
+
+    def test_infer_tags_bugfix(self) -> None:
+        from kerebrom.sopor import _infer_tags
+        tags = _infer_tags("Encontré un bug en el trailing stop, ya lo corregí con un fix")
+        self.assertIn("bugfix", tags)
+
+    def test_score_user_decision_message(self) -> None:
+        from kerebrom.sopor import TranscriptMessage, _score_message
+        msg = TranscriptMessage(role="user", text="Decidí cambiar el diseño completo del frontend porque el actual no funciona bien")
+        score = _score_message(msg)
+        self.assertGreaterEqual(score, 0.5, "User decision messages should score high")
+
+    def test_score_trivial_assistant_message(self) -> None:
+        from kerebrom.sopor import TranscriptMessage, _score_message
+        msg = TranscriptMessage(role="assistant", text="Ok.")
+        score = _score_message(msg)
+        self.assertLess(score, 0.35, "Trivial messages should score below threshold")
+
+
 class HookSetupTests(unittest.TestCase):
     """Test that setup.py configures hooks in settings.json."""
 
