@@ -257,7 +257,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             else:
                 for row in data:
                     suffix = "" if row["invalid_at"] is None else " (invalidated)"
-                    print("{subject} --{predicate}--> {object} [{confidence:.2f}]{}".format(suffix=suffix, **row))
+                    print("{subject} --{predicate}--> {object} [{confidence:.2f}]{suffix}".format(suffix=suffix, **row))
             return 0
 
         if args.command == "context":

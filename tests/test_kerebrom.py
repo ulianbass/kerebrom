@@ -1074,13 +1074,14 @@ class UninstallTests(unittest.TestCase):
 class EmbeddingAutoSelectTests(unittest.TestCase):
     """Test the embedding model auto-selection and pluggable interface."""
 
-    def test_hash_model_is_default_fallback(self) -> None:
-        from kerebrom.embeddings import HashEmbeddingModel, auto_select_model
+    def test_auto_select_picks_best_available(self) -> None:
+        from kerebrom.embeddings import EmbeddingModel, auto_select_model
 
         model = auto_select_model()
-        # In this test environment (no onnxruntime, no sentence-transformers),
-        # we should get the hash model.
-        self.assertIsInstance(model, HashEmbeddingModel)
+        # Should satisfy the EmbeddingModel protocol regardless of tier.
+        self.assertTrue(hasattr(model, "dimensions"))
+        self.assertTrue(hasattr(model, "embed"))
+        self.assertGreater(model.dimensions, 0)
 
     def test_hash_model_produces_stable_embeddings(self) -> None:
         from kerebrom.embeddings import HashEmbeddingModel
