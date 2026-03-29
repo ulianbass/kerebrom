@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     remember_parser.add_argument("--source", default="manual")
     remember_parser.add_argument("--importance", type=float, default=0.5)
     remember_parser.add_argument("--confidence", type=float, default=0.8)
+    remember_parser.add_argument("--tags", nargs="*", default=[], help="Observation tags (decision, bugfix, feature, refactor, discovery, change).")
 
     recall_parser = subparsers.add_parser("recall", help="Search memories.")
     add_common_arguments(recall_parser)
@@ -101,6 +102,11 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--db", default=str(Path.home() / ".kerebrom" / "kerebrom.db"), help="Path to the SQLite database.")
     add_crypto_arguments(setup_parser)
 
+    capture_parser = subparsers.add_parser("capture", help="Passive capture — receives hook event JSON on stdin and stores a memory.")
+    capture_parser.add_argument("--db", default=str(Path.home() / ".kerebrom" / "kerebrom.db"), help="Path to the SQLite database.")
+    capture_parser.add_argument("--project", default=DEFAULT_PROJECT, help="Logical project namespace.")
+    add_crypto_arguments(capture_parser)
+
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove all traces of Kerebrom from this machine.")
     uninstall_parser.add_argument("--keep-pip", action="store_true", help="Skip pip uninstall (keep the Python package).")
     uninstall_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt.")
@@ -142,6 +148,12 @@ def resolve_passphrase(args: Any) -> Optional[str]:
 def main(argv: Optional[Iterable[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    # Capture is lightweight — reads stdin JSON, stores memory, exits.
+    if args.command == "capture":
+        from .hooks import handle_capture
+        passphrase = resolve_passphrase(args)
+        return handle_capture(db_path=args.db, project=args.project, passphrase=passphrase)
 
     # Uninstall is special — it must NOT run setup or create a store.
     if args.command == "uninstall":
@@ -200,6 +212,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 source=args.source,
                 importance=args.importance,
                 confidence=args.confidence,
+                tags=args.tags,
             )
             print_json(payload)
             return 0

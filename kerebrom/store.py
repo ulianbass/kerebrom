@@ -74,6 +74,7 @@ class MemoryRecord:
     duplicate_count: int
     is_redacted: bool
     pii_hits: List[str]
+    tags: List[str]
     created_at: str
     updated_at: str
     valid_at: str
@@ -99,6 +100,7 @@ class MemoryRecord:
             duplicate_count=int(row["duplicate_count"]),
             is_redacted=bool(row["is_redacted"]),
             pii_hits=json.loads(row["pii_hits"]),
+            tags=json.loads(row["tags"]) if row["tags"] else [],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             valid_at=row["valid_at"],
@@ -119,6 +121,7 @@ class MemoryRecord:
             "duplicate_count": self.duplicate_count,
             "is_redacted": self.is_redacted,
             "pii_hits": self.pii_hits,
+            "tags": self.tags,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "valid_at": self.valid_at,
@@ -196,7 +199,8 @@ class KerebromStore:
                     last_decay_at TEXT,
                     valid_at TEXT NOT NULL,
                     invalid_at TEXT,
-                    consolidated_at TEXT
+                    consolidated_at TEXT,
+                    tags TEXT NOT NULL DEFAULT '[]'
                 );
 
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
@@ -286,6 +290,7 @@ class KerebromStore:
             )
             self._ensure_column(connection, "memories", "last_decay_at", "TEXT")
             self._ensure_column(connection, "memories", "consolidated_at", "TEXT")
+            self._ensure_column(connection, "memories", "tags", "TEXT NOT NULL DEFAULT '[]'")
             # Metadata table for auto-maintenance scheduling.
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS maintenance_log (
@@ -437,6 +442,7 @@ class KerebromStore:
         source: str = "manual",
         importance: float = 0.5,
         confidence: float = 0.8,
+        tags: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         self.initialize(project=project)
         now = utc_now()
@@ -467,8 +473,8 @@ class KerebromStore:
                 """
                 INSERT INTO memories (
                     project, content, raw_content, kind, source, importance, confidence,
-                    is_redacted, pii_hits, embedding, created_at, updated_at, valid_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_redacted, pii_hits, tags, embedding, created_at, updated_at, valid_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project,
@@ -480,6 +486,7 @@ class KerebromStore:
                     confidence,
                     int(bool(sensitive_matches)),
                     json.dumps([match.label for match in sensitive_matches]),
+                    json.dumps(tags or []),
                     json.dumps(embedding),
                     now,
                     now,

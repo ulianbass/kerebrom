@@ -92,6 +92,46 @@ def _clean_claude_md() -> str:
         return "CLAUDE.md: sección kerebrom removida"
 
 
+def _clean_claude_hooks() -> str:
+    """Remove kerebrom hooks from ~/.claude/settings.json."""
+    settings_file = Path.home() / ".claude" / "settings.json"
+    if not settings_file.exists():
+        return "settings.json: no existe"
+
+    try:
+        data = json.loads(settings_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return "settings.json: no se pudo leer"
+
+    hooks = data.get("hooks", {})
+    changed = False
+    for event_type in list(hooks.keys()):
+        if isinstance(hooks[event_type], list):
+            original_len = len(hooks[event_type])
+            hooks[event_type] = [
+                h for h in hooks[event_type]
+                if not (isinstance(h, dict) and "kerebrom" in h.get("command", ""))
+            ]
+            if len(hooks[event_type]) != original_len:
+                changed = True
+            if not hooks[event_type]:
+                del hooks[event_type]
+
+    if not changed:
+        return "settings.json: hooks de kerebrom no estaban configurados"
+
+    if hooks:
+        data["hooks"] = hooks
+    else:
+        data.pop("hooks", None)
+
+    settings_file.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return "settings.json: hooks de kerebrom removidos"
+
+
 def _clean_codex_config() -> str:
     """Remove [mcp_servers.kerebrom] from ~/.codex/config.toml."""
     config_file = Path.home() / ".codex" / "config.toml"
@@ -189,6 +229,7 @@ def run_uninstall(skip_pip: bool = False, quiet: bool = False) -> Dict[str, Any]
         ("Base de datos", _remove_kerebrom_db),
         ("Claude Code MCP", _clean_claude_mcp),
         ("Claude Code CLAUDE.md", _clean_claude_md),
+        ("Claude Code Hooks", _clean_claude_hooks),
         ("Codex config.toml", _clean_codex_config),
         ("Codex AGENTS.md", _clean_codex_agents_md),
         ("Archivos temporales", _clean_temp_runtime),

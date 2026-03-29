@@ -1117,5 +1117,189 @@ class EmbeddingAutoSelectTests(unittest.TestCase):
             self.assertTrue(result["inserted"])
 
 
+class PrivateTagTests(unittest.TestCase):
+    """Test <private> tag stripping."""
+
+    def test_private_tags_stripped_before_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            store = KerebromStore(Path(td) / "test.db")
+            store.initialize()
+            result = store.remember("Mi nombre es Ulian. <private>Mi contraseña es hunter2</private> Vivo en Guatemala.")
+            content = result["memory"]["content"]
+            self.assertNotIn("hunter2", content)
+            self.assertNotIn("<private>", content)
+            self.assertIn("Ulian", content)
+            self.assertIn("Guatemala", content)
+
+    def test_entirely_private_text(self) -> None:
+        from kerebrom.privacy import strip_private_tags
+        result = strip_private_tags("<private>todo secreto</private>")
+        self.assertEqual(result, "")
+
+    def test_multiple_private_blocks(self) -> None:
+        from kerebrom.privacy import strip_private_tags
+        result = strip_private_tags("Hola <private>secreto1</private> mundo <private>secreto2</private> fin")
+        self.assertNotIn("secreto1", result)
+        self.assertNotIn("secreto2", result)
+        self.assertIn("Hola", result)
+        self.assertIn("fin", result)
+
+
+class ObservationTagTests(unittest.TestCase):
+    """Test observation tags on memories."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tempdir.name) / "kerebrom.db"
+        self.store = KerebromStore(self.db_path)
+        self.store.initialize()
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def test_remember_with_tags(self) -> None:
+        result = self.store.remember("Decidimos usar ONNX en vez de torch.", tags=["decision", "feature"])
+        memory = result["memory"]
+        self.assertEqual(memory["tags"], ["decision", "feature"])
+
+    def test_remember_without_tags(self) -> None:
+        result = self.store.remember("Un recuerdo normal.")
+        memory = result["memory"]
+        self.assertEqual(memory["tags"], [])
+
+    def test_tags_in_recall(self) -> None:
+        self.store.remember("Corregimos el bug de race condition.", tags=["bugfix"])
+        results = self.store.recall("race condition", limit=1)
+        self.assertGreaterEqual(len(results), 1)
+        self.assertEqual(results[0].tags, ["bugfix"])
+
+    def test_tags_via_mcp(self) -> None:
+        from kerebrom.mcp_server import handle_tools_call
+        resp = handle_tools_call(
+            1,
+            {"name": "remember", "arguments": {"content": "Refactorizamos crypto.", "tags": ["refactor"]}},
+            self.store,
+            "default",
+        )
+        data = json.loads(resp["result"]["content"][0]["text"])
+        self.assertTrue(data["inserted"])
+        self.assertEqual(data["memory"]["tags"], ["refactor"])
+
+
+class PassiveCaptureTests(unittest.TestCase):
+    """Test the passive capture hooks module."""
+
+    def test_summarize_write_event(self) -> None:
+        from kerebrom.hooks import _summarize_tool_event
+        event = {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "/src/main.py", "content": "print('hello')"},
+        }
+        summary = _summarize_tool_event(event)
+        self.assertIsNotNone(summary)
+        self.assertIn("main.py", summary)
+
+    def test_summarize_bash_event(self) -> None:
+        from kerebrom.hooks import _summarize_tool_event
+        event = {
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm test"},
+            "tool_output": "5 tests passed",
+        }
+        summary = _summarize_tool_event(event)
+        self.assertIsNotNone(summary)
+        self.assertIn("npm test", summary)
+
+    def test_trivial_bash_skipped(self) -> None:
+        from kerebrom.hooks import _summarize_tool_event
+        event = {"tool_name": "Bash", "tool_input": {"command": "ls"}}
+        summary = _summarize_tool_event(event)
+        self.assertIsNone(summary)
+
+    def test_uninteresting_tool_skipped(self) -> None:
+        from kerebrom.hooks import _summarize_tool_event
+        event = {"tool_name": "Read", "tool_input": {"file_path": "/foo.py"}}
+        summary = _summarize_tool_event(event)
+        self.assertIsNone(summary)
+
+    def test_handle_capture_stores_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            db_path = Path(td) / "test.db"
+            event = json.dumps({
+                "tool_name": "Edit",
+                "tool_input": {"file_path": "/src/app.py", "old_string": "x", "new_string": "y"},
+            })
+            # Simulate stdin
+            from unittest.mock import patch
+            with patch("sys.stdin", io.StringIO(event)):
+                from kerebrom.hooks import handle_capture
+                ret = handle_capture(db_path=str(db_path))
+            self.assertEqual(ret, 0)
+
+            # Verify memory was stored.
+            store = KerebromStore(db_path)
+            store.initialize()
+            results = store.recall("app.py", limit=5)
+            self.assertGreaterEqual(len(results), 1)
+            self.assertIn("auto-capture", results[0].tags)
+
+    def test_handle_capture_ignores_malformed_input(self) -> None:
+        from unittest.mock import patch
+        with patch("sys.stdin", io.StringIO("not json")):
+            from kerebrom.hooks import handle_capture
+            ret = handle_capture(db_path="/tmp/nonexistent.db")
+        self.assertEqual(ret, 0)
+
+
+class HookSetupTests(unittest.TestCase):
+    """Test that setup.py configures hooks in settings.json."""
+
+    def test_setup_creates_hooks_in_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td)
+            claude_dir = fake_home / ".claude"
+            claude_dir.mkdir()
+
+            from unittest.mock import patch
+            with patch("kerebrom.setup.Path.home", return_value=fake_home):
+                from kerebrom.setup import _setup_claude_code
+                ok, msg = _setup_claude_code(fake_home / ".kerebrom" / "kerebrom.db")
+
+            self.assertTrue(ok)
+            self.assertIn("Hooks", msg)
+
+            settings = json.loads((claude_dir / "settings.json").read_text())
+            self.assertIn("hooks", settings)
+            self.assertIn("PostToolUse", settings["hooks"])
+            self.assertIn("Stop", settings["hooks"])
+
+            # Verify kerebrom capture command is in hooks
+            post_hooks = settings["hooks"]["PostToolUse"]
+            commands = [h["command"] for h in post_hooks if isinstance(h, dict)]
+            self.assertTrue(any("kerebrom capture" in cmd for cmd in commands))
+
+    def test_uninstall_removes_hooks(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td)
+            claude_dir = fake_home / ".claude"
+            claude_dir.mkdir()
+            settings = {
+                "hooks": {
+                    "PostToolUse": [{"matcher": "PostToolUse", "command": "kerebrom capture --db /x"}],
+                    "Stop": [{"matcher": "Stop", "command": "kerebrom capture --db /x"}],
+                }
+            }
+            (claude_dir / "settings.json").write_text(json.dumps(settings))
+
+            from unittest.mock import patch
+            with patch("kerebrom.uninstall.Path.home", return_value=fake_home):
+                from kerebrom.uninstall import _clean_claude_hooks
+                msg = _clean_claude_hooks()
+
+            self.assertIn("removidos", msg)
+            remaining = json.loads((claude_dir / "settings.json").read_text())
+            self.assertNotIn("hooks", remaining)
+
+
 if __name__ == "__main__":
     unittest.main()

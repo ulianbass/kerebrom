@@ -66,6 +66,15 @@ TOOLS: List[Dict[str, Any]] = [
                     "default": 0.8,
                     "description": "Confidence score 0-1.",
                 },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "default": [],
+                    "description": (
+                        "Observation tags: decision, bugfix, feature, refactor, "
+                        "discovery, change, preference, or custom."
+                    ),
+                },
             },
             "required": ["content"],
         },
@@ -249,6 +258,7 @@ def _dispatch_tool(
             source="mcp",
             importance=args.get("importance", 0.5),
             confidence=args.get("confidence", 0.8),
+            tags=args.get("tags", []),
         )
 
     if name == "recall":

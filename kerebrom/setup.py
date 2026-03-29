@@ -178,6 +178,59 @@ def _setup_claude_code(
         claude_md.write_text(_CLAUDE_MD, encoding="utf-8")
         messages.append("CLAUDE.md: creado")
 
+    # ── settings.json: register passive capture hooks ──
+    settings_file = claude_dir / "settings.json"
+    existing_settings: Dict[str, Any] = {}
+    if settings_file.exists():
+        try:
+            existing_settings = json.loads(settings_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing_settings = {}
+
+    hooks = existing_settings.get("hooks", {})
+    kerebrom_hook_marker = "kerebrom capture"
+
+    # Check if hooks are already configured.
+    already_hooked = False
+    for hook_list in hooks.values():
+        if isinstance(hook_list, list):
+            for hook in hook_list:
+                cmd = hook.get("command", "") if isinstance(hook, dict) else ""
+                if kerebrom_hook_marker in cmd:
+                    already_hooked = True
+                    break
+
+    if already_hooked:
+        messages.append("Hooks: ya configurados")
+    else:
+        capture_cmd = "kerebrom capture --db {}".format(db_path)
+
+        # PostToolUse: capture file edits, bash commands, etc.
+        post_tool_hook = {
+            "matcher": "PostToolUse",
+            "command": capture_cmd,
+        }
+        # Stop: capture session end summaries.
+        stop_hook = {
+            "matcher": "Stop",
+            "command": capture_cmd,
+        }
+
+        if "PostToolUse" not in hooks:
+            hooks["PostToolUse"] = []
+        hooks["PostToolUse"].append(post_tool_hook)
+
+        if "Stop" not in hooks:
+            hooks["Stop"] = []
+        hooks["Stop"].append(stop_hook)
+
+        existing_settings["hooks"] = hooks
+        settings_file.write_text(
+            json.dumps(existing_settings, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        messages.append("Hooks: configurados (PostToolUse + Stop)")
+
     return True, "Claude Code: " + "; ".join(messages)
 
 

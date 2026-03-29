@@ -1,4 +1,4 @@
-"""Sensitive data scrubbing and detection."""
+"""Sensitive data scrubbing, detection, and privacy tags."""
 
 from __future__ import annotations
 
@@ -21,9 +21,25 @@ SENSITIVE_PATTERNS = [
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+\b")),
 ]
 
+# <private>...</private> tags — content is stripped before storing.
+_PRIVATE_TAG_RE = re.compile(r"<private>.*?</private>", re.DOTALL | re.IGNORECASE)
+
+
+def strip_private_tags(text: str) -> str:
+    """Remove all <private>...</private> blocks from text.
+
+    Returns the text with private blocks removed and whitespace normalized.
+    If the entire text is private, returns empty string.
+    """
+    cleaned = _PRIVATE_TAG_RE.sub("", text)
+    # Collapse multiple spaces/newlines left by removal.
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
 
 def scrub_sensitive(text: str) -> tuple[str, List[SensitiveMatch]]:
-    redacted = text
+    # First strip <private> tags entirely.
+    redacted = strip_private_tags(text)
     matches: List[SensitiveMatch] = []
 
     for label, pattern in SENSITIVE_PATTERNS:
