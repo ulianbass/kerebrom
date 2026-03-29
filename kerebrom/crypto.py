@@ -1,8 +1,11 @@
 """Encrypted container helpers for Kerebrom.
 
 This module provides whole-file envelope encryption for SQLite databases
-using a system OpenSSL binary for AES-256-CTR and Python stdlib for
-PBKDF2 + HMAC authentication.
+using AES-256-CTR + PBKDF2 + HMAC-SHA256 authentication.
+
+Two backends are supported:
+- ``cryptography`` library (preferred, portable, pip install kerebrom[crypto])
+- System OpenSSL binary via subprocess (fallback, macOS/Linux only)
 
 It is intentionally conservative:
 - The encrypted container protects the database file at rest.
@@ -17,7 +20,6 @@ import hashlib
 import hmac
 import os
 import struct
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -27,6 +29,60 @@ IV_SIZE = 16
 MAC_SIZE = 32
 ITERATIONS = 200_000
 HEADER_STRUCT = struct.Struct(">I")
+
+# ---------------------------------------------------------------------------
+# AES-256-CTR backend selection
+# ---------------------------------------------------------------------------
+
+_USE_CRYPTOGRAPHY_LIB = False
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    _USE_CRYPTOGRAPHY_LIB = True
+except ImportError:
+    pass
+
+
+def _aes_ctr(data: bytes, key: bytes, iv: bytes) -> bytes:
+    """Encrypt or decrypt data with AES-256-CTR.
+
+    CTR mode is symmetric — encrypt and decrypt are the same operation.
+    """
+    if _USE_CRYPTOGRAPHY_LIB:
+        cipher = Cipher(algorithms.AES(key), modes.CTR(iv))
+        encryptor = cipher.encryptor()
+        return encryptor.update(data) + encryptor.finalize()
+    else:
+        return _aes_ctr_openssl(data, key, iv)
+
+
+def _aes_ctr_openssl(data: bytes, key: bytes, iv: bytes) -> bytes:
+    """AES-256-CTR via system OpenSSL binary (fallback for no-deps install)."""
+    import subprocess
+
+    with tempfile.TemporaryDirectory() as td:
+        input_path = Path(td) / "input.bin"
+        output_path = Path(td) / "output.bin"
+        input_path.write_bytes(data)
+
+        args = [
+            "openssl", "enc", "-aes-256-ctr", "-nosalt",
+            "-K", key.hex(),
+            "-iv", iv.hex(),
+            "-in", str(input_path),
+            "-out", str(output_path),
+        ]
+        result = subprocess.run(args, text=True, capture_output=True, check=False)
+        if result.returncode != 0:
+            raise RuntimeError(
+                "OpenSSL AES-CTR failed: {}".format(result.stderr.strip() or "unknown error")
+            )
+        return output_path.read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def is_encrypted_container(path: str | Path) -> bool:
@@ -52,23 +108,18 @@ def encrypt_database_file(
     iv = os.urandom(IV_SIZE)
     enc_key, mac_key = _derive_keys(passphrase, salt)
 
+    plaintext_data = plain.read_bytes()
+    ciphertext = _aes_ctr(plaintext_data, enc_key, iv)
+
+    mac = hmac.new(
+        mac_key,
+        MAGIC + HEADER_STRUCT.pack(ITERATIONS) + salt + iv + ciphertext,
+        hashlib.sha256,
+    ).digest()
+    payload = MAGIC + HEADER_STRUCT.pack(ITERATIONS) + salt + iv + mac + ciphertext
+
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=str(target.parent)) as td:
-        ciphertext_path = Path(td) / "cipher.bin"
-        _run_openssl_ctr(
-            input_path=plain,
-            output_path=ciphertext_path,
-            key_hex=enc_key.hex(),
-            iv_hex=iv.hex(),
-            decrypt=False,
-        )
-        ciphertext = ciphertext_path.read_bytes()
-        mac = hmac.new(
-            mac_key,
-            MAGIC + HEADER_STRUCT.pack(ITERATIONS) + salt + iv + ciphertext,
-            hashlib.sha256,
-        ).digest()
-        payload = MAGIC + HEADER_STRUCT.pack(ITERATIONS) + salt + iv + mac + ciphertext
         temp_target = Path(td) / "database.enc"
         temp_target.write_bytes(payload)
         os.replace(temp_target, target)
@@ -113,17 +164,10 @@ def decrypt_database_file(
     if not hmac.compare_digest(expected_mac, actual_mac):
         raise ValueError("Invalid passphrase or tampered encrypted container: {}".format(source))
 
+    plaintext_data = _aes_ctr(ciphertext, enc_key, iv)
+
     target.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=str(target.parent)) as td:
-        ciphertext_path = Path(td) / "cipher.bin"
-        ciphertext_path.write_bytes(ciphertext)
-        _run_openssl_ctr(
-            input_path=ciphertext_path,
-            output_path=target,
-            key_hex=enc_key.hex(),
-            iv_hex=iv.hex(),
-            decrypt=True,
-        )
+    target.write_bytes(plaintext_data)
 
 
 def _derive_keys(passphrase: str, salt: bytes, iterations: int = ITERATIONS) -> tuple[bytes, bytes]:
@@ -135,37 +179,3 @@ def _derive_keys(passphrase: str, salt: bytes, iterations: int = ITERATIONS) -> 
         dklen=64,
     )
     return material[:32], material[32:]
-
-
-def _run_openssl_ctr(
-    input_path: Path,
-    output_path: Path,
-    key_hex: str,
-    iv_hex: str,
-    *,
-    decrypt: bool,
-) -> None:
-    args = [
-        "openssl",
-        "enc",
-        "-aes-256-ctr",
-        "-nosalt",
-        "-K",
-        key_hex,
-        "-iv",
-        iv_hex,
-        "-in",
-        str(input_path),
-        "-out",
-        str(output_path),
-    ]
-    if decrypt:
-        args.insert(3, "-d")
-    result = subprocess.run(args, text=True, capture_output=True, check=False)
-    if result.returncode != 0:
-        raise RuntimeError(
-            "OpenSSL {} failed: {}".format(
-                "decrypt" if decrypt else "encrypt",
-                result.stderr.strip() or "unknown error",
-            )
-        )

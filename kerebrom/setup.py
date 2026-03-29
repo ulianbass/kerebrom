@@ -252,6 +252,27 @@ _TOOLS = [
 ]
 
 
+_FIRST_RUN_MARKER = Path.home() / ".kerebrom" / ".setup_done"
+
+_WELCOME = """\
+
+  Kerebrom v0.1.0 — Tu cerebro persistente para AI
+
+  Kerebrom recuerda todo entre conversaciones y comparte
+  memoria entre Claude Code, Codex, y cualquier herramienta
+  compatible con MCP.
+
+  Base de datos: {db}
+  Herramientas configuradas: {tools}
+
+  Uso: simplemente trabaja con tu AI como siempre.
+  Kerebrom captura y recuerda automaticamente.
+
+  Desinstalar todo: kerebrom uninstall
+
+"""
+
+
 def run_setup(
     db_path: Optional[Path] = None,
     quiet: bool = False,
@@ -265,6 +286,8 @@ def run_setup(
     if db_path is None:
         db_path = DEFAULT_DB
     db_path = db_path.expanduser().resolve()
+
+    first_run = not _FIRST_RUN_MARKER.exists()
 
     results: Dict[str, Any] = {
         "db": str(db_path),
@@ -289,11 +312,20 @@ def run_setup(
     results["configured"] = configured
     results["skipped"] = skipped
 
+    # Mark first-run done.
+    if first_run and configured > 0:
+        _FIRST_RUN_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        _FIRST_RUN_MARKER.write_text("1")
+
     if not quiet:
-        print()
-        if configured:
+        if first_run and configured > 0:
+            tool_names = [name for name, info in results["tools"].items() if info["configured"]]
+            print(_WELCOME.format(db=db_path, tools=", ".join(tool_names)))
+        elif configured:
+            print()
             print("Listo. Reinicia los AI tools para que tomen los cambios.")
         else:
+            print()
             print("No se detectaron AI tools instalados.")
 
     return results
