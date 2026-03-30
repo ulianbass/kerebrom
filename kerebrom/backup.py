@@ -67,8 +67,22 @@ def create_backup(
     output_path = output_path.expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Safety: never overwrite a backup with fewer memories than it already has.
+    if output_path.exists():
+        try:
+            existing_data = json.loads(output_path.read_text(encoding="utf-8"))
+            existing_count = existing_data.get("memory_count", 0)
+        except (json.JSONDecodeError, OSError):
+            existing_count = 0
+    else:
+        existing_count = 0
+
     # Export all active memories.
     memories = store.export_memories(project=project, include_inactive=False)
+
+    # Safety check: refuse to overwrite with fewer memories.
+    if len(memories) < existing_count:
+        return output_path  # Silently keep the existing backup intact.
 
     # Build backup payload with only the fields needed for organic restore.
     backup_memories: List[Dict[str, Any]] = []
