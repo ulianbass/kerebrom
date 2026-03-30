@@ -563,6 +563,17 @@ def run_setup(
         db_path = DEFAULT_DB
     db_path = db_path.expanduser().resolve()
 
+    # Never run setup in sandbox / temp environments.
+    if _is_temp_path(db_path):
+        return {
+            "db": str(db_path),
+            "tools": {},
+            "configured": 0,
+            "skipped": 0,
+            "passphrase_env": passphrase_env,
+            "passphrase_file": passphrase_file,
+        }
+
     first_run = not _FIRST_RUN_MARKER.exists()
 
     results: Dict[str, Any] = {

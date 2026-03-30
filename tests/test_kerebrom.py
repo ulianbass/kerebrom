@@ -440,16 +440,19 @@ class SetupTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_ensure_setup_configures_tools_installed_later(self) -> None:
+        from unittest.mock import patch
         from kerebrom.setup import ensure_setup
 
         db_path = Path(self.tempdir.name) / ".kerebrom" / "kerebrom.db"
         codex_dir = Path(self.tempdir.name) / ".codex"
 
-        ensure_setup(db_path=db_path)
+        with patch("kerebrom.setup._is_temp_path", return_value=False):
+            ensure_setup(db_path=db_path)
         self.assertFalse((codex_dir / "config.toml").exists())
 
         codex_dir.mkdir(parents=True, exist_ok=True)
-        ensure_setup(db_path=db_path)
+        with patch("kerebrom.setup._is_temp_path", return_value=False):
+            ensure_setup(db_path=db_path)
 
         self.assertTrue((codex_dir / "config.toml").exists())
         self.assertTrue((codex_dir / "AGENTS.md").exists())
