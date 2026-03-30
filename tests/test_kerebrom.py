@@ -455,6 +455,7 @@ class SetupTests(unittest.TestCase):
         self.assertTrue((codex_dir / "AGENTS.md").exists())
 
     def test_ensure_setup_propagates_passphrase_selector(self) -> None:
+        from unittest.mock import patch
         from kerebrom.setup import ensure_setup
 
         db_path = Path(self.tempdir.name) / ".kerebrom" / "secure.kdb"
@@ -463,7 +464,8 @@ class SetupTests(unittest.TestCase):
         codex_dir.mkdir(parents=True, exist_ok=True)
         claude_dir.mkdir(parents=True, exist_ok=True)
 
-        ensure_setup(db_path=db_path, passphrase_env="KEREBROM_PASSPHRASE")
+        with patch("kerebrom.setup._is_temp_path", return_value=False):
+            ensure_setup(db_path=db_path, passphrase_env="KEREBROM_PASSPHRASE")
 
         codex_config = (codex_dir / "config.toml").read_text(encoding="utf-8")
         mcp_json = Path(self.tempdir.name) / ".claude" / ".mcp.json"
@@ -1574,7 +1576,8 @@ class HookSetupTests(unittest.TestCase):
             claude_dir.mkdir()
 
             from unittest.mock import patch
-            with patch("kerebrom.setup.Path.home", return_value=fake_home):
+            with patch("kerebrom.setup.Path.home", return_value=fake_home), \
+                 patch("kerebrom.setup._is_temp_path", return_value=False):
                 from kerebrom.setup import _setup_claude_code
                 ok, msg = _setup_claude_code(fake_home / ".kerebrom" / "kerebrom.db")
 

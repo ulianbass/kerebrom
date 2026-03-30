@@ -127,17 +127,15 @@ Never say "I don't know" without checking Kerebrom first.
 
 
 def _is_temp_path(db_path: Path) -> bool:
-    """Check if db_path is outside the user's home directory.
+    """Detect if db_path is a temporary/sandbox path.
 
-    When tests set HOME to a temp dir, Path.home() matches the temp path,
-    so this only triggers for truly foreign temp paths (e.g. when ensure_setup
-    is called from an MCP server running with a test db).
+    Checks for known temp directory patterns rather than relying on
+    Path.home(), which gets remapped in Claude Code sandboxes.
     """
-    try:
-        db_path.resolve().relative_to(Path.home().resolve())
-        return False  # Inside home — not a foreign temp path.
-    except ValueError:
-        return True  # Outside home — likely a temp/test path.
+    resolved = str(db_path.resolve())
+    # Detect macOS temp dirs, Linux /tmp, and Windows Temp.
+    temp_markers = ["/private/var/folders/", "/tmp/", "/var/tmp/", "\\Temp\\"]
+    return any(marker in resolved for marker in temp_markers)
 
 
 def _mcp_entry(
