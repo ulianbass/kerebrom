@@ -467,7 +467,8 @@ def _setup_launchagent(
     if passphrase_file:
         setup_args.extend(["--passphrase-file", passphrase_file])
 
-    wrapper_content = "#!/bin/sh\nexec {}\n".format(" ".join(setup_args))
+    import shlex
+    wrapper_content = "#!/bin/sh\nexec {}\n".format(" ".join(shlex.quote(a) for a in setup_args))
     db_path.parent.mkdir(parents=True, exist_ok=True)
     wrapper_path.write_text(wrapper_content, encoding="utf-8")
     wrapper_path.chmod(0o755)

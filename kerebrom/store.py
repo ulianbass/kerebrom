@@ -754,8 +754,6 @@ class KerebromStore:
                 )
             return cursor.rowcount
 
-        raise ValueError("forget requires memory_id, query or sensitive=True")
-
     def list_entities(
         self,
         project: str = DEFAULT_PROJECT,

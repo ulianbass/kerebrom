@@ -73,16 +73,15 @@ def _clean_claude_mcp() -> str:
             mcp_servers = data.get("mcpServers", {})
             for key in ["Kerebrom", "kerebrom"]:
                 mcp_servers.pop(key, None)
-            if True:  # always write back after cleanup
-                if not mcp_servers:
-                    data.pop("mcpServers", None)
-                else:
-                    data["mcpServers"] = mcp_servers
-                claude_json.write_text(
-                    json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-                    encoding="utf-8",
-                )
-                messages.append("claude.json: MCP removido")
+            if not mcp_servers:
+                data.pop("mcpServers", None)
+            else:
+                data["mcpServers"] = mcp_servers
+            claude_json.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            messages.append("claude.json: MCP removido")
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -162,9 +161,21 @@ def _clean_claude_hooks() -> str:
     for event_type in list(hooks.keys()):
         if isinstance(hooks[event_type], list):
             original_len = len(hooks[event_type])
+
+            def _has_kerebrom(entry: dict) -> bool:
+                """Check both old and new hook formats for kerebrom."""
+                # Old format: {"command": "...kerebrom..."}
+                if "kerebrom" in entry.get("command", ""):
+                    return True
+                # New format: {"hooks": [{"type": "command", "command": "...kerebrom..."}]}
+                for h in entry.get("hooks", []):
+                    if isinstance(h, dict) and "kerebrom" in h.get("command", ""):
+                        return True
+                return False
+
             hooks[event_type] = [
                 h for h in hooks[event_type]
-                if not (isinstance(h, dict) and "kerebrom" in h.get("command", ""))
+                if not (isinstance(h, dict) and _has_kerebrom(h))
             ]
             if len(hooks[event_type]) != original_len:
                 changed = True
