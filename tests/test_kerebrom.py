@@ -1064,12 +1064,19 @@ class UninstallTests(unittest.TestCase):
             self.assertIn("removida", msg)
 
     def test_uninstall_cli_with_yes_flag(self) -> None:
-        result = subprocess.run(
-            [sys.executable, "-m", "kerebrom", "uninstall", "--yes", "--keep-pip"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
+        import os
+        import tempfile
+
+        # Run uninstall in an isolated HOME so the real system is untouched.
+        with tempfile.TemporaryDirectory() as fake_home:
+            env = {**os.environ, "HOME": fake_home}
+            result = subprocess.run(
+                [sys.executable, "-m", "kerebrom", "uninstall", "--yes", "--keep-pip"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                env=env,
+            )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertIn("desinstalado", result.stdout.lower())
 

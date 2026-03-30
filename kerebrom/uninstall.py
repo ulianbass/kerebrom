@@ -57,6 +57,14 @@ def _remove_kerebrom_db() -> str:
     if not kerebrom_dir.exists():
         return "~/.kerebrom/: no existe, nada que borrar"
 
+    # Remove immutable flags (macOS chflags uchg) before rmtree so that
+    # protected files like the Kerebrom wrapper script can be deleted.
+    if sys.platform == "darwin":
+        subprocess.run(
+            ["chflags", "-R", "nouchg", str(kerebrom_dir)],
+            capture_output=True,
+        )
+
     shutil.rmtree(kerebrom_dir)
     return "~/.kerebrom/: eliminado (base de datos y toda la memoria)"
 
