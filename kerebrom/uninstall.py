@@ -86,22 +86,23 @@ def _clean_claude_mcp() -> str:
         except (json.JSONDecodeError, OSError):
             pass
 
-    # ── Legacy location: ~/.claude/.mcp.json ──
+    # ── Primary location: ~/.claude/.mcp.json ──
     mcp_file = Path.home() / ".claude" / ".mcp.json"
     if mcp_file.exists():
         try:
             data = json.loads(mcp_file.read_text(encoding="utf-8"))
+            mcp_servers = data.get("mcpServers", {})
             for key in ["Kerebrom", "kerebrom"]:
-                data.pop(key, None)
-            if True:
-                if not data:
-                    mcp_file.unlink()
-                else:
-                    mcp_file.write_text(
-                        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-                        encoding="utf-8",
-                    )
-                messages.append(".mcp.json: entrada legacy removida")
+                mcp_servers.pop(key, None)
+            if not mcp_servers:
+                mcp_file.unlink()
+            else:
+                data["mcpServers"] = mcp_servers
+                mcp_file.write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+            messages.append(".mcp.json: Kerebrom removido")
         except (json.JSONDecodeError, OSError):
             pass
 

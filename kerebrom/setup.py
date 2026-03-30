@@ -189,36 +189,53 @@ def _setup_claude_code(
 
     messages: List[str] = []
 
-    # ── ~/.claude.json: register MCP server globally ──
-    # Claude Code reads global MCP servers from ~/.claude.json under "mcpServers",
-    # NOT from ~/.claude/.mcp.json (which is project-scoped).
-    # Skip MCP registration if db_path is a temp/test path to avoid corrupting
-    # the real config with ephemeral paths.
+    # ── ~/.claude/.mcp.json: register MCP server ──
+    # Claude Code reads MCP servers from ~/.claude/.mcp.json.
+    # This file is NOT overwritten by Claude Code (unlike ~/.claude.json),
+    # so configs persist across restarts.
     if _is_temp_path(db_path):
         messages.append("MCP: omitido (ruta temporal)")
     else:
-        claude_json = Path.home() / ".claude.json"
-        claude_config: Dict[str, Any] = {}
-        if claude_json.exists():
+        mcp_json = claude_dir / ".mcp.json"
+        mcp_config: Dict[str, Any] = {}
+        if mcp_json.exists():
             try:
-                claude_config = json.loads(claude_json.read_text(encoding="utf-8"))
+                mcp_config = json.loads(mcp_json.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
-                claude_config = {}
+                mcp_config = {}
 
         entry = _mcp_entry(db_path, passphrase_env=passphrase_env, passphrase_file=passphrase_file)
-        mcp_servers = claude_config.get("mcpServers", {})
+        mcp_servers = mcp_config.get("mcpServers", {})
         # Remove legacy lowercase key if present.
         mcp_servers.pop("kerebrom", None)
         if mcp_servers.get("Kerebrom") == entry:
             messages.append("MCP: ya configurado")
         else:
             mcp_servers["Kerebrom"] = entry
-            claude_config["mcpServers"] = mcp_servers
-            claude_json.write_text(
-                json.dumps(claude_config, indent=2, ensure_ascii=False) + "\n",
+            mcp_config["mcpServers"] = mcp_servers
+            mcp_json.write_text(
+                json.dumps(mcp_config, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
             messages.append("MCP: configurado")
+
+        # Clean up legacy entry from ~/.claude.json (Claude Code overwrites this file).
+        claude_json = Path.home() / ".claude.json"
+        if claude_json.exists():
+            try:
+                cj = json.loads(claude_json.read_text(encoding="utf-8"))
+                mcs = cj.get("mcpServers", {})
+                if "Kerebrom" in mcs or "kerebrom" in mcs:
+                    mcs.pop("Kerebrom", None)
+                    mcs.pop("kerebrom", None)
+                    if not mcs:
+                        cj.pop("mcpServers", None)
+                    claude_json.write_text(
+                        json.dumps(cj, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8",
+                    )
+            except (json.JSONDecodeError, OSError):
+                pass
 
     # ── CLAUDE.md: redirect memory to Kerebrom ──
     claude_md = claude_dir / "CLAUDE.md"
@@ -261,15 +278,22 @@ def _setup_claude_code(
     hooks = existing_settings.get("hooks", {})
     kerebrom_hook_marker = "kerebrom capture"
 
-    # Check if hooks are already configured.
+    # Check if hooks are already configured (supports both old and new format).
     already_hooked = False
     for hook_list in hooks.values():
         if isinstance(hook_list, list):
-            for hook in hook_list:
-                cmd = hook.get("command", "") if isinstance(hook, dict) else ""
-                if kerebrom_hook_marker in cmd:
+            for entry in hook_list:
+                if not isinstance(entry, dict):
+                    continue
+                # New format: entry has "hooks" array.
+                inner_hooks = entry.get("hooks", [])
+                for h in inner_hooks:
+                    if kerebrom_hook_marker in h.get("command", ""):
+                        already_hooked = True
+                        break
+                # Old format: entry has "command" directly.
+                if kerebrom_hook_marker in entry.get("command", ""):
                     already_hooked = True
-                    break
 
     if already_hooked:
         messages.append("Hooks: ya configurados")
@@ -278,24 +302,22 @@ def _setup_claude_code(
     else:
         capture_cmd = "{} -m kerebrom capture --db {}".format(sys.executable, db_path)
 
-        # PostToolUse: capture file edits, bash commands, etc.
-        post_tool_hook = {
-            "matcher": "PostToolUse",
-            "command": capture_cmd,
-        }
-        # Stop: capture session end summaries.
-        stop_hook = {
-            "matcher": "Stop",
-            "command": capture_cmd,
+        hook_entry = {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": capture_cmd,
+                }
+            ]
         }
 
         if "PostToolUse" not in hooks:
             hooks["PostToolUse"] = []
-        hooks["PostToolUse"].append(post_tool_hook)
+        hooks["PostToolUse"].append(hook_entry)
 
         if "Stop" not in hooks:
             hooks["Stop"] = []
-        hooks["Stop"].append(stop_hook)
+        hooks["Stop"].append(hook_entry)
 
         existing_settings["hooks"] = hooks
         settings_changed = True

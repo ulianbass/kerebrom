@@ -466,13 +466,13 @@ class SetupTests(unittest.TestCase):
         ensure_setup(db_path=db_path, passphrase_env="KEREBROM_PASSPHRASE")
 
         codex_config = (codex_dir / "config.toml").read_text(encoding="utf-8")
-        claude_json = Path(self.tempdir.name) / ".claude.json"
-        claude_config = json.loads(claude_json.read_text(encoding="utf-8"))
+        mcp_json = Path(self.tempdir.name) / ".claude" / ".mcp.json"
+        mcp_config = json.loads(mcp_json.read_text(encoding="utf-8"))
 
         self.assertIn("--passphrase-env", codex_config)
         self.assertIn("KEREBROM_PASSPHRASE", codex_config)
-        self.assertIn("--passphrase-env", claude_config["mcpServers"]["Kerebrom"]["args"])
-        self.assertIn("KEREBROM_PASSPHRASE", claude_config["mcpServers"]["Kerebrom"]["args"])
+        self.assertIn("--passphrase-env", mcp_config["mcpServers"]["Kerebrom"]["args"])
+        self.assertIn("KEREBROM_PASSPHRASE", mcp_config["mcpServers"]["Kerebrom"]["args"])
 
 
 class CLITests(unittest.TestCase):
@@ -1030,7 +1030,7 @@ class UninstallTests(unittest.TestCase):
             fake_home = Path(td)
             claude_dir = fake_home / ".claude"
             claude_dir.mkdir()
-            mcp_data = {"kerebrom": {"command": "python3"}, "other_tool": {"command": "node"}}
+            mcp_data = {"mcpServers": {"kerebrom": {"command": "python3"}, "other_tool": {"command": "node"}}}
             (claude_dir / ".mcp.json").write_text(json.dumps(mcp_data))
 
             from unittest.mock import patch
@@ -1039,9 +1039,9 @@ class UninstallTests(unittest.TestCase):
                 msg = _clean_claude_mcp()
 
             remaining = json.loads((claude_dir / ".mcp.json").read_text())
-            self.assertNotIn("kerebrom", remaining)
-            self.assertIn("other_tool", remaining)
-            self.assertIn("removida", msg)
+            self.assertNotIn("kerebrom", remaining.get("mcpServers", remaining))
+            self.assertIn("other_tool", remaining.get("mcpServers", remaining))
+            self.assertIn("removido", msg)
 
     def test_uninstall_cleans_codex_config(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -1586,9 +1586,13 @@ class HookSetupTests(unittest.TestCase):
             self.assertIn("PostToolUse", settings["hooks"])
             self.assertIn("Stop", settings["hooks"])
 
-            # Verify kerebrom capture command is in hooks
+            # Verify kerebrom capture command is in hooks (new format: hooks array inside entry)
             post_hooks = settings["hooks"]["PostToolUse"]
-            commands = [h["command"] for h in post_hooks if isinstance(h, dict)]
+            commands = []
+            for entry in post_hooks:
+                if isinstance(entry, dict):
+                    for h in entry.get("hooks", []):
+                        commands.append(h.get("command", ""))
             self.assertTrue(any("kerebrom capture" in cmd for cmd in commands))
 
     def test_uninstall_removes_hooks(self) -> None:
