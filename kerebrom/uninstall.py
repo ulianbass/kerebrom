@@ -71,8 +71,9 @@ def _clean_claude_mcp() -> str:
         try:
             data = json.loads(claude_json.read_text(encoding="utf-8"))
             mcp_servers = data.get("mcpServers", {})
-            if "kerebrom" in mcp_servers:
-                del mcp_servers["kerebrom"]
+            for key in ["Kerebrom", "kerebrom"]:
+                mcp_servers.pop(key, None)
+            if True:  # always write back after cleanup
                 if not mcp_servers:
                     data.pop("mcpServers", None)
                 else:
@@ -90,8 +91,9 @@ def _clean_claude_mcp() -> str:
     if mcp_file.exists():
         try:
             data = json.loads(mcp_file.read_text(encoding="utf-8"))
-            if "kerebrom" in data:
-                del data["kerebrom"]
+            for key in ["Kerebrom", "kerebrom"]:
+                data.pop(key, None)
+            if True:
                 if not data:
                     mcp_file.unlink()
                 else:
@@ -183,6 +185,42 @@ def _clean_claude_hooks() -> str:
     return "settings.json: hooks de kerebrom removidos"
 
 
+def _clean_claude_desktop_mcp() -> str:
+    """Remove kerebrom entry from Claude Desktop app config."""
+    if sys.platform == "darwin":
+        config_path = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    elif sys.platform == "win32":
+        import os as _os
+        config_path = Path(_os.environ.get("APPDATA", "")) / "Claude" / "claude_desktop_config.json"
+    else:
+        return "Claude Desktop: plataforma no soportada"
+
+    if not config_path.exists():
+        return "Claude Desktop: no detectado"
+
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        mcp_servers = data.get("mcpServers", {})
+        found = False
+        for key in ["Kerebrom", "kerebrom"]:
+            if key in mcp_servers:
+                del mcp_servers[key]
+                found = True
+        if not found:
+            return "Claude Desktop: Kerebrom no estaba configurado"
+        if not mcp_servers:
+            data.pop("mcpServers", None)
+        else:
+            data["mcpServers"] = mcp_servers
+        config_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        return "Claude Desktop: MCP removido"
+    except (json.JSONDecodeError, OSError):
+        return "Claude Desktop: error al limpiar config"
+
+
 def _clean_codex_config() -> str:
     """Remove [mcp_servers.kerebrom] from ~/.codex/config.toml."""
     config_file = Path.home() / ".codex" / "config.toml"
@@ -248,6 +286,23 @@ def _clean_temp_runtime() -> str:
     return "Temp: sin residuos runtime"
 
 
+def _clean_launchagent() -> str:
+    """Remove the kerebrom LaunchAgent."""
+    if sys.platform != "darwin":
+        return "LaunchAgent: no aplica (no macOS)"
+
+    plist_path = Path.home() / "Library" / "LaunchAgents" / "com.kerebrom.setup.plist"
+    if not plist_path.exists():
+        return "LaunchAgent: no estaba instalado"
+
+    subprocess.run(
+        ["launchctl", "unload", str(plist_path)],
+        capture_output=True,
+    )
+    plist_path.unlink()
+    return "LaunchAgent: eliminado"
+
+
 def _clean_model_cache() -> str:
     """Remove downloaded ONNX model files from ~/.cache/kerebrom/."""
     cache_dir = Path.home() / ".cache" / "kerebrom"
@@ -282,9 +337,11 @@ def run_uninstall(skip_pip: bool = False, quiet: bool = False) -> Dict[str, Any]
         ("Claude Code MCP", _clean_claude_mcp),
         ("Claude Code CLAUDE.md", _clean_claude_md),
         ("Claude Code Hooks", _clean_claude_hooks),
+        ("Claude Desktop MCP", _clean_claude_desktop_mcp),
         ("Codex config.toml", _clean_codex_config),
         ("Codex AGENTS.md", _clean_codex_agents_md),
         ("Archivos temporales", _clean_temp_runtime),
+        ("LaunchAgent", _clean_launchagent),
         ("Modelo ONNX", _clean_model_cache),
     ]
     if not skip_pip:

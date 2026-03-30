@@ -49,12 +49,20 @@ def create_backup(
 ) -> Path:
     """Export all active memories to a portable .kbk file.
 
+    If no output_path is given, reuses the most recent existing .kbk file
+    (updating it in place) or creates a new one with a fixed name.
+    This avoids accumulating duplicate backup files.
+
     Returns the path to the created backup file.
     """
     if output_path is None:
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        filename = "{}-{}{}" .format(BACKUP_PREFIX, timestamp, BACKUP_EXTENSION)
-        output_path = DEFAULT_BACKUP_DIR / filename
+        # Reuse existing backup if one exists.
+        existing = find_latest_backup()
+        if existing is not None:
+            output_path = existing
+        else:
+            filename = "{}{}".format(BACKUP_PREFIX, BACKUP_EXTENSION)
+            output_path = DEFAULT_BACKUP_DIR / filename
 
     output_path = output_path.expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)

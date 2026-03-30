@@ -327,6 +327,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             run_server(db_path=args.db, project=args.project, passphrase=passphrase)
             return 0
 
+
         if args.command == "consolidate":
             data = store.consolidate(
                 project=args.project,

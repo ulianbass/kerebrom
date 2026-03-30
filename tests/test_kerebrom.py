@@ -471,8 +471,8 @@ class SetupTests(unittest.TestCase):
 
         self.assertIn("--passphrase-env", codex_config)
         self.assertIn("KEREBROM_PASSPHRASE", codex_config)
-        self.assertIn("--passphrase-env", claude_config["mcpServers"]["kerebrom"]["args"])
-        self.assertIn("KEREBROM_PASSPHRASE", claude_config["mcpServers"]["kerebrom"]["args"])
+        self.assertIn("--passphrase-env", claude_config["mcpServers"]["Kerebrom"]["args"])
+        self.assertIn("KEREBROM_PASSPHRASE", claude_config["mcpServers"]["Kerebrom"]["args"])
 
 
 class CLITests(unittest.TestCase):
@@ -1465,6 +1465,38 @@ class OrganicBackupTests(unittest.TestCase):
         result = restore_organic(self.store, backup_path, skip_duplicates=True)
         self.assertEqual(result["restored"], 0)
         self.assertEqual(result["skipped_duplicate"], 3)
+
+    def test_create_backup_reuses_existing(self) -> None:
+        """Calling create_backup twice without output_path should update the same file."""
+        from unittest.mock import patch
+        from kerebrom.backup import create_backup, DEFAULT_BACKUP_DIR
+
+        backup_dir = Path(self.tempdir.name) / "docs"
+        backup_dir.mkdir()
+
+        with patch("kerebrom.backup.DEFAULT_BACKUP_DIR", backup_dir), \
+             patch("kerebrom.backup.find_latest_backup", return_value=None):
+            first = create_backup(self.store)
+
+        # First call creates the file.
+        self.assertTrue(first.exists())
+        first_data = json.loads(first.read_text())
+        self.assertEqual(first_data["memory_count"], 3)
+
+        # Add a 4th memory.
+        self.store.remember("Cuarta memoria de prueba.", kind="episodic", importance=0.5)
+
+        # Second call should reuse the same file.
+        with patch("kerebrom.backup.find_latest_backup", return_value=first):
+            second = create_backup(self.store)
+
+        self.assertEqual(first, second)
+        second_data = json.loads(second.read_text())
+        self.assertEqual(second_data["memory_count"], 4)
+
+        # Only one .kbk file should exist.
+        kbk_files = list(backup_dir.glob("*.kbk"))
+        self.assertEqual(len(kbk_files), 1)
 
     def test_find_backups(self) -> None:
         from kerebrom.backup import create_backup, find_backups

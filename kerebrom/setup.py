@@ -13,6 +13,7 @@ so newly installed tools get configured without a separate manual step.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -125,6 +126,20 @@ Never say "I don't know" without checking Kerebrom first.
 """
 
 
+def _is_temp_path(db_path: Path) -> bool:
+    """Check if db_path is outside the user's home directory.
+
+    When tests set HOME to a temp dir, Path.home() matches the temp path,
+    so this only triggers for truly foreign temp paths (e.g. when ensure_setup
+    is called from an MCP server running with a test db).
+    """
+    try:
+        db_path.resolve().relative_to(Path.home().resolve())
+        return False  # Inside home — not a foreign temp path.
+    except ValueError:
+        return True  # Outside home — likely a temp/test path.
+
+
 def _mcp_entry(
     db_path: Path,
     passphrase_env: Optional[str] = None,
@@ -136,9 +151,26 @@ def _mcp_entry(
         args.extend(["--passphrase-env", passphrase_env])
     if passphrase_file:
         args.extend(["--passphrase-file", passphrase_file])
+
+    # Build PYTHONPATH so the MCP server can find kerebrom even when
+    # launched from a minimal environment (e.g. Claude Desktop app).
+    import site
+    python_paths = [str(db_path.parent.parent)]  # project root guess
+    # Include the source tree if installed in editable mode.
+    src_dir = Path(__file__).resolve().parent.parent
+    if (src_dir / "kerebrom" / "__init__.py").exists():
+        python_paths.insert(0, str(src_dir))
+    # Include user site-packages.
+    user_site = site.getusersitepackages()
+    if isinstance(user_site, str):
+        python_paths.append(user_site)
+
     return {
         "command": sys.executable,
         "args": args,
+        "env": {
+            "PYTHONPATH": ":".join(dict.fromkeys(python_paths)),
+        },
     }
 
 
@@ -160,26 +192,33 @@ def _setup_claude_code(
     # ── ~/.claude.json: register MCP server globally ──
     # Claude Code reads global MCP servers from ~/.claude.json under "mcpServers",
     # NOT from ~/.claude/.mcp.json (which is project-scoped).
-    claude_json = Path.home() / ".claude.json"
-    claude_config: Dict[str, Any] = {}
-    if claude_json.exists():
-        try:
-            claude_config = json.loads(claude_json.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            claude_config = {}
-
-    entry = _mcp_entry(db_path, passphrase_env=passphrase_env, passphrase_file=passphrase_file)
-    mcp_servers = claude_config.get("mcpServers", {})
-    if mcp_servers.get("kerebrom") == entry:
-        messages.append("MCP: ya configurado")
+    # Skip MCP registration if db_path is a temp/test path to avoid corrupting
+    # the real config with ephemeral paths.
+    if _is_temp_path(db_path):
+        messages.append("MCP: omitido (ruta temporal)")
     else:
-        mcp_servers["kerebrom"] = entry
-        claude_config["mcpServers"] = mcp_servers
-        claude_json.write_text(
-            json.dumps(claude_config, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-        messages.append("MCP: configurado")
+        claude_json = Path.home() / ".claude.json"
+        claude_config: Dict[str, Any] = {}
+        if claude_json.exists():
+            try:
+                claude_config = json.loads(claude_json.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                claude_config = {}
+
+        entry = _mcp_entry(db_path, passphrase_env=passphrase_env, passphrase_file=passphrase_file)
+        mcp_servers = claude_config.get("mcpServers", {})
+        # Remove legacy lowercase key if present.
+        mcp_servers.pop("kerebrom", None)
+        if mcp_servers.get("Kerebrom") == entry:
+            messages.append("MCP: ya configurado")
+        else:
+            mcp_servers["Kerebrom"] = entry
+            claude_config["mcpServers"] = mcp_servers
+            claude_json.write_text(
+                json.dumps(claude_config, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            messages.append("MCP: configurado")
 
     # ── CLAUDE.md: redirect memory to Kerebrom ──
     claude_md = claude_dir / "CLAUDE.md"
@@ -234,6 +273,8 @@ def _setup_claude_code(
 
     if already_hooked:
         messages.append("Hooks: ya configurados")
+    elif _is_temp_path(db_path):
+        messages.append("Hooks: omitidos (ruta temporal)")
     else:
         capture_cmd = "{} -m kerebrom capture --db {}".format(sys.executable, db_path)
 
@@ -335,9 +376,134 @@ def _setup_codex(
 
 # ── Public API ───────────────────────────────────────────────────────
 
+def _setup_claude_desktop(
+    db_path: Path,
+    passphrase_env: Optional[str] = None,
+    passphrase_file: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Configure Kerebrom MCP in the Claude Desktop app (Chat + Cowork)."""
+    if sys.platform == "darwin":
+        config_path = Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    elif sys.platform == "win32":
+        config_path = Path(os.environ.get("APPDATA", "")) / "Claude" / "claude_desktop_config.json"
+    else:
+        return False, "Claude Desktop: plataforma no soportada"
+
+    if not config_path.parent.exists():
+        return False, "Claude Desktop: no detectado"
+
+    if _is_temp_path(db_path):
+        return True, "Claude Desktop: MCP omitido (ruta temporal)"
+
+    config: Dict[str, Any] = {}
+    if config_path.exists():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            config = {}
+
+    entry = _mcp_entry(db_path, passphrase_env=passphrase_env, passphrase_file=passphrase_file)
+    mcp_servers = config.get("mcpServers", {})
+    # Remove legacy lowercase key if present.
+    mcp_servers.pop("kerebrom", None)
+    if mcp_servers.get("Kerebrom") == entry:
+        return True, "Claude Desktop: MCP ya configurado (Chat + Cowork)"
+
+    mcp_servers["Kerebrom"] = entry
+    config["mcpServers"] = mcp_servers
+    config_path.write_text(
+        json.dumps(config, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return True, "Claude Desktop: MCP configurado (Chat + Cowork)"
+
+
+def _setup_launchagent(
+    db_path: Path,
+    passphrase_env: Optional[str] = None,
+    passphrase_file: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Install a macOS LaunchAgent that runs `kerebrom setup` periodically.
+
+    This ensures MCP configs auto-repair if an external process removes them.
+    Runs every 10 minutes, silently, using the same Python that installed kerebrom.
+    """
+    if sys.platform != "darwin":
+        return False, "LaunchAgent: solo disponible en macOS"
+
+    if _is_temp_path(db_path):
+        return True, "LaunchAgent: omitido (ruta temporal)"
+
+    label = "com.kerebrom.setup"
+    plist_dir = Path.home() / "Library" / "LaunchAgents"
+    plist_path = plist_dir / "{}.plist".format(label)
+
+    # Create a wrapper script so macOS shows "Kerebrom" in login items
+    # instead of "python3".
+    wrapper_path = db_path.parent / "Kerebrom"
+    setup_args = [sys.executable, "-m", "kerebrom", "setup", "--db", str(db_path)]
+    if passphrase_env:
+        setup_args.extend(["--passphrase-env", passphrase_env])
+    if passphrase_file:
+        setup_args.extend(["--passphrase-file", passphrase_file])
+
+    wrapper_content = "#!/bin/sh\nexec {}\n".format(" ".join(setup_args))
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    wrapper_path.write_text(wrapper_content, encoding="utf-8")
+    wrapper_path.chmod(0o755)
+
+    plist_content = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{label}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{wrapper}</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/dev/null</string>
+  <key>StandardErrorPath</key>
+  <string>/dev/null</string>
+</dict>
+</plist>
+""".format(label=label, wrapper=str(wrapper_path))
+
+    plist_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check if already installed with same content.
+    if plist_path.exists():
+        existing = plist_path.read_text(encoding="utf-8")
+        if existing == plist_content:
+            return True, "LaunchAgent: ya instalado"
+
+    plist_path.write_text(plist_content, encoding="utf-8")
+
+    # Load/reload the agent.
+    import subprocess
+    subprocess.run(
+        ["launchctl", "unload", str(plist_path)],
+        capture_output=True,
+    )
+    subprocess.run(
+        ["launchctl", "load", str(plist_path)],
+        capture_output=True,
+    )
+
+    return True, "LaunchAgent: instalado (auto-reparación cada 10 min)"
+
+
 _TOOLS = [
     ("Claude Code", _setup_claude_code),
+    ("Claude Desktop", _setup_claude_desktop),
     ("Codex", _setup_codex),
+    ("LaunchAgent", _setup_launchagent),
 ]
 
 

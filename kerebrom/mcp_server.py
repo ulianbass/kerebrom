@@ -28,7 +28,7 @@ from typing import Any, Dict, List
 from .store import DEFAULT_PROJECT, KerebromStore
 
 PROTOCOL_VERSION = "2025-03-26"
-SERVER_NAME = "kerebrom"
+SERVER_NAME = "Kerebrom"
 SERVER_VERSION = "0.1.0"
 
 # ---------------------------------------------------------------------------
@@ -237,8 +237,11 @@ def _log(text: str) -> None:
 
 
 def handle_initialize(id: Any, _params: Dict[str, Any]) -> Dict[str, Any]:
+    # Negotiate protocol version: use the client's version if provided,
+    # so we stay compatible with older clients (e.g. Claude Desktop).
+    client_version = _params.get("protocolVersion", PROTOCOL_VERSION)
     return _ok(id, {
-        "protocolVersion": PROTOCOL_VERSION,
+        "protocolVersion": client_version,
         "capabilities": {
             "tools": {"listChanged": False},
         },
