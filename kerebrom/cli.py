@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--passphrase-file", help="Read the database passphrase from this local file.")
 
     def add_common_arguments(target: argparse.ArgumentParser) -> None:
-        target.add_argument("--db", default="kerebrom.db", help="Path to the SQLite database.")
+        target.add_argument("--db", default=str(Path.home() / ".kerebrom" / "kerebrom.db"), help="Path to the SQLite database.")
         target.add_argument("--project", default=DEFAULT_PROJECT, help="Logical project namespace.")
         add_crypto_arguments(target)
 

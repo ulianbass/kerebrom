@@ -23,7 +23,6 @@ Usage:
 
 from __future__ import annotations
 
-import glob
 import json
 import os
 import re
@@ -87,8 +86,7 @@ def find_transcripts(
     if project_path:
         # Encode path the way Claude Code does: slashes → dashes.
         encoded = project_path.replace("/", "-")
-        if encoded.startswith("-"):
-            encoded = encoded  # keep leading dash
+        # Leading dash is expected for absolute paths (e.g. /Users → -Users).
         search_dir = _CLAUDE_PROJECTS_DIR / encoded
         if search_dir.is_dir():
             paths = list(search_dir.glob("*.jsonl"))
