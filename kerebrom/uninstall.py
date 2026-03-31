@@ -248,13 +248,12 @@ def _clean_codex_config() -> str:
         return "config.toml: no existe"
 
     content = config_file.read_text(encoding="utf-8")
-    if "[mcp_servers.kerebrom]" not in content:
+    if "[mcp_servers.kerebrom]" not in content and "[mcp_servers.Kerebrom]" not in content:
         return "config.toml: kerebrom no estaba configurado"
 
-    # Remove the [mcp_servers.kerebrom] section and all its sub-sections.
-    # This handles [mcp_servers.kerebrom], [mcp_servers.kerebrom.tools.*], etc.
+    # Remove the [mcp_servers.kerebrom] / [mcp_servers.Kerebrom] section (case-insensitive).
     cleaned = re.sub(
-        r"\n?\[mcp_servers\.kerebrom[^\]]*\][^\[]*",
+        r"\n?\[mcp_servers\.[kK]erebrom[^\]]*\][^\[]*",
         "",
         content,
     )

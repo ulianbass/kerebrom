@@ -357,14 +357,14 @@ def _setup_codex(
     if passphrase_file:
         args.extend(['"--passphrase-file"', '"{}"'.format(passphrase_file)])
     toml_block = (
-        "\n[mcp_servers.kerebrom]\n"
+        "\n[mcp_servers.Kerebrom]\n"
         'command = "{}"\n'
         "args = [{}]\n"
     ).format(sys.executable, ", ".join(args))
 
     if config_file.exists():
         content = config_file.read_text(encoding="utf-8")
-        if "[mcp_servers.kerebrom]" in content:
+        if "[mcp_servers.Kerebrom]" in content or "[mcp_servers.kerebrom]" in content:
             messages.append("config.toml: ya configurado")
         else:
             config_file.write_text(
