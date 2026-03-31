@@ -342,6 +342,9 @@ def _setup_codex(
     codex_dir = Path.home() / ".codex"
     config_file = codex_dir / "config.toml"
 
+    if _is_temp_path(db_path):
+        return False, "Codex: omitido (entorno sandbox)"
+
     if not codex_dir.exists():
         return False, "Codex no detectado (~/.codex/ no existe)"
 
