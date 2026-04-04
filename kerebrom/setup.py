@@ -539,24 +539,37 @@ def _setup_launchagent(
 
     plist_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if already installed — accept any path containing "Kerebrom".
+    import subprocess
+
+    def _is_agent_loaded() -> bool:
+        """Check if launchd actually has the agent registered (not just file exists)."""
+        result = subprocess.run(
+            ["launchctl", "print", "gui/{}/{}".format(os.getuid(), label)],
+            capture_output=True, text=True,
+        )
+        return result.returncode == 0
+
+    # Check if already installed: file exists with correct content AND launchd has it loaded.
     if plist_path.exists():
         existing = plist_path.read_text(encoding="utf-8")
-        if "Kerebrom" in existing and label in existing:
+        if "Kerebrom" in existing and label in existing and _is_agent_loaded():
             return True, "LaunchAgent: ya instalado"
 
     plist_path.write_text(plist_content, encoding="utf-8")
 
-    # Load/reload the agent.
-    import subprocess
+    # Bootstrap the agent into launchd (modern API, with fallback to legacy load).
     subprocess.run(
-        ["launchctl", "unload", str(plist_path)],
+        ["launchctl", "bootout", "gui/{}/{}".format(os.getuid(), label)],
         capture_output=True,
     )
-    subprocess.run(
-        ["launchctl", "load", str(plist_path)],
+    result = subprocess.run(
+        ["launchctl", "bootstrap", "gui/{}".format(os.getuid()), str(plist_path)],
         capture_output=True,
     )
+    if result.returncode != 0:
+        # Fallback to legacy load/unload for older macOS.
+        subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
+        subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True)
 
     return True, "LaunchAgent: instalado (auto-reparación cada 10 min)"
 
