@@ -26,13 +26,13 @@ class KerebromStoreTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_remember_and_recall(self) -> None:
-        self.store.remember("Me llamo Ulian. Vivo en Guatemala. Trabajo en Kerebrom.", importance=0.9)
+        self.store.remember("Me llamo Alex. Vivo en Madrid. Trabajo en Kerebrom.", importance=0.9)
         self.store.remember("Prefiero Rust para construir herramientas de sistemas.", importance=0.7)
 
         results = self.store.recall("Donde vivo", limit=3)
 
         self.assertGreaterEqual(len(results), 1)
-        self.assertIn("Guatemala", results[0].content)
+        self.assertIn("Madrid", results[0].content)
 
     def test_sensitive_content_is_redacted(self) -> None:
         payload = self.store.remember("Mi correo es ulian@example.com y api_key=sk_1234567890ABCDE")
@@ -43,8 +43,8 @@ class KerebromStoreTests(unittest.TestCase):
         self.assertIn("[REDACTED:EMAIL]", memory["content"])
 
     def test_duplicate_memories_are_deduplicated(self) -> None:
-        first = self.store.remember("Vivo en Guatemala.")
-        second = self.store.remember("Vivo en Guatemala.")
+        first = self.store.remember("Vivo en Madrid.")
+        second = self.store.remember("Vivo en Madrid.")
 
         self.assertTrue(first["inserted"])
         self.assertFalse(second["inserted"])
@@ -61,14 +61,14 @@ class KerebromStoreTests(unittest.TestCase):
         self.assertNotIn(memory_id, ids)
 
     def test_forget_invalidates_derived_facts(self) -> None:
-        memory_id = self.store.remember("Vivo en Guatemala.")["memory"]["id"]
+        memory_id = self.store.remember("Vivo en Madrid.")["memory"]["id"]
         self.store.forget(memory_id=memory_id)
 
         facts = self.store.list_facts(limit=10)
         self.assertEqual(facts, [])
 
     def test_contradictory_facts_invalidate_previous_relation(self) -> None:
-        self.store.remember("Vivo en Guatemala.")
+        self.store.remember("Vivo en Madrid.")
         self.store.remember("Vivo en España.")
 
         facts = self.store.list_facts(limit=10)
@@ -77,14 +77,14 @@ class KerebromStoreTests(unittest.TestCase):
         self.assertEqual(live_facts[0]["object"], "España")
 
     def test_forgetting_latest_exclusive_fact_restores_previous_supported_fact(self) -> None:
-        first_memory_id = self.store.remember("Vivo en Guatemala.")["memory"]["id"]
+        first_memory_id = self.store.remember("Vivo en Madrid.")["memory"]["id"]
         second_memory_id = self.store.remember("Vivo en España.")["memory"]["id"]
         self.store.forget(memory_id=second_memory_id)
 
         facts = self.store.list_facts(limit=10)
         live_facts = [fact for fact in facts if fact["predicate"] == "lives_in"]
         self.assertEqual(len(live_facts), 1)
-        self.assertEqual(live_facts[0]["object"], "Guatemala")
+        self.assertEqual(live_facts[0]["object"], "Madrid")
         self.assertIsNotNone(first_memory_id)
 
     def test_forget_query_forgets_dormant_memory_without_reactivation_side_effects(self) -> None:
@@ -114,21 +114,21 @@ class KerebromStoreTests(unittest.TestCase):
         self.assertEqual(int(row["access_count"]), 0)
 
     def test_backup_and_restore_round_trip(self) -> None:
-        self.store.remember("Vivo en Guatemala.")
+        self.store.remember("Vivo en Madrid.")
         backup_path = Path(self.tempdir.name) / "backup.db"
         restored_path = Path(self.tempdir.name) / "restored.db"
 
         backup_summary = self.store.backup(backup_path)
         restored_store = KerebromStore(restored_path)
         restore_summary = restored_store.restore_from(backup_path)
-        restored_results = restored_store.recall("Guatemala", limit=5)
+        restored_results = restored_store.recall("Madrid", limit=5)
 
         self.assertEqual(backup_summary["memories"], 1)
         self.assertEqual(restore_summary["memories"], 1)
         self.assertTrue(backup_path.exists())
         self.assertTrue(restored_path.exists())
         self.assertGreaterEqual(len(restored_results), 1)
-        self.assertIn("Guatemala", restored_results[0].content)
+        self.assertIn("Madrid", restored_results[0].content)
 
 
 class EncryptedStoreTests(unittest.TestCase):
@@ -144,12 +144,12 @@ class EncryptedStoreTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_encrypted_store_round_trip(self) -> None:
-        self.store.remember("Vivo en Guatemala.")
-        results = self.store.recall("Guatemala", limit=5)
+        self.store.remember("Vivo en Madrid.")
+        results = self.store.recall("Madrid", limit=5)
         raw = self.db_path.read_bytes()
 
         self.assertGreaterEqual(len(results), 1)
-        self.assertIn("Guatemala", results[0].content)
+        self.assertIn("Madrid", results[0].content)
         self.assertTrue(raw.startswith(b"KEREBROM-ENC-1"))
         self.assertNotIn(b"SQLite format 3", raw[:64])
 
@@ -183,14 +183,14 @@ class ProgressiveDisclosureTests(unittest.TestCase):
         self.db_path = Path(self.tempdir.name) / "kerebrom.db"
         self.store = KerebromStore(self.db_path)
         self.store.initialize()
-        self.store.remember("Vivo en Guatemala.", importance=0.9)
+        self.store.remember("Vivo en Madrid.", importance=0.9)
         self.store.remember("Prefiero Python para data science.", importance=0.7)
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
     def test_layer_1_compact_index(self) -> None:
-        ctx = self.store.build_context("Guatemala", layer=1)
+        ctx = self.store.build_context("Madrid", layer=1)
         self.assertEqual(ctx["layer"], 1)
         self.assertIn("memory_index", ctx)
         self.assertIn("facts_summary", ctx)
@@ -200,7 +200,7 @@ class ProgressiveDisclosureTests(unittest.TestCase):
             self.assertNotIn("content", item)
 
     def test_layer_2_summary(self) -> None:
-        ctx = self.store.build_context("Guatemala", layer=2)
+        ctx = self.store.build_context("Madrid", layer=2)
         self.assertEqual(ctx["layer"], 2)
         for m in ctx["memories"]:
             self.assertIn("snippet", m)
@@ -208,7 +208,7 @@ class ProgressiveDisclosureTests(unittest.TestCase):
             self.assertNotIn("raw_content", m)
 
     def test_layer_3_full_detail(self) -> None:
-        ctx = self.store.build_context("Guatemala", layer=3)
+        ctx = self.store.build_context("Madrid", layer=3)
         self.assertEqual(ctx["layer"], 3)
         for m in ctx["memories"]:
             self.assertIn("content", m)
@@ -273,8 +273,8 @@ class ConsolidationTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_consolidation_with_similar_memories(self) -> None:
-        self.store.remember("Vivo en Guatemala.", kind="episodic", importance=0.6)
-        self.store.remember("Vivo en Guatemala, Centroamérica.", kind="episodic", importance=0.6)
+        self.store.remember("Vivo en Madrid.", kind="episodic", importance=0.6)
+        self.store.remember("Vivo en Madrid, Europa.", kind="episodic", importance=0.6)
         result = self.store.consolidate(similarity_threshold=0.70)
         self.assertGreaterEqual(result["clusters"], 0)
         self.assertIn("new_facts", result)
@@ -286,8 +286,8 @@ class ConsolidationTests(unittest.TestCase):
         self.assertEqual(result["clusters"], 0)
 
     def test_consolidation_is_idempotent(self) -> None:
-        self.store.remember("Vivo en Guatemala.", kind="episodic", importance=0.6)
-        self.store.remember("Vivo en Guatemala, Centroamérica.", kind="episodic", importance=0.6)
+        self.store.remember("Vivo en Madrid.", kind="episodic", importance=0.6)
+        self.store.remember("Vivo en Madrid, Europa.", kind="episodic", importance=0.6)
         first = self.store.consolidate(similarity_threshold=0.70)
         second = self.store.consolidate(similarity_threshold=0.70)
         exported = self.store.export_memories(include_inactive=True)
@@ -340,7 +340,7 @@ class ExpandedCaptureTests(unittest.TestCase):
         self.assertEqual(set(likes), {"Python", "Rust"})
 
     def test_soy_de_does_not_create_false_role_or_residence(self) -> None:
-        self.store.remember("Soy de Guatemala.")
+        self.store.remember("Soy de Madrid.")
         facts = self.store.list_facts(limit=20)
         predicates = {fact["predicate"] for fact in facts}
         self.assertIn("from", predicates)
@@ -623,7 +623,7 @@ class CLITests(unittest.TestCase):
                             "demo",
                             "--passphrase-env",
                             env_name,
-                            "Vivo en Guatemala.",
+                            "Vivo en Madrid.",
                         ]
                     ),
                     0,
@@ -642,7 +642,7 @@ class CLITests(unittest.TestCase):
                             "--passphrase-env",
                             env_name,
                             "--json",
-                            "Guatemala",
+                            "Madrid",
                         ]
                     ),
                     0,
@@ -651,7 +651,7 @@ class CLITests(unittest.TestCase):
 
             self.assertTrue(db_path.read_bytes().startswith(b"KEREBROM-ENC-1"))
             self.assertGreaterEqual(len(recall_data), 1)
-            self.assertIn("Guatemala", recall_data[0]["content"])
+            self.assertIn("Madrid", recall_data[0]["content"])
         finally:
             if previous is None:
                 os.environ.pop(env_name, None)
@@ -707,10 +707,10 @@ class MCPServerProtocolTests(unittest.TestCase):
 
     def test_tools_call_recall(self) -> None:
         from kerebrom.mcp_server import handle_tools_call
-        self.store.remember("Vivo en Guatemala.")
+        self.store.remember("Vivo en Madrid.")
         resp = handle_tools_call(
             4,
-            {"name": "recall", "arguments": {"query": "Guatemala"}},
+            {"name": "recall", "arguments": {"query": "Madrid"}},
             self.store,
             "default",
         )
@@ -751,6 +751,11 @@ class MCPServerSubprocessTests(unittest.TestCase):
         db_path = Path(self.tempdir.name) / "kerebrom.db"
         env = os.environ.copy()
         env["HOME"] = self.tempdir.name
+        # Preserve the real XDG_CACHE_HOME / cache dir so the ONNX model
+        # doesn't get re-downloaded every run (saves ~15 min per test).
+        real_home = os.path.expanduser("~")
+        if "XDG_CACHE_HOME" not in env:
+            env["XDG_CACHE_HOME"] = os.path.join(real_home, ".cache")
         pythonpath = str(self.repo_root)
         existing = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = pythonpath if not existing else pythonpath + os.pathsep + existing
@@ -763,29 +768,40 @@ class MCPServerSubprocessTests(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 3,
                 "method": "tools/call",
-                "params": {"name": "remember", "arguments": {"content": "Vivo en Guatemala."}},
+                "params": {"name": "remember", "arguments": {"content": "Vivo en Madrid."}},
             },
             {
                 "jsonrpc": "2.0",
                 "id": 4,
                 "method": "tools/call",
-                "params": {"name": "recall", "arguments": {"query": "Guatemala", "limit": 3}},
+                "params": {"name": "recall", "arguments": {"query": "Madrid", "limit": 3}},
             },
         ]
         payload = "\n".join(json.dumps(message, ensure_ascii=False) for message in messages) + "\n"
 
-        result = subprocess.run(
-            [sys.executable, "-m", "kerebrom", "serve", "--db", str(db_path), "--project", "subprocess"],
-            cwd=str(self.repo_root),
-            env=env,
-            input=payload,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "kerebrom", "serve", "--db", str(db_path), "--project", "subprocess"],
+                cwd=str(self.repo_root),
+                env=env,
+                input=payload,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=120,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("MCP server subprocess timed out after 120 seconds")
 
         self.assertEqual(result.returncode, 0, msg=result.stderr)
-        responses = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+        responses = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line and line.startswith("{"):
+                try:
+                    responses.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
         by_id = {response["id"]: response for response in responses}
 
         self.assertEqual(by_id[1]["result"]["protocolVersion"], "2025-03-26")
@@ -798,7 +814,7 @@ class MCPServerSubprocessTests(unittest.TestCase):
 
         recall_data = json.loads(by_id[4]["result"]["content"][0]["text"])
         self.assertGreaterEqual(len(recall_data), 1)
-        self.assertIn("Guatemala", recall_data[0]["content"])
+        self.assertIn("Madrid", recall_data[0]["content"])
 
 
 class BenchmarkGateTests(unittest.TestCase):
@@ -833,7 +849,7 @@ class ReactivationTests(unittest.TestCase):
 
     def test_dormant_memory_reactivates_on_strong_semantic_match(self) -> None:
         """A memory that decayed should come back when a strong cue arrives."""
-        result = self.store.remember("Me llamo Pedro Julian Arribas Monzon, soy de Guatemala.", importance=0.9)
+        result = self.store.remember("Me llamo Juan Carlos Garcia Lopez, soy de Madrid.", importance=0.9)
         memory_id = result["memory"]["id"]
 
         # Simulate natural decay: mark as dormant (invalidated, low importance).
@@ -849,7 +865,7 @@ class ReactivationTests(unittest.TestCase):
             )
 
         # Query with a strong cue — should reactivate.
-        results = self.store.recall("Pedro Julian Guatemala", limit=5, maintain=False)
+        results = self.store.recall("Juan Carlos Madrid", limit=5, maintain=False)
         ids = [m.id for m in results]
         self.assertIn(memory_id, ids, "Dormant memory should reactivate on strong cue")
 
@@ -921,7 +937,7 @@ class MultiProjectIsolationTests(unittest.TestCase):
         self.assertNotIn("XYZ123", beta_contents)
 
     def test_facts_scoped_to_project(self) -> None:
-        self.store.remember("Vivo en Guatemala.", project="alpha")
+        self.store.remember("Vivo en Madrid.", project="alpha")
         self.store.remember("Vivo en España.", project="beta")
 
         alpha_facts = self.store.list_facts(project="alpha", limit=10)
@@ -930,10 +946,10 @@ class MultiProjectIsolationTests(unittest.TestCase):
         alpha_objects = {f["object"] for f in alpha_facts}
         beta_objects = {f["object"] for f in beta_facts}
 
-        self.assertIn("Guatemala", alpha_objects)
+        self.assertIn("Madrid", alpha_objects)
         self.assertNotIn("España", alpha_objects)
         self.assertIn("España", beta_objects)
-        self.assertNotIn("Guatemala", beta_objects)
+        self.assertNotIn("Madrid", beta_objects)
 
     def test_forget_does_not_cross_projects(self) -> None:
         self.store.remember("Me gusta Rust.", project="alpha", importance=0.9)
@@ -1100,23 +1116,23 @@ class EmbeddingAutoSelectTests(unittest.TestCase):
         from kerebrom.embeddings import HashEmbeddingModel
 
         model = HashEmbeddingModel()
-        a = model.embed("Vivo en Guatemala")
-        b = model.embed("Vivo en Guatemala")
+        a = model.embed("Vivo en Madrid")
+        b = model.embed("Vivo en Madrid")
         self.assertEqual(a, b)
 
     def test_char_ngrams_improve_partial_matching(self) -> None:
         from kerebrom.embeddings import HashEmbeddingModel, cosine_similarity
 
         model = HashEmbeddingModel()
-        guatemala = model.embed("Guatemala")
-        guatemalteco = model.embed("guatemalteco")
-        espana = model.embed("España")
+        madrid = model.embed("Madrid")
+        madrileño = model.embed("madrileño")
+        tokyo = model.embed("Tokyo")
 
-        sim_related = cosine_similarity(guatemala, guatemalteco)
-        sim_unrelated = cosine_similarity(guatemala, espana)
+        sim_related = cosine_similarity(madrid, madrileño)
+        sim_unrelated = cosine_similarity(madrid, tokyo)
         self.assertGreater(
             sim_related, sim_unrelated,
-            "Related words (Guatemala/guatemalteco) should be more similar than unrelated (Guatemala/España)",
+            "Related words (Madrid/madrileño) should be more similar than unrelated (Madrid/Tokyo)",
         )
 
     def test_embedding_model_protocol(self) -> None:
@@ -1138,12 +1154,12 @@ class PrivateTagTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             store = KerebromStore(Path(td) / "test.db")
             store.initialize()
-            result = store.remember("Mi nombre es Ulian. <private>Mi contraseña es hunter2</private> Vivo en Guatemala.")
+            result = store.remember("Mi nombre es Alex. <private>Mi contraseña es hunter2</private> Vivo en Madrid.")
             content = result["memory"]["content"]
             self.assertNotIn("hunter2", content)
             self.assertNotIn("<private>", content)
-            self.assertIn("Ulian", content)
-            self.assertIn("Guatemala", content)
+            self.assertIn("Alex", content)
+            self.assertIn("Madrid", content)
 
     def test_entirely_private_text(self) -> None:
         from kerebrom.privacy import strip_private_tags

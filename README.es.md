@@ -2,7 +2,7 @@
 
 [Read in English](README.md)
 
-Kerebrom es un motor de memoria persistente local para herramientas de AI. Le da a Claude Code, Codex, Cursor y Claude Desktop una memoria compartida a largo plazo que sobrevive entre conversaciones — sin servicios en la nube, sin bases de datos externas, solo un archivo SQLite en tu maquina.
+Kerebrom es un motor de memoria persistente local para herramientas de AI. Le da a Claude Code, Codex y Claude Desktop una memoria compartida a largo plazo que sobrevive entre conversaciones — sin servicios en la nube, sin bases de datos externas, solo un archivo SQLite en tu maquina.
 
 ## Caracteristicas
 
@@ -13,7 +13,7 @@ Kerebrom es un motor de memoria persistente local para herramientas de AI. Le da
 - **Privacidad primero** — limpieza de valores sensibles antes de guardar; modo encriptado opcional.
 - **Mantenimiento automatico** — decaimiento de memorias, consolidacion episodica-a-semantica y limpieza programada.
 - **Servidor MCP** via stdio — funciona con cualquier herramienta que hable Model Context Protocol.
-- **Auto-setup** — un comando detecta y configura Claude Code, Codex, Claude Desktop y Cursor.
+- **Auto-setup** — un comando detecta y configura Claude Code, Codex y Claude Desktop.
 - **Backups portables** — archivos `.kbk` para recuperacion y migracion.
 
 ## Instalacion
@@ -72,7 +72,6 @@ python3 -m kerebrom serve --db ~/.kerebrom/kerebrom.db
 - **Claude Code** — registra servidor MCP en `.mcp.json`, agrega instrucciones a `CLAUDE.md`, desactiva la memoria basada en archivos, instala hooks de captura pasiva.
 - **Claude Desktop** — configura MCP en `claude_desktop_config.json` (Chat + Cowork).
 - **Codex** — registra MCP en `config.toml`, agrega instrucciones a `AGENTS.md`.
-- **Cursor** — registra MCP en `mcp.json`.
 - **LaunchAgent** (macOS) — instala un agente periodico que auto-repara configs si se eliminan.
 
 ## Arquitectura

@@ -33,3 +33,4 @@ htmlcov/
 # Local MCP config and reports (contain machine-specific paths)
 .mcp.json
 kerebrom-report.md
+.claude/settings.local.json

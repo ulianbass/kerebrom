@@ -461,9 +461,8 @@ def _setup_launchagent(
     plist_dir = Path.home() / "Library" / "LaunchAgents"
     plist_path = plist_dir / "{}.plist".format(label)
 
-    # Create a wrapper script so macOS shows "Kerebrom" in login items
-    # instead of "python3".
-    wrapper_path = db_path.parent / "Kerebrom"
+    # Create an .app bundle so macOS shows "Kerebrom" with a custom icon
+    # in Login Items instead of a generic "exec" entry.
     setup_args = [sys.executable, "-m", "kerebrom", "setup", "--db", str(db_path)]
     if passphrase_env:
         setup_args.extend(["--passphrase-env", passphrase_env])
@@ -471,10 +470,44 @@ def _setup_launchagent(
         setup_args.extend(["--passphrase-file", passphrase_file])
 
     import shlex
+
+    app_dir = db_path.parent / "Kerebrom.app"
+    macos_dir = app_dir / "Contents" / "MacOS"
+    resources_dir = app_dir / "Contents" / "Resources"
+    macos_dir.mkdir(parents=True, exist_ok=True)
+    resources_dir.mkdir(parents=True, exist_ok=True)
+
+    # Executable wrapper script inside the .app bundle
+    wrapper_path = macos_dir / "Kerebrom"
     wrapper_content = "#!/bin/sh\nexec {}\n".format(" ".join(shlex.quote(a) for a in setup_args))
-    db_path.parent.mkdir(parents=True, exist_ok=True)
     wrapper_path.write_text(wrapper_content, encoding="utf-8")
     wrapper_path.chmod(0o755)
+
+    # Info.plist for the .app bundle
+    info_plist = app_dir / "Contents" / "Info.plist"
+    if not info_plist.exists():
+        info_plist.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"\n'
+            '  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+            '<plist version="1.0">\n<dict>\n'
+            '  <key>CFBundleExecutable</key>\n  <string>Kerebrom</string>\n'
+            '  <key>CFBundleIdentifier</key>\n  <string>com.kerebrom.setup</string>\n'
+            '  <key>CFBundleIconFile</key>\n  <string>AppIcon</string>\n'
+            '  <key>CFBundleName</key>\n  <string>Kerebrom</string>\n'
+            '  <key>CFBundleDisplayName</key>\n  <string>Kerebrom</string>\n'
+            '  <key>CFBundlePackageType</key>\n  <string>APPL</string>\n'
+            '  <key>CFBundleVersion</key>\n  <string>1.0</string>\n'
+            '  <key>LSUIElement</key>\n  <true/>\n'
+            '</dict>\n</plist>\n',
+            encoding="utf-8",
+        )
+
+    # Keep a legacy wrapper that points to the .app executable
+    legacy_wrapper = db_path.parent / "Kerebrom"
+    if not legacy_wrapper.is_symlink():
+        legacy_wrapper.unlink(missing_ok=True)
+        legacy_wrapper.symlink_to(wrapper_path)
 
     plist_content = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -487,6 +520,8 @@ def _setup_launchagent(
   <array>
     <string>{wrapper}</string>
   </array>
+  <key>AssociatedBundleIdentifiers</key>
+  <string>{label}</string>
   <key>StartInterval</key>
   <integer>600</integer>
   <key>RunAtLoad</key>
