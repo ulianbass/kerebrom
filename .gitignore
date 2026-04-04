@@ -24,6 +24,12 @@ Thumbs.db
 htmlcov/
 
 # Kerebrom runtime
+*.db
 *.db-wal
 *.db-shm
 *.lock
+*.kbk
+
+# Local MCP config and reports (contain machine-specific paths)
+.mcp.json
+kerebrom-report.md

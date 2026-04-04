@@ -577,6 +577,10 @@ def run_setup(
             "passphrase_file": passphrase_file,
         }
 
+    # Ensure reports/ and backups/ directories exist inside ~/.kerebrom/
+    for subdir in ("reports", "backups"):
+        (db_path.parent / subdir).mkdir(parents=True, exist_ok=True)
+
     first_run = not _FIRST_RUN_MARKER.exists()
 
     results: Dict[str, Any] = {
