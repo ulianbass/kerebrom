@@ -539,10 +539,10 @@ def _setup_launchagent(
 
     plist_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if already installed with same content.
+    # Check if already installed — accept any path containing "Kerebrom".
     if plist_path.exists():
         existing = plist_path.read_text(encoding="utf-8")
-        if existing == plist_content:
+        if "Kerebrom" in existing and label in existing:
             return True, "LaunchAgent: ya instalado"
 
     plist_path.write_text(plist_content, encoding="utf-8")
