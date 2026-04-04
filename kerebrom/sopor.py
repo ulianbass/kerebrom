@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Sopor Plenus — transcript consolidation for Kerebrom.
 
 Reads Claude Code JSONL transcripts, extracts meaningful memories

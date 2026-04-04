@@ -115,6 +115,12 @@ python3 scripts/release_gate.py
 - Encrypted mode uses the system `openssl` binary rather than SQLCipher.
 - Encrypted mode creates a temporary plaintext file while a process is actively using the database.
 
+## Author
+
+Created by **Ulian Bass**.
+
+Copyright (c) 2026 Ulian Bass. All rights reserved.
+
 ## License
 
-MIT
+Proprietary. See [LICENSE](LICENSE) for terms.

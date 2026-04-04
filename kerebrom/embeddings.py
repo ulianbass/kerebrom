@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Pluggable embedding system for Kerebrom.
 
 Three tiers, auto-selected by what's installed:

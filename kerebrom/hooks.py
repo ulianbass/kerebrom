@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Passive capture hooks for Claude Code and other AI tools.
 
 Claude Code hooks send JSON on stdin describing tool calls and their results.

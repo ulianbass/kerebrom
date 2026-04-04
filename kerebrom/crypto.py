@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Encrypted container helpers for Kerebrom.
 
 This module provides whole-file envelope encryption for SQLite databases

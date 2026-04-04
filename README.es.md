@@ -115,6 +115,12 @@ python3 scripts/release_gate.py
 - El modo encriptado usa el binario `openssl` del sistema en vez de SQLCipher.
 - El modo encriptado crea un archivo temporal en texto plano mientras un proceso usa activamente la base de datos.
 
+## Autor
+
+Creado por **Ulian Bass**.
+
+Copyright (c) 2026 Ulian Bass. Todos los derechos reservados.
+
 ## Licencia
 
-MIT
+Propietario. Ver [LICENSE](LICENSE) para los terminos.

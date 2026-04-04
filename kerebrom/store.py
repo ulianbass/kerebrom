@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """SQLite-backed Kerebrom core engine."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Sensitive data scrubbing, detection, and privacy tags."""
 
 from __future__ import annotations

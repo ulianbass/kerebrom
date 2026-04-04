@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Kerebrom organic backup and restore.
 
 Exports all memories to a single portable .kbk file (JSON) that survives

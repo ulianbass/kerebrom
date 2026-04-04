@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Kerebrom MCP Server — raw JSON-RPC over stdio.
 
 Implements the Model Context Protocol (spec 2025-03-26) without external

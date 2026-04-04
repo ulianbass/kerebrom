@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Ulian Bass. All rights reserved.
+# This software is proprietary. See LICENSE for terms.
+
 """Auto-setup Kerebrom MCP across AI coding tools.
 
 Detects installed AI tools (Claude Code, Codex) and configures
