@@ -133,6 +133,10 @@ def build_parser() -> argparse.ArgumentParser:
     obsidian_parser.add_argument("--output", required=True, help="Directorio de salida para la bóveda de Obsidian.")
     obsidian_parser.add_argument("--no-canvas", action="store_true", help="No generar el archivo canvas con el grafo.")
 
+    graph_parser = subparsers.add_parser("graph", help="Visualizar grafo de conocimiento interactivo en el navegador.")
+    add_common_arguments(graph_parser)
+    graph_parser.add_argument("--port", type=int, default=8420, help="Puerto del servidor HTTP (default: 8420).")
+
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove all traces of Kerebrom from this machine.")
     uninstall_parser.add_argument("--keep-pip", action="store_true", help="Skip pip uninstall (keep the Python package).")
     uninstall_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt.")
@@ -329,6 +333,12 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 include_canvas=not args.no_canvas,
             )
             print_json(resultado)
+            return 0
+
+        if args.command == "graph":
+            store.close()
+            from .graph import launch_graph
+            launch_graph(db_path=Path(args.db), port=args.port, passphrase=passphrase)
             return 0
 
         if args.command == "backup":
