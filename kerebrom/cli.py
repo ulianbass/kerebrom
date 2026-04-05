@@ -415,7 +415,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             return 0
 
         if args.command == "sopor":
-            from .sopor import find_transcripts, run_sopor, run_sopor_all, run_sopor_latest
+            from .sopor import run_sopor, run_sopor_all, run_sopor_latest
             print("Kerebrom — Sopor Plenus\n")
 
             if args.session:

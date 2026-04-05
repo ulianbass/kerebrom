@@ -25,7 +25,7 @@ from .capture import (
     extract_relation_candidates,
 )
 from .crypto import decrypt_database_file, encrypt_database_file, is_encrypted_container
-from .embeddings import EmbeddingModel, HashEmbeddingModel, auto_select_model, average_embedding, cosine_similarity, tokenize
+from .embeddings import EmbeddingModel, auto_select_model, average_embedding, cosine_similarity, tokenize
 from .privacy import scrub_sensitive
 
 DEFAULT_PROJECT = "default"

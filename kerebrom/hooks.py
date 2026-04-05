@@ -154,7 +154,7 @@ def _trigger_sopor(
 
     This is called from the Stop hook — it must be fast and silent.
     """
-    from .sopor import find_transcripts, run_sopor
+    from .sopor import run_sopor
 
     # Find the transcript file for this session.
     claude_projects = Path.home() / ".claude" / "projects"

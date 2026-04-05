@@ -10,7 +10,7 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from .store import DEFAULT_PROJECT, KerebromStore
 
