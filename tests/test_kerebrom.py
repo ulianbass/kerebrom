@@ -1549,7 +1549,8 @@ class OrganicBackupTests(unittest.TestCase):
 class HookSetupTests(unittest.TestCase):
     """Test that setup.py configures hooks in settings.json."""
 
-    def test_setup_creates_hooks_in_settings(self) -> None:
+    def test_setup_does_not_create_hooks(self) -> None:
+        """Setup ya no crea hooks de captura automatica (generaban basura)."""
         with tempfile.TemporaryDirectory() as td:
             fake_home = Path(td)
             claude_dir = fake_home / ".claude"
@@ -1562,21 +1563,9 @@ class HookSetupTests(unittest.TestCase):
                 ok, msg = _setup_claude_code(fake_home / ".kerebrom" / "kerebrom.db")
 
             self.assertTrue(ok)
-            self.assertIn("Hooks", msg)
 
             settings = json.loads((claude_dir / "settings.json").read_text())
-            self.assertIn("hooks", settings)
-            self.assertIn("PostToolUse", settings["hooks"])
-            self.assertIn("Stop", settings["hooks"])
-
-            # Verify kerebrom capture command is in hooks (new format: hooks array inside entry)
-            post_hooks = settings["hooks"]["PostToolUse"]
-            commands = []
-            for entry in post_hooks:
-                if isinstance(entry, dict):
-                    for h in entry.get("hooks", []):
-                        commands.append(h.get("command", ""))
-            self.assertTrue(any("kerebrom capture" in cmd for cmd in commands))
+            self.assertNotIn("hooks", settings)
 
     def test_uninstall_removes_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as td:

@@ -296,33 +296,24 @@ def _setup_claude_code(
                 if kerebrom_hook_marker in entry.get("command", ""):
                     already_hooked = True
 
+    # Hooks de captura desactivados — generaban basura (1000+ memorias de ruido).
+    # Sopor programado se encarga de consolidar transcripts de forma inteligente.
+    # Si había hooks viejos de kerebrom, limpiarlos.
     if already_hooked:
-        messages.append("Hooks: ya configurados")
-    elif _is_temp_path(db_path):
-        messages.append("Hooks: omitidos (ruta temporal)")
-    else:
-        capture_cmd = "{} -m kerebrom capture --db {}".format(sys.executable, db_path)
-
-        hook_entry = {
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": capture_cmd,
-                }
-            ]
-        }
-
-        if "PostToolUse" not in hooks:
-            hooks["PostToolUse"] = []
-        hooks["PostToolUse"].append(hook_entry)
-
-        if "Stop" not in hooks:
-            hooks["Stop"] = []
-        hooks["Stop"].append(hook_entry)
-
-        existing_settings["hooks"] = hooks
+        for event_key in ("PostToolUse", "Stop"):
+            if event_key in hooks:
+                hooks[event_key] = [
+                    e for e in hooks[event_key]
+                    if kerebrom_hook_marker not in e.get("command", "")
+                    and not any(kerebrom_hook_marker in h.get("command", "")
+                                for h in e.get("hooks", []) if isinstance(h, dict))
+                ]
+                if not hooks[event_key]:
+                    del hooks[event_key]
+        if not hooks:
+            existing_settings.pop("hooks", None)
         settings_changed = True
-        messages.append("Hooks: configurados (PostToolUse + Stop)")
+        messages.append("Hooks: limpiados (captura automática desactivada)")
 
     # Write settings.json if anything changed.
     if settings_changed:
