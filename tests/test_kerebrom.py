@@ -1216,66 +1216,20 @@ class ObservationTagTests(unittest.TestCase):
         self.assertEqual(data["memory"]["tags"], ["refactor"])
 
 
-class PassiveCaptureTests(unittest.TestCase):
-    """Test the passive capture hooks module."""
-
-    def test_summarize_write_event(self) -> None:
-        from kerebrom.hooks import _summarize_tool_event
-        event = {
-            "tool_name": "Write",
-            "tool_input": {"file_path": "/src/main.py", "content": "print('hello')"},
-        }
-        summary = _summarize_tool_event(event)
-        self.assertIsNotNone(summary)
-        self.assertIn("main.py", summary)
-
-    def test_summarize_bash_event(self) -> None:
-        from kerebrom.hooks import _summarize_tool_event
-        event = {
-            "tool_name": "Bash",
-            "tool_input": {"command": "npm test"},
-            "tool_output": "5 tests passed",
-        }
-        summary = _summarize_tool_event(event)
-        self.assertIsNotNone(summary)
-        self.assertIn("npm test", summary)
-
-    def test_trivial_bash_skipped(self) -> None:
-        from kerebrom.hooks import _summarize_tool_event
-        event = {"tool_name": "Bash", "tool_input": {"command": "ls"}}
-        summary = _summarize_tool_event(event)
-        self.assertIsNone(summary)
-
-    def test_uninteresting_tool_skipped(self) -> None:
-        from kerebrom.hooks import _summarize_tool_event
-        event = {"tool_name": "Read", "tool_input": {"file_path": "/foo.py"}}
-        summary = _summarize_tool_event(event)
-        self.assertIsNone(summary)
-
-    def test_handle_capture_stores_memory(self) -> None:
-        with tempfile.TemporaryDirectory() as td:
-            db_path = Path(td) / "test.db"
-            event = json.dumps({
-                "tool_name": "Edit",
-                "tool_input": {"file_path": "/src/app.py", "old_string": "x", "new_string": "y"},
-            })
-            # Simulate stdin
-            from unittest.mock import patch
-            with patch("sys.stdin", io.StringIO(event)):
-                from kerebrom.hooks import handle_capture
-                ret = handle_capture(db_path=str(db_path))
-            self.assertEqual(ret, 0)
-
-            # Verify memory was stored.
-            store = KerebromStore(db_path)
-            store.initialize()
-            results = store.recall("app.py", limit=5)
-            self.assertGreaterEqual(len(results), 1)
-            self.assertIn("auto-capture", results[0].tags)
+class HookTests(unittest.TestCase):
+    """Test del hook de cierre de sesion."""
 
     def test_handle_capture_ignores_malformed_input(self) -> None:
         from unittest.mock import patch
         with patch("sys.stdin", io.StringIO("not json")):
+            from kerebrom.hooks import handle_capture
+            ret = handle_capture(db_path="/tmp/nonexistent.db")
+        self.assertEqual(ret, 0)
+
+    def test_handle_capture_ignores_non_stop_events(self) -> None:
+        from unittest.mock import patch
+        event = json.dumps({"tool_name": "Write", "tool_input": {"file_path": "/foo.py"}})
+        with patch("sys.stdin", io.StringIO(event)):
             from kerebrom.hooks import handle_capture
             ret = handle_capture(db_path="/tmp/nonexistent.db")
         self.assertEqual(ret, 0)
