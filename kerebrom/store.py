@@ -78,6 +78,7 @@ class MemoryRecord:
     is_redacted: bool
     pii_hits: List[str]
     tags: List[str]
+    metadata: Dict[str, Any]
     created_at: str
     updated_at: str
     valid_at: str
@@ -104,6 +105,7 @@ class MemoryRecord:
             is_redacted=bool(row["is_redacted"]),
             pii_hits=json.loads(row["pii_hits"]),
             tags=json.loads(row["tags"]) if row["tags"] else [],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             valid_at=row["valid_at"],
@@ -125,6 +127,7 @@ class MemoryRecord:
             "is_redacted": self.is_redacted,
             "pii_hits": self.pii_hits,
             "tags": self.tags,
+            "metadata": self.metadata,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "valid_at": self.valid_at,
@@ -203,7 +206,8 @@ class KerebromStore:
                     valid_at TEXT NOT NULL,
                     invalid_at TEXT,
                     consolidated_at TEXT,
-                    tags TEXT NOT NULL DEFAULT '[]'
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    metadata TEXT NOT NULL DEFAULT '{}'
                 );
 
                 CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
@@ -294,6 +298,36 @@ class KerebromStore:
             self._ensure_column(connection, "memories", "last_decay_at", "TEXT")
             self._ensure_column(connection, "memories", "consolidated_at", "TEXT")
             self._ensure_column(connection, "memories", "tags", "TEXT NOT NULL DEFAULT '[]'")
+            # Migración: columna metadata para datos adicionales en formato JSON.
+            self._ensure_column(connection, "memories", "metadata", "TEXT NOT NULL DEFAULT '{}'")
+
+            # Tabla de referencias inversas entidad→memoria (grafo bidireccional).
+            connection.executescript("""
+                CREATE TABLE IF NOT EXISTS entity_references (
+                    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+                    memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+                    direction TEXT NOT NULL DEFAULT 'mention',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(entity_id, memory_id, direction)
+                );
+                CREATE INDEX IF NOT EXISTS idx_entity_refs_memory
+                ON entity_references(memory_id);
+            """)
+
+            # Tabla de referencias no resueltas (huecos de conocimiento).
+            connection.executescript("""
+                CREATE TABLE IF NOT EXISTS unresolved_references (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    project TEXT NOT NULL,
+                    reference_text TEXT NOT NULL,
+                    source_memory_id INTEGER NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+                    created_at TEXT NOT NULL,
+                    resolved_at TEXT,
+                    resolved_entity_id INTEGER REFERENCES entities(id),
+                    UNIQUE(project, reference_text, source_memory_id)
+                );
+            """)
+
             # Metadata table for auto-maintenance scheduling.
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS maintenance_log (
@@ -446,6 +480,7 @@ class KerebromStore:
         importance: float = 0.5,
         confidence: float = 0.8,
         tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         self.initialize(project=project)
         now = utc_now()
@@ -476,8 +511,9 @@ class KerebromStore:
                 """
                 INSERT INTO memories (
                     project, content, raw_content, kind, source, importance, confidence,
-                    is_redacted, pii_hits, tags, embedding, created_at, updated_at, valid_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_redacted, pii_hits, tags, metadata, embedding,
+                    created_at, updated_at, valid_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     project,
@@ -490,6 +526,7 @@ class KerebromStore:
                     int(bool(sensitive_matches)),
                     json.dumps([match.label for match in sensitive_matches]),
                     json.dumps(tags or []),
+                    json.dumps(metadata or {}),
                     json.dumps(embedding),
                     now,
                     now,
@@ -505,19 +542,50 @@ class KerebromStore:
                     "INSERT OR IGNORE INTO memory_entities(memory_id, entity_id, role) VALUES (?, ?, ?)",
                     (memory_id, entity_id, "mention"),
                 )
+                # Índice inverso: referencia entidad→memoria.
+                connection.execute(
+                    "INSERT OR IGNORE INTO entity_references(entity_id, memory_id, direction, created_at) VALUES (?, ?, ?, ?)",
+                    (entity_id, memory_id, "mention", now),
+                )
 
             user_entity_id = self._ensure_entity(connection, project, DEFAULT_USER_ENTITY, "person")
+            # Conjunto de nombres canónicos conocidos para detectar referencias no resueltas.
+            known_canonical = {
+                row["canonical_name"]
+                for row in connection.execute(
+                    "SELECT canonical_name FROM entities WHERE project = ?", (project,)
+                ).fetchall()
+            }
             relation_keys = set()
             for relation in extract_relation_candidates(scrubbed_content):
+                # Verificar si el objeto de la relación ya existe como entidad canónica.
+                candidate_canonical = canonicalize_entity(relation.object_value).lower()
+                if candidate_canonical not in known_canonical:
+                    # Registrar referencia no resuelta (hueco de conocimiento).
+                    connection.execute(
+                        """
+                        INSERT OR IGNORE INTO unresolved_references(
+                            project, reference_text, source_memory_id, created_at
+                        ) VALUES (?, ?, ?, ?)
+                        """,
+                        (project, relation.object_value, memory_id, now),
+                    )
                 object_entity_id = self._ensure_entity(
                     connection,
                     project,
                     relation.object_value,
                     relation.entity_type,
                 )
+                # Actualizar known_canonical después de crear la entidad.
+                known_canonical.add(candidate_canonical)
                 connection.execute(
                     "INSERT OR IGNORE INTO memory_entities(memory_id, entity_id, role) VALUES (?, ?, ?)",
                     (memory_id, object_entity_id, "relation_object"),
+                )
+                # Índice inverso: referencia entidad→memoria (objeto de relación).
+                connection.execute(
+                    "INSERT OR IGNORE INTO entity_references(entity_id, memory_id, direction, created_at) VALUES (?, ?, ?, ?)",
+                    (object_entity_id, memory_id, "relation_object", now),
                 )
                 self._record_relation_support(
                     connection=connection,
@@ -1104,6 +1172,148 @@ class KerebromStore:
             combined = active_results + reactivated
             combined.sort(key=lambda m: m.score, reverse=True)
             return combined[:max(1, limit)]
+
+    def query(
+        self,
+        project: str = DEFAULT_PROJECT,
+        kind: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        importance_min: Optional[float] = None,
+        importance_max: Optional[float] = None,
+        created_after: Optional[str] = None,
+        created_before: Optional[str] = None,
+        source: Optional[str] = None,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        limit: int = 20,
+        order_by: str = "created_at",
+        order_dir: str = "DESC",
+    ) -> List[MemoryRecord]:
+        """Consulta estructurada de memorias con filtros combinables.
+
+        Construye una consulta SQL con cláusulas WHERE según los filtros
+        proporcionados. Para tags usa extracción JSON; para metadata_filter
+        usa json_extract().
+        """
+        self.initialize(project=project)
+        # Columnas válidas para ordenamiento.
+        allowed_order = {"created_at", "updated_at", "importance", "confidence", "access_count"}
+        if order_by not in allowed_order:
+            order_by = "created_at"
+        if order_dir.upper() not in ("ASC", "DESC"):
+            order_dir = "DESC"
+
+        sql = "SELECT * FROM memories WHERE project = ? AND invalid_at IS NULL"
+        params: List[Any] = [project]
+
+        if kind is not None:
+            sql += " AND kind = ?"
+            params.append(kind)
+
+        if source is not None:
+            sql += " AND source = ?"
+            params.append(source)
+
+        if importance_min is not None:
+            sql += " AND importance >= ?"
+            params.append(importance_min)
+
+        if importance_max is not None:
+            sql += " AND importance <= ?"
+            params.append(importance_max)
+
+        if created_after is not None:
+            sql += " AND created_at >= ?"
+            params.append(created_after)
+
+        if created_before is not None:
+            sql += " AND created_at <= ?"
+            params.append(created_before)
+
+        # Filtro por tags: verificar si algún tag coincide usando json_each.
+        if tags:
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append(
+                    "EXISTS (SELECT 1 FROM json_each(memories.tags) WHERE json_each.value = ?)"
+                )
+                params.append(tag)
+            sql += " AND (" + " OR ".join(tag_conditions) + ")"
+
+        # Filtro por metadata: usar json_extract para cada clave/valor.
+        if metadata_filter:
+            for key, value in metadata_filter.items():
+                sql += " AND json_extract(metadata, ?) = ?"
+                params.append("$.{}".format(key))
+                params.append(json.dumps(value) if isinstance(value, (dict, list)) else value)
+
+        sql += " ORDER BY {} {} LIMIT ?".format(order_by, order_dir.upper())
+        params.append(limit)
+
+        with self.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+            return [MemoryRecord.from_row(row) for row in rows]
+
+    def get_entity_references(self, entity_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+        """Obtener todas las memorias que referencian una entidad dada, con dirección."""
+        self.initialize()
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT er.entity_id, er.memory_id, er.direction, er.created_at,
+                       m.content, m.kind, m.importance
+                FROM entity_references er
+                JOIN memories m ON m.id = er.memory_id
+                WHERE er.entity_id = ? AND m.invalid_at IS NULL
+                ORDER BY er.created_at DESC
+                LIMIT ?
+                """,
+                (entity_id, limit),
+            ).fetchall()
+            return [
+                {
+                    "entity_id": int(row["entity_id"]),
+                    "memory_id": int(row["memory_id"]),
+                    "direction": row["direction"],
+                    "created_at": row["created_at"],
+                    "content": row["content"],
+                    "kind": row["kind"],
+                    "importance": float(row["importance"]),
+                }
+                for row in rows
+            ]
+
+    def list_unresolved_references(
+        self, project: str = DEFAULT_PROJECT, limit: int = 20
+    ) -> List[Dict[str, Any]]:
+        """Listar referencias no resueltas (huecos de conocimiento)."""
+        self.initialize(project=project)
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT ur.id, ur.project, ur.reference_text, ur.source_memory_id,
+                       ur.created_at, ur.resolved_at, ur.resolved_entity_id,
+                       m.content AS source_content
+                FROM unresolved_references ur
+                JOIN memories m ON m.id = ur.source_memory_id
+                WHERE ur.project = ? AND ur.resolved_at IS NULL
+                ORDER BY ur.created_at DESC
+                LIMIT ?
+                """,
+                (project, limit),
+            ).fetchall()
+            return [
+                {
+                    "id": int(row["id"]),
+                    "project": row["project"],
+                    "reference_text": row["reference_text"],
+                    "source_memory_id": int(row["source_memory_id"]),
+                    "created_at": row["created_at"],
+                    "resolved_at": row["resolved_at"],
+                    "resolved_entity_id": int(row["resolved_entity_id"]) if row["resolved_entity_id"] else None,
+                    "source_content": row["source_content"],
+                }
+                for row in rows
+            ]
 
     def _filter_context_memories(
         self,

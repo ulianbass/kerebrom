@@ -128,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
     sopor_parser.add_argument("--project-path", help="Filesystem path of the project (to find its transcripts).")
     sopor_parser.add_argument("--threshold", type=float, default=0.35, help="Score threshold for extraction (0-1).")
 
+    obsidian_parser = subparsers.add_parser("obsidian", help="Exportar memorias como bóveda de Obsidian.")
+    add_common_arguments(obsidian_parser)
+    obsidian_parser.add_argument("--output", required=True, help="Directorio de salida para la bóveda de Obsidian.")
+    obsidian_parser.add_argument("--no-canvas", action="store_true", help="No generar el archivo canvas con el grafo.")
+
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove all traces of Kerebrom from this machine.")
     uninstall_parser.add_argument("--keep-pip", action="store_true", help="Skip pip uninstall (keep the Python package).")
     uninstall_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt.")
@@ -313,6 +318,17 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         if args.command == "export":
             data = store.export_memories(project=args.project, include_inactive=not args.active_only)
             print_json(data)
+            return 0
+
+        if args.command == "obsidian":
+            from .obsidian import export_vault
+            resultado = export_vault(
+                store,
+                output_dir=args.output,
+                project=args.project,
+                include_canvas=not args.no_canvas,
+            )
+            print_json(resultado)
             return 0
 
         if args.command == "backup":

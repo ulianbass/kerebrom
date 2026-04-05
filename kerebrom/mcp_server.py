@@ -78,6 +78,14 @@ TOOLS: List[Dict[str, Any]] = [
                         "discovery, change, preference, or custom."
                     ),
                 },
+                "metadata": {
+                    "type": "object",
+                    "default": {},
+                    "description": (
+                        "Metadata adicional en formato JSON. Permite almacenar "
+                        "datos estructurados arbitrarios junto a la memoria."
+                    ),
+                },
             },
             "required": ["content"],
         },
@@ -172,6 +180,86 @@ TOOLS: List[Dict[str, Any]] = [
                         "Filesystem path of the project whose transcripts "
                         "to consolidate.  If omitted, searches all projects."
                     ),
+                },
+            },
+        },
+    },
+    {
+        "name": "query",
+        "description": (
+            "Consulta estructurada de memorias con filtros combinables. "
+            "Permite filtrar por tipo, tags, importancia, fecha, fuente y metadata."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["core", "episodic", "semantic", "procedural"],
+                    "description": "Filtrar por tipo de memoria.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filtrar memorias que contengan al menos uno de estos tags.",
+                },
+                "importance_min": {
+                    "type": "number",
+                    "description": "Importancia mínima (0-1).",
+                },
+                "importance_max": {
+                    "type": "number",
+                    "description": "Importancia máxima (0-1).",
+                },
+                "created_after": {
+                    "type": "string",
+                    "description": "Solo memorias creadas después de esta fecha ISO.",
+                },
+                "created_before": {
+                    "type": "string",
+                    "description": "Solo memorias creadas antes de esta fecha ISO.",
+                },
+                "source": {
+                    "type": "string",
+                    "description": "Filtrar por fuente (mcp, manual, sopor, etc.).",
+                },
+                "metadata_filter": {
+                    "type": "object",
+                    "description": "Filtro clave/valor sobre el campo metadata JSON.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 20,
+                    "description": "Máximo de memorias a devolver.",
+                },
+                "order_by": {
+                    "type": "string",
+                    "default": "created_at",
+                    "description": "Columna de ordenamiento (created_at, updated_at, importance, confidence, access_count).",
+                },
+                "order_dir": {
+                    "type": "string",
+                    "default": "DESC",
+                    "enum": ["ASC", "DESC"],
+                    "description": "Dirección de ordenamiento.",
+                },
+            },
+        },
+    },
+    {
+        "name": "gaps",
+        "description": (
+            "Listar referencias no resueltas — huecos de conocimiento en el grafo. "
+            "Devuelve entidades mencionadas en relaciones que no existían como "
+            "entidades canónicas al momento de ser extraídas."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "default": 20,
+                    "description": "Máximo de referencias a devolver.",
                 },
             },
         },
@@ -295,6 +383,7 @@ def _dispatch_tool(
             importance=args.get("importance", 0.5),
             confidence=args.get("confidence", 0.8),
             tags=args.get("tags", []),
+            metadata=args.get("metadata"),
         )
 
     if name == "recall":
@@ -367,6 +456,29 @@ def _dispatch_tool(
             project=project,
             limit=args.get("limit", 5),
             layer=layer,
+        )
+
+    if name == "query":
+        results = store.query(
+            project=project,
+            kind=args.get("kind"),
+            tags=args.get("tags"),
+            importance_min=args.get("importance_min"),
+            importance_max=args.get("importance_max"),
+            created_after=args.get("created_after"),
+            created_before=args.get("created_before"),
+            source=args.get("source"),
+            metadata_filter=args.get("metadata_filter"),
+            limit=args.get("limit", 20),
+            order_by=args.get("order_by", "created_at"),
+            order_dir=args.get("order_dir", "DESC"),
+        )
+        return [r.to_dict() for r in results]
+
+    if name == "gaps":
+        return store.list_unresolved_references(
+            project=project,
+            limit=args.get("limit", 20),
         )
 
     raise ValueError("Unknown tool: {}".format(name))
