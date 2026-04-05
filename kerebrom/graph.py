@@ -37,102 +37,148 @@ _DEFAULT_COLOR = "#9ca3af"
 
 
 def build_graph_data(store: KerebromStore, project: str = "default") -> Dict[str, Any]:
-    """Construye nodos y links para el grafo interactivo."""
+    """Construye nodos y links para el grafo interactivo.
+
+    Enfoque centrado en memorias: las memorias son los nodos principales,
+    conectadas entre si cuando comparten entidades significativas.
+    Las entidades con relaciones reales tambien aparecen como nodos puente.
+    """
     nodes = []
     links = []
-    entity_conn_count: Dict[int, int] = {}
+    link_set: set = set()  # evitar links duplicados
 
-    # --- Entidades ---
+    from .capture import COMMON_ENTITY_WORDS
+
     with store.connect() as conn:
-        entities = conn.execute(
-            "SELECT id, name, entity_type, created_at FROM entities WHERE project = ?",
+        # --- Memorias activas ---
+        memories = conn.execute(
+            "SELECT id, content, kind, importance, tags FROM memories "
+            "WHERE project = ? AND invalid_at IS NULL "
+            "ORDER BY importance DESC",
             (project,),
         ).fetchall()
 
+        # Mapa: entity_id -> [memory_ids]
+        entity_to_mems: Dict[int, list] = {}
+        mem_to_entities: Dict[int, list] = {}
+        for m in memories:
+            mid = m[0]
+            ents = conn.execute(
+                "SELECT entity_id FROM memory_entities WHERE memory_id = ?",
+                (mid,),
+            ).fetchall()
+            ent_ids = [e[0] for e in ents]
+            mem_to_entities[mid] = ent_ids
+            for eid in ent_ids:
+                entity_to_mems.setdefault(eid, []).append(mid)
+
+        # Filtrar entidades significativas (nombre > 2 chars, no stopword, >=2 memorias)
+        entity_names = {}
+        entity_types = {}
+        sig_entities = set()
+        all_ents = conn.execute(
+            "SELECT id, name, entity_type FROM entities WHERE project = ?",
+            (project,),
+        ).fetchall()
+        for e in all_ents:
+            entity_names[e[0]] = e[1]
+            entity_types[e[0]] = e[2] or "concept"
+            mems = entity_to_mems.get(e[0], [])
+            # Entidad significativa: nombre > 2 chars, no es stopword, conecta >=2 memorias
+            if len(e[1]) > 2 and e[1] not in COMMON_ENTITY_WORDS and len(mems) >= 2:
+                sig_entities.add(e[0])
+
+        # Relaciones reales
         relations = conn.execute(
             "SELECT subject_entity_id, predicate, object_entity_id, confidence "
             "FROM relations WHERE project = ? AND invalid_at IS NULL",
             (project,),
         ).fetchall()
-
-        # Contar conexiones por entidad
         for r in relations:
-            entity_conn_count[r[0]] = entity_conn_count.get(r[0], 0) + 1
-            entity_conn_count[r[2]] = entity_conn_count.get(r[2], 0) + 1
+            sig_entities.add(r[0])
+            sig_entities.add(r[2])
 
-        # Nodos entidad
-        for e in entities:
-            eid = e[0]
-            conns = entity_conn_count.get(eid, 0)
-            if conns == 0:
-                # Contar menciones en memoria como conexiones
-                mem_count = conn.execute(
-                    "SELECT COUNT(*) FROM memory_entities WHERE entity_id = ?",
-                    (eid,),
-                ).fetchone()[0]
-                conns = mem_count
+        # --- Nodos de memoria (solo las que conectan con entidades significativas) ---
+        connected_mems = set()
+        for eid in sig_entities:
+            for mid in entity_to_mems.get(eid, []):
+                connected_mems.add(mid)
 
-            nodes.append({
-                "id": f"e_{eid}",
-                "name": e[1],
-                "group": e[2] or "concept",
-                "type": "entity",
-                "val": max(3, conns * 2),
-                "color": _ENTITY_COLORS.get(e[2] or "concept", _DEFAULT_COLOR),
-                "connections": conns,
-            })
-
-        # Links de relaciones
-        for r in relations:
-            links.append({
-                "source": f"e_{r[0]}",
-                "target": f"e_{r[2]}",
-                "label": r[1],
-                "value": r[3],
-            })
-
-        # --- Memorias importantes ---
-        memories = conn.execute(
-            "SELECT id, content, kind, importance, tags FROM memories "
-            "WHERE project = ? AND invalid_at IS NULL AND importance >= 0.7 "
-            "ORDER BY importance DESC LIMIT 100",
-            (project,),
-        ).fetchall()
-
-        for m in memories:
-            mid = m[0]
-            snippet = m[1][:80] + ("..." if len(m[1]) > 80 else "")
+        mem_lookup = {m[0]: m for m in memories}
+        for mid in connected_mems:
+            m = mem_lookup.get(mid)
+            if not m:
+                continue
+            content = m[1]
             kind = m[2]
+            importance = m[3]
+            snippet = content[:100] + ("..." if len(content) > 100 else "")
+
             nodes.append({
                 "id": f"m_{mid}",
                 "name": snippet,
                 "group": f"memory_{kind}",
                 "type": "memory",
                 "kind": kind,
-                "importance": m[3],
-                "val": max(2, int(m[3] * 6)),
+                "importance": importance,
+                "val": max(3, int(importance * 8)),
                 "color": _MEMORY_COLORS.get(kind, _DEFAULT_COLOR),
                 "connections": 0,
             })
 
-            # Links memoria -> entidades
-            mem_entities = conn.execute(
-                "SELECT entity_id FROM memory_entities WHERE memory_id = ?",
-                (mid,),
-            ).fetchall()
-            for me in mem_entities:
+        # --- Nodos de entidades significativas ---
+        for eid in sig_entities:
+            name = entity_names.get(eid, "?")
+            etype = entity_types.get(eid, "concept")
+            mems = entity_to_mems.get(eid, [])
+            nodes.append({
+                "id": f"e_{eid}",
+                "name": name,
+                "group": etype,
+                "type": "entity",
+                "val": max(4, len(mems) * 2),
+                "color": _ENTITY_COLORS.get(etype, _DEFAULT_COLOR),
+                "connections": len(mems),
+            })
+
+        # --- Links: memoria <-> entidad significativa ---
+        for eid in sig_entities:
+            for mid in entity_to_mems.get(eid, []):
+                key = (f"m_{mid}", f"e_{eid}")
+                if key not in link_set:
+                    link_set.add(key)
+                    links.append({
+                        "source": f"m_{mid}",
+                        "target": f"e_{eid}",
+                        "label": "menciona",
+                        "value": 0.3,
+                    })
+
+        # --- Links: entidad <-> entidad (relaciones) ---
+        for r in relations:
+            key = (f"e_{r[0]}", f"e_{r[2]}")
+            if key not in link_set:
+                link_set.add(key)
                 links.append({
-                    "source": f"m_{mid}",
-                    "target": f"e_{me[0]}",
-                    "label": "menciona",
-                    "value": 0.3,
+                    "source": f"e_{r[0]}",
+                    "target": f"e_{r[2]}",
+                    "label": r[1],
+                    "value": r[3],
                 })
+
+        # Actualizar conteo de conexiones en nodos
+        conn_count: Dict[str, int] = {}
+        for l in links:
+            conn_count[l["source"]] = conn_count.get(l["source"], 0) + 1
+            conn_count[l["target"]] = conn_count.get(l["target"], 0) + 1
+        for n in nodes:
+            n["connections"] = conn_count.get(n["id"], 0)
 
     return {
         "nodes": nodes,
         "links": links,
         "stats": {
-            "entities": len(entities),
+            "entities": len(sig_entities),
             "relations": len(relations),
             "memories": len(memories),
             "total_nodes": len(nodes),
@@ -145,13 +191,13 @@ def build_graph_data(store: KerebromStore, project: str = "default") -> Dict[str
 # HTML del visualizador (inline, sin archivos externos)
 # ---------------------------------------------------------------------------
 
-_GRAPH_HTML = r"""<!DOCTYPE html>
+_GRAPH_HTML = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kerebrom — Grafo de Conocimiento</title>
-<script src="https://unpkg.com/force-graph@1.47.5/dist/force-graph.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0f0f1a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
@@ -203,7 +249,15 @@ body { background: #0f0f1a; color: #e2e8f0; font-family: -apple-system, BlinkMac
   background: none; border: none; color: #6b7280; cursor: pointer; font-size: 18px;
 }
 
-#graph { width: 100vw; height: 100vh; }
+#graph { width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; z-index: 1; }
+.link { stroke-opacity: 0.3; }
+.link.highlighted { stroke: #a855f7 !important; stroke-opacity: 1; stroke-width: 2px !important; }
+.node circle { cursor: pointer; stroke: rgba(255,255,255,0.15); stroke-width: 1px; }
+.node circle:hover { stroke: #fff; stroke-width: 2px; }
+.node text { font-size: 9px; fill: rgba(226,232,240,0.6); pointer-events: none; }
+.node.dimmed circle { opacity: 0.08; }
+.node.dimmed text { opacity: 0.05; }
+.tooltip { position: fixed; background: rgba(30,30,50,0.95); border: 1px solid #3d3d5c; border-radius: 6px; padding: 8px 12px; font-size: 12px; color: #e2e8f0; pointer-events: none; z-index: 20; max-width: 300px; display: none; }
 
 .legend {
   position: fixed; bottom: 16px; left: 16px; z-index: 10;
@@ -233,7 +287,7 @@ body { background: #0f0f1a; color: #e2e8f0; font-family: -apple-system, BlinkMac
   <div id="panel-content"></div>
 </div>
 
-<div id="graph"></div>
+<svg id="graph"></svg>
 
 <div class="legend">
   <div class="legend-item"><div class="legend-dot" style="background:#4a9eff"></div> Persona</div>
@@ -244,207 +298,159 @@ body { background: #0f0f1a; color: #e2e8f0; font-family: -apple-system, BlinkMac
   <div class="legend-item"><div class="legend-dot" style="background:#818cf8"></div> Memoria semantica</div>
 </div>
 
+<div class="tooltip" id="tooltip"></div>
 <script>
-let graphData = null;
-let graph = null;
-let selectedNode = null;
-let highlightNodes = new Set();
-let highlightLinks = new Set();
-let activeFilters = new Set(['person','concept','location','organization','memory']);
-let searchTerm = '';
+const W = window.innerWidth, H = window.innerHeight;
+const svg = d3.select('#graph').attr('width', W).attr('height', H);
+const g = svg.append('g');
+const tooltip = document.getElementById('tooltip');
 
-async function init() {
-  const res = await fetch('/api/graph');
-  graphData = await res.json();
+// Zoom y pan con D3
+svg.call(d3.zoom()
+  .scaleExtent([0.1, 8])
+  .on('zoom', e => g.attr('transform', e.transform))
+);
 
+fetch('/api/graph').then(r => r.json()).then(data => {
   document.getElementById('stats').textContent =
-    `${graphData.stats.entities} entidades · ${graphData.stats.relations} relaciones · ${graphData.stats.memories} memorias`;
+    data.stats.entities + ' entidades · ' + data.stats.relations + ' relaciones · ' + data.stats.memories + ' memorias';
 
-  graph = ForceGraph()(document.getElementById('graph'))
-    .graphData(graphData)
-    .backgroundColor('#0f0f1a')
-    .nodeLabel(n => `${n.name}\n${n.type === 'entity' ? n.group : n.kind} · ${n.connections || 0} conexiones`)
-    .nodeColor(n => getNodeColor(n))
-    .nodeVal(n => getNodeSize(n))
-    .nodeCanvasObjectMode(() => 'after')
-    .nodeCanvasObject((node, ctx, globalScale) => {
-      // Dibujar etiqueta solo si el zoom es suficiente o el nodo es grande
-      if (globalScale < 1.5 && node.val < 8) return;
-      const label = node.name.length > 25 ? node.name.slice(0, 22) + '...' : node.name;
-      const fontSize = Math.max(10 / globalScale, 1.5);
-      ctx.font = `${fontSize}px -apple-system, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = highlightNodes.has(node) ? '#ffffff' : 'rgba(226,232,240,0.7)';
-      ctx.fillText(label, node.x, node.y + node.val / 1.5 + 2);
-    })
-    .linkColor(l => highlightLinks.has(l) ? '#a855f7' : 'rgba(100,100,140,0.25)')
-    .linkWidth(l => highlightLinks.has(l) ? 2 : Math.max(0.5, l.value * 2))
-    .linkDirectionalArrowLength(4)
-    .linkDirectionalArrowRelPos(1)
-    .linkLabel(l => l.label)
-    .onNodeClick(handleNodeClick)
-    .onNodeHover(handleNodeHover)
-    .onBackgroundClick(() => { clearHighlight(); closePanel(); })
-    .warmupTicks(80)
-    .cooldownTicks(200)
-    .d3Force('charge').strength(-120);
+  const simulation = d3.forceSimulation(data.nodes)
+    .force('link', d3.forceLink(data.links).id(d => d.id).distance(60).strength(0.3))
+    .force('charge', d3.forceManyBody().strength(-80).distanceMax(250))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.val) * 3 + 2));
 
-  graph.d3Force('link').distance(60);
-}
+  // Links
+  const link = g.append('g').selectAll('line')
+    .data(data.links).join('line')
+    .attr('class', 'link')
+    .attr('stroke', '#475569')
+    .attr('stroke-width', d => Math.max(0.5, d.value * 2));
 
-function getNodeColor(n) {
-  if (highlightNodes.size > 0 && !highlightNodes.has(n)) return 'rgba(60,60,80,0.3)';
-  if (searchTerm && !n.name.toLowerCase().includes(searchTerm)) return 'rgba(60,60,80,0.3)';
-  return n.color;
-}
-
-function getNodeSize(n) {
-  if (highlightNodes.size > 0 && !highlightNodes.has(n)) return Math.max(1, n.val * 0.5);
-  return n.val;
-}
-
-function handleNodeHover(node) {
-  highlightNodes.clear();
-  highlightLinks.clear();
-
-  if (node) {
-    highlightNodes.add(node);
-    const neighbors = graphData.links.filter(l =>
-      l.source === node || l.target === node ||
-      l.source.id === node.id || l.target.id === node.id
+  // Nodos
+  const node = g.append('g').selectAll('g')
+    .data(data.nodes).join('g')
+    .attr('class', 'node')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
     );
-    neighbors.forEach(l => {
-      highlightLinks.add(l);
-      if (typeof l.source === 'object') highlightNodes.add(l.source);
-      if (typeof l.target === 'object') highlightNodes.add(l.target);
+
+  node.append('circle')
+    .attr('r', d => Math.max(3, Math.sqrt(d.val) * 2.5))
+    .attr('fill', d => d.color);
+
+  node.append('text')
+    .attr('dy', d => Math.sqrt(d.val) * 2.5 + 12)
+    .attr('text-anchor', 'middle')
+    .text(d => d.name.length > 25 ? d.name.slice(0, 22) + '...' : d.name);
+
+  // Hover: resaltar vecinos
+  node.on('mouseover', function(e, d) {
+    const neighbors = new Set();
+    neighbors.add(d.id);
+    data.links.forEach(l => {
+      const sid = typeof l.source === 'object' ? l.source.id : l.source;
+      const tid = typeof l.target === 'object' ? l.target.id : l.target;
+      if (sid === d.id) neighbors.add(tid);
+      if (tid === d.id) neighbors.add(sid);
     });
-  }
-  graph.nodeColor(graph.nodeColor());
-  graph.linkColor(graph.linkColor());
-  graph.linkWidth(graph.linkWidth());
-}
 
-function handleNodeClick(node) {
-  if (!node) return;
-  selectedNode = node;
+    node.classed('dimmed', n => !neighbors.has(n.id));
+    link.classed('highlighted', l => {
+      const sid = typeof l.source === 'object' ? l.source.id : l.source;
+      const tid = typeof l.target === 'object' ? l.target.id : l.target;
+      return sid === d.id || tid === d.id;
+    });
 
-  highlightNodes.clear();
-  highlightLinks.clear();
-  highlightNodes.add(node);
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.pageX + 12) + 'px';
+    tooltip.style.top = (e.pageY - 10) + 'px';
+    const typeLabel = d.type === 'entity' ? d.group : d.kind;
+    tooltip.innerHTML = '<strong>' + d.name.slice(0, 80) + '</strong><br>' + typeLabel + ' · ' + (d.connections || 0) + ' conexiones';
+  })
+  .on('mouseout', function() {
+    node.classed('dimmed', false);
+    link.classed('highlighted', false);
+    tooltip.style.display = 'none';
+  })
+  .on('click', function(e, d) {
+    const panel = document.getElementById('panel');
+    const content = document.getElementById('panel-content');
+    const neighbors = data.links.filter(l => {
+      const sid = typeof l.source === 'object' ? l.source.id : l.source;
+      const tid = typeof l.target === 'object' ? l.target.id : l.target;
+      return sid === d.id || tid === d.id;
+    });
+    let relHtml = '';
+    neighbors.forEach(l => {
+      const s = typeof l.source === 'object' ? l.source : data.nodes.find(n => n.id === l.source);
+      const t = typeof l.target === 'object' ? l.target : data.nodes.find(n => n.id === l.target);
+      const other = (s && s.id === d.id) ? t : s;
+      if (other) relHtml += '<div class="relation">' + l.label + ' \\u2192 ' + other.name.slice(0, 60) + '</div>';
+    });
 
-  const neighbors = graphData.links.filter(l =>
-    l.source === node || l.target === node
-  );
-  neighbors.forEach(l => {
-    highlightLinks.add(l);
-    highlightNodes.add(l.source);
-    highlightNodes.add(l.target);
-  });
-
-  graph.nodeColor(graph.nodeColor());
-  graph.linkColor(graph.linkColor());
-
-  // Panel lateral
-  const panel = document.getElementById('panel');
-  const content = document.getElementById('panel-content');
-
-  let relHtml = '';
-  neighbors.forEach(l => {
-    const other = l.source === node ? l.target : l.source;
-    const dir = l.source === node ? '→' : '←';
-    relHtml += `<div class="relation">${dir} <strong>${l.label}</strong> ${other.name}</div>`;
-  });
-
-  if (node.type === 'memory') {
-    fetch(`/api/memory/${node.id.replace('m_', '')}`)
-      .then(r => r.json())
-      .then(mem => {
-        content.innerHTML = `
-          <h2>${node.kind}</h2>
-          <div class="type-badge" style="background:${node.color}33;color:${node.color}">
-            importance: ${(mem.importance || node.importance).toFixed(2)}
-          </div>
-          <div class="content">${mem.content || node.name}</div>
-          ${relHtml ? `<div class="relations"><h3 style="font-size:13px;margin-bottom:8px;">Conexiones</h3>${relHtml}</div>` : ''}
-        `;
-      });
-  } else {
-    content.innerHTML = `
-      <h2>${node.name}</h2>
-      <div class="type-badge" style="background:${node.color}33;color:${node.color}">
-        ${node.group} · ${node.connections} conexiones
-      </div>
-      ${relHtml ? `<div class="relations"><h3 style="font-size:13px;margin-bottom:8px;">Relaciones</h3>${relHtml}</div>` : ''}
-    `;
-  }
-  panel.classList.add('open');
-
-  // Centrar camara en el nodo
-  graph.centerAt(node.x, node.y, 500);
-  graph.zoom(3, 500);
-}
-
-function clearHighlight() {
-  highlightNodes.clear();
-  highlightLinks.clear();
-  selectedNode = null;
-  graph.nodeColor(graph.nodeColor());
-  graph.linkColor(graph.linkColor());
-  graph.linkWidth(graph.linkWidth());
-}
-
-function closePanel() {
-  document.getElementById('panel').classList.remove('open');
-}
-
-// Busqueda
-document.getElementById('search').addEventListener('input', (e) => {
-  searchTerm = e.target.value.toLowerCase();
-  graph.nodeColor(graph.nodeColor());
-});
-
-// Filtros
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const group = btn.dataset.group;
-    if (group === 'all') {
-      const allActive = document.querySelectorAll('.filter-btn.active').length ===
-                         document.querySelectorAll('.filter-btn').length;
-      document.querySelectorAll('.filter-btn').forEach(b => {
-        if (allActive) b.classList.remove('active');
-        else b.classList.add('active');
-      });
-      if (allActive) activeFilters.clear();
-      else activeFilters = new Set(['person','concept','location','organization','memory']);
+    if (d.type === 'memory') {
+      fetch('/api/memory/' + d.id.replace('m_', ''))
+        .then(r => r.json())
+        .then(mem => {
+          content.innerHTML = '<h2>' + (d.kind || 'memoria') + '</h2>' +
+            '<div class="type-badge" style="background:' + d.color + '33;color:' + d.color + '">importancia: ' + (mem.importance || 0).toFixed(2) + '</div>' +
+            '<div class="content">' + (mem.content || d.name) + '</div>' +
+            (relHtml ? '<div class="relations"><h3 style="font-size:13px;margin:12px 0 8px">Conexiones</h3>' + relHtml + '</div>' : '');
+        });
     } else {
-      btn.classList.toggle('active');
-      if (btn.classList.contains('active')) activeFilters.add(group);
-      else activeFilters.delete(group);
+      content.innerHTML = '<h2>' + d.name + '</h2>' +
+        '<div class="type-badge" style="background:' + d.color + '33;color:' + d.color + '">' + d.group + ' · ' + (d.connections || 0) + ' conexiones</div>' +
+        (relHtml ? '<div class="relations"><h3 style="font-size:13px;margin:12px 0 8px">Relaciones</h3>' + relHtml + '</div>' : '');
     }
-    applyFilters();
+    panel.classList.add('open');
+  });
+
+  // Tick de simulacion
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+  });
+
+  // Busqueda
+  document.getElementById('search').addEventListener('input', e => {
+    const term = e.target.value.toLowerCase();
+    node.classed('dimmed', d => term && !d.name.toLowerCase().includes(term));
+  });
+
+  // Filtros
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.classList.toggle('active');
+      const activeGroups = new Set();
+      document.querySelectorAll('.filter-btn.active').forEach(b => activeGroups.add(b.dataset.group));
+      const showAll = activeGroups.has('all');
+      node.style('display', d => {
+        if (showAll) return null;
+        if (d.type === 'memory') return activeGroups.has('memory') ? null : 'none';
+        return activeGroups.has(d.group) ? null : 'none';
+      });
+      link.style('display', l => {
+        const sVis = l.source && d3.select('[data-id="' + l.source.id + '"]').style('display') !== 'none';
+        return null; // mostrar todos los links por simplicidad
+      });
+    });
+  });
+
+  // Click fondo cierra panel
+  svg.on('click', function(e) {
+    if (e.target === svg.node()) {
+      document.getElementById('panel').classList.remove('open');
+    }
   });
 });
 
-function applyFilters() {
-  const filtered = {
-    nodes: graphData.nodes.filter(n => {
-      if (n.type === 'memory') return activeFilters.has('memory');
-      return activeFilters.has(n.group);
-    }),
-    links: graphData.links,
-  };
-  // Solo links cuyos nodos estan visibles
-  const visibleIds = new Set(filtered.nodes.map(n => n.id));
-  filtered.links = graphData.links.filter(l => {
-    const sid = typeof l.source === 'object' ? l.source.id : l.source;
-    const tid = typeof l.target === 'object' ? l.target.id : l.target;
-    return visibleIds.has(sid) && visibleIds.has(tid);
-  });
-  graph.graphData(filtered);
-}
-
-init();
+function closePanel() { document.getElementById('panel').classList.remove('open'); }
 </script>
 </body>
 </html>"""
