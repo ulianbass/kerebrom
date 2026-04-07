@@ -741,7 +741,8 @@ def _setup_sopor(
         # Sincronizar con la DB de Codex si existe y la app no está corriendo
         codex_sqlite = codex_dir / "sqlite" / "codex-dev.db"
         if codex_sqlite.exists():
-            codex_running = subprocess.run(
+            import subprocess as _subprocess
+            codex_running = _subprocess.run(
                 ["pgrep", "-x", "Codex"],
                 capture_output=True,
             ).returncode == 0
