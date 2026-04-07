@@ -34,3 +34,6 @@ htmlcov/
 .mcp.json
 kerebrom-report.md
 .claude/settings.local.json
+
+# Local launch config (per-machine absolute paths)
+.claude/launch.json
