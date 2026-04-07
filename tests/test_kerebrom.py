@@ -1590,5 +1590,75 @@ class HookSetupTests(unittest.TestCase):
             self.assertNotIn("hooks", remaining)
 
 
+class SoporSetupTests(unittest.TestCase):
+    """Test que _setup_sopor instala SKILL.md y automation.toml."""
+
+    def test_setup_sopor_creates_skill_md(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td)
+            (fake_home / ".claude").mkdir()
+
+            from unittest.mock import patch
+            with patch("kerebrom.setup.Path.home", return_value=fake_home), \
+                 patch("kerebrom.setup._is_temp_path", return_value=False):
+                from kerebrom.setup import _setup_sopor
+                ok, msg = _setup_sopor(fake_home / ".kerebrom" / "kerebrom.db")
+
+            self.assertTrue(ok)
+            skill = fake_home / ".claude" / "scheduled-tasks" / "sopor" / "SKILL.md"
+            self.assertTrue(skill.exists())
+            content = skill.read_text()
+            self.assertIn("Sopor Plenus", content)
+            self.assertIn("ABSTRAER", content)
+            self.assertIn("NUNCA copies texto literal", content)
+            self.assertIn("FUSIONA", content)
+
+    def test_setup_sopor_creates_codex_automation(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td)
+            (fake_home / ".codex").mkdir()
+
+            from unittest.mock import patch
+            with patch("kerebrom.setup.Path.home", return_value=fake_home), \
+                 patch("kerebrom.setup._is_temp_path", return_value=False):
+                from kerebrom.setup import _setup_sopor
+                ok, msg = _setup_sopor(fake_home / ".kerebrom" / "kerebrom.db")
+
+            self.assertTrue(ok)
+            automations = fake_home / ".codex" / "automations"
+            self.assertTrue(automations.exists())
+            toml_files = list(automations.glob("*/automation.toml"))
+            self.assertEqual(len(toml_files), 1)
+            content = toml_files[0].read_text()
+            self.assertIn('name = "Sopor"', content)
+            self.assertIn("ABSTRAER", content)
+            self.assertIn("FREQ=DAILY", content)
+
+    def test_setup_sopor_idempotent(self) -> None:
+        """Correr setup dos veces no duplica la automation."""
+        with tempfile.TemporaryDirectory() as td:
+            fake_home = Path(td)
+            (fake_home / ".codex").mkdir()
+
+            from unittest.mock import patch
+            with patch("kerebrom.setup.Path.home", return_value=fake_home), \
+                 patch("kerebrom.setup._is_temp_path", return_value=False):
+                from kerebrom.setup import _setup_sopor
+                _setup_sopor(fake_home / ".kerebrom" / "kerebrom.db")
+                _setup_sopor(fake_home / ".kerebrom" / "kerebrom.db")
+
+            automations = fake_home / ".codex" / "automations"
+            toml_files = list(automations.glob("*/automation.toml"))
+            self.assertEqual(len(toml_files), 1)
+
+    def test_setup_sopor_skipped_in_temp_path(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            from kerebrom.setup import _setup_sopor
+            # La ruta temporal debe ser detectada y omitida
+            ok, msg = _setup_sopor(Path(td) / "kerebrom.db")
+            self.assertFalse(ok)
+            self.assertIn("temporal", msg)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -565,10 +565,226 @@ def _setup_launchagent(
     return True, "LaunchAgent: instalado (auto-reparación cada 10 min)"
 
 
+# ── Prompt genérico de Sopor Plenus ──────────────────────────────────
+# Se usa tanto para el SKILL.md de Claude Code como para el
+# automation.toml de Codex. Sin datos personales del usuario.
+
+_SOPOR_PROMPT = """\
+Eres Sopor Plenus — el analista de inteligencia de Kerebrom. No eres un \
+extractor de texto. Eres un pensador. Tu trabajo es leer conversaciones \
+completas, comprender lo que sucedió a nivel profundo, y cristalizar las \
+ideas que importan.
+
+Piensa como un asesor con IQ 160 que lee el diario de su cliente y anota \
+solo las conclusiones que cambian algo.
+
+IMPORTANTE: Responde siempre en el idioma del usuario. Usa rutas absolutas.
+
+## PROCESO OBLIGATORIO antes de guardar
+
+1. ABSTRAER: la IDEA detrás de lo que pasó. No qué se dijo, sino qué \
+SIGNIFICA.
+2. VALIDAR: ¿importará en 30 días? Si un AI nuevo abre la conversación, \
+¿necesitaría saber esto?
+3. FORMULAR: hecho destilado [QUÉ] — [POR QUÉ] — [CONTEXTO]. 1-3 oraciones \
+máximo. NUNCA copies texto literal del usuario ni del transcript — reescribe \
+SIEMPRE con tus propias palabras, sin errores ortográficos, sin lenguaje \
+informal.
+4. CONECTAR: usa recall para buscar memorias similares. Si hay versiones \
+parciales, FUSIONA en una sola más completa y forget las viejas. Si \
+similitud > 0.85, NO guardes.
+
+## QUÉ GUARDAR
+- Decisiones arquitectónicas (qué y POR QUÉ): kind=semantic, tags=[decision]
+- Preferencias del usuario: kind=core, tags=[preference]
+- Datos personales: kind=core, tags=[discovery]
+- Estado de proyectos: kind=semantic, tags=[feature]
+- Bugs resueltos (problema + root cause + fix): kind=episodic, tags=[bugfix]
+- Lecciones aprendidas: kind=semantic, tags=[discovery]
+
+## QUÉ DESCARTAR (NUNCA guardar)
+- Frases casuales como Ok, Listo, Perfecto, Bien
+- Preguntas sin respuesta, pasos intermedios, outputs de comandos, código
+- Texto copiado literalmente del transcript
+- Confirmaciones, saludos, mensajes sin contenido
+- Cualquier cosa que no importará en 30 días
+
+## FUSIÓN INTELIGENTE
+Si recall devuelve 2+ memorias parciales sobre el mismo tema:
+1. forget las parciales
+2. remember UNA memoria fusionada más completa
+Objetivo: MENOS memorias, MEJOR calidad.
+
+## FUENTES DE TRANSCRIPTS
+find ~/.codex/sessions -name "*.jsonl" -mmin -1500 -type f
+find ~/.claude/projects -name "*.jsonl" -mmin -1500 -type f
+
+## DIAGNÓSTICO (solo lectura)
+ls -la {db_path}
+find /private/var/folders -name "kerebrom.db" 2>/dev/null | wc -l
+
+## REPORTE
+Guardar en {reports_dir}/reporte-YYYY-MM-DD-HHMM.md con formato:
+- Memorias (nuevas, fusionadas, duplicados)
+- Mantenimiento (eliminadas, fusionadas)
+- Diagnóstico (DB, MCP, Phantom DBs)
+- Estado General [OK o ATENCIÓN]
+
+## REGLAS
+- NUNCA copies texto literal — DESTILA ideas con tus propias palabras
+- NUNCA guardes código, outputs, o confirmaciones
+- Después de mantenimiento: MENOS memorias pero MEJOR calidad
+- Si algo falla, continúa con la siguiente fase
+"""
+
+
+_SOPOR_SKILL_HEADER = """\
+---
+name: sopor
+description: Consolida transcripts en memorias destiladas de alta calidad \
+y mantiene la coherencia de Kerebrom
+---
+
+"""
+
+
+def _setup_sopor(
+    db_path: Path,
+    passphrase_env: Optional[str] = None,
+    passphrase_file: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Instala Sopor Plenus como scheduled task de Claude Code y
+    automation de Codex. Ambos usan el mismo prompt genérico.
+    """
+    if _is_temp_path(db_path):
+        return False, "Sopor: omitido (ruta temporal)"
+
+    messages: List[str] = []
+    reports_dir = db_path.parent / "reports"
+
+    # Sustituir placeholders en el prompt con rutas reales
+    prompt = _SOPOR_PROMPT.format(
+        db_path=db_path,
+        reports_dir=reports_dir,
+    )
+
+    # ── Claude Code: scheduled task ──
+    claude_dir = Path.home() / ".claude"
+    if claude_dir.exists():
+        skill_dir = claude_dir / "scheduled-tasks" / "sopor"
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_file = skill_dir / "SKILL.md"
+        skill_content = _SOPOR_SKILL_HEADER + prompt
+        if skill_file.exists() and skill_file.read_text(encoding="utf-8") == skill_content:
+            messages.append("Claude Code SKILL.md: ya configurado")
+        else:
+            skill_file.write_text(skill_content, encoding="utf-8")
+            messages.append("Claude Code SKILL.md: creado")
+    else:
+        messages.append("Claude Code: no detectado")
+
+    # ── Codex: automation.toml ──
+    codex_dir = Path.home() / ".codex"
+    if codex_dir.exists():
+        automations_dir = codex_dir / "automations"
+        automations_dir.mkdir(parents=True, exist_ok=True)
+
+        # Buscar si ya existe una automation de Sopor
+        existing_id = None
+        for d in automations_dir.iterdir():
+            if d.is_dir():
+                toml_file = d / "automation.toml"
+                if toml_file.exists() and 'name = "Sopor"' in toml_file.read_text(encoding="utf-8"):
+                    existing_id = d.name
+                    break
+
+        import uuid as _uuid
+        automation_id = existing_id or str(_uuid.uuid4())
+        auto_dir = automations_dir / automation_id
+        auto_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generar el TOML. El prompt va como string multilinea con escape
+        # para los caracteres conflictivos en TOML.
+        import time as _time
+        now_ms = int(_time.time() * 1000)
+
+        # Escapar triple-quote si aparece en el prompt (muy raro pero por seguridad)
+        safe_prompt = prompt.replace('"""', '\\"\\"\\"')
+
+        toml_content = (
+            'version = 1\n'
+            'id = "{}"\n'
+            'kind = "cron"\n'
+            'name = "Sopor"\n'
+            'prompt = """\n{}"""\n'
+            'status = "ACTIVE"\n'
+            'rrule = "FREQ=DAILY;BYHOUR=18;BYMINUTE=0"\n'
+            'model = "gpt-5.4"\n'
+            'reasoning_effort = "xhigh"\n'
+            'execution_environment = "local"\n'
+            'cwds = ["{}"]\n'
+            'created_at = {}\n'
+            'updated_at = {}\n'
+        ).format(
+            automation_id,
+            safe_prompt,
+            str(db_path.parent),
+            now_ms,
+            now_ms,
+        )
+
+        (auto_dir / "automation.toml").write_text(toml_content, encoding="utf-8")
+        messages.append("Codex automation.toml: {}".format(
+            "actualizado" if existing_id else "creado"
+        ))
+
+        # Sincronizar con la DB de Codex si existe y la app no está corriendo
+        codex_sqlite = codex_dir / "sqlite" / "codex-dev.db"
+        if codex_sqlite.exists():
+            codex_running = subprocess.run(
+                ["pgrep", "-x", "Codex"],
+                capture_output=True,
+            ).returncode == 0
+            if not codex_running:
+                try:
+                    import sqlite3 as _sqlite
+                    conn = _sqlite.connect(str(codex_sqlite))
+                    conn.execute(
+                        "INSERT OR REPLACE INTO automations "
+                        "(id, name, prompt, status, rrule, cwds, created_at, "
+                        "updated_at, model, reasoning_effort) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            automation_id,
+                            "Sopor",
+                            prompt,
+                            "ACTIVE",
+                            "FREQ=DAILY;BYHOUR=18;BYMINUTE=0",
+                            '["{}"]'.format(str(db_path.parent)),
+                            now_ms,
+                            now_ms,
+                            "gpt-5.4",
+                            "xhigh",
+                        ),
+                    )
+                    conn.commit()
+                    conn.close()
+                    messages.append("Codex DB: sincronizado")
+                except Exception:
+                    messages.append("Codex DB: TOML creado (sync pendiente)")
+            else:
+                messages.append("Codex DB: TOML creado (Codex corriendo, sync al reiniciar)")
+    else:
+        messages.append("Codex: no detectado")
+
+    return True, "Sopor: " + "; ".join(messages)
+
+
 _TOOLS = [
     ("Claude Code", _setup_claude_code),
     ("Claude Desktop", _setup_claude_desktop),
     ("Codex", _setup_codex),
+    ("Sopor", _setup_sopor),
     ("LaunchAgent", _setup_launchagent),
 ]
 
