@@ -252,6 +252,92 @@ def canonicalize_entity(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip()
 
 
+# ── Inferencia de tipo de entidad (heurísticas genéricas) ─────────
+
+_LOCATION_NAMES = {
+    # Países más comunes
+    "guatemala", "mexico", "méxico", "argentina", "chile", "peru", "perú",
+    "colombia", "venezuela", "ecuador", "bolivia", "paraguay", "uruguay",
+    "brasil", "brazil", "españa", "spain", "estados unidos", "usa",
+    "united states", "canada", "canadá", "francia", "france", "alemania",
+    "germany", "italia", "italy", "reino unido", "uk", "japón", "japan",
+    "china", "rusia", "russia", "india", "australia",
+    # Ciudades
+    "guatemala city", "ciudad de guatemala", "nueva york", "new york",
+    "madrid", "barcelona", "buenos aires", "ciudad de méxico", "parís",
+    "paris", "londres", "london", "tokio", "tokyo", "san francisco",
+    "los angeles", "berlin", "roma", "rome",
+}
+
+_ORG_SUFFIXES = {
+    "inc", "ltd", "llc", "corp", "corporation", "company", "co.",
+    "gmbh", "s.a.", "s.l.", "sas", "sarl", "oy", "ab", "plc",
+}
+
+_ORG_NAMES = {
+    # Empresas de tech comunes
+    "google", "microsoft", "apple", "amazon", "meta", "facebook",
+    "openai", "anthropic", "nvidia", "intel", "github", "gitlab",
+    "docker", "kubernetes", "cloudflare", "vercel", "netlify",
+    "heroku", "aws", "gcp", "azure", "firebase", "supabase",
+    # Financieras / trading
+    "binance", "coinbase", "kraken", "bybit", "bitmex", "ftx",
+    "quantfury", "interactive brokers", "robinhood", "etoro",
+    "tradingview", "metatrader", "ninjatrader",
+    # Otras comunes
+    "spaceship", "hostinger", "contabo", "digitalocean", "linode",
+    "homebrew", "nginx", "postgresql", "mysql", "mongodb", "redis",
+    "claude", "codex", "chatgpt",
+}
+
+
+def infer_entity_type(name: str) -> str:
+    """Infiere el tipo de entidad a partir de su nombre (heurística genérica).
+
+    Retorna uno de: person, location, organization, concept.
+    Sin conocer el contexto, aplica reglas conservadoras:
+    - location: países y ciudades conocidas
+    - organization: empresas conocidas, sufijos corporativos, tickers
+    - person: 2-3 palabras capitalizadas con forma de nombre propio
+    - concept: el resto (default)
+    """
+    normalized = name.strip().lower()
+    if not normalized:
+        return "concept"
+
+    # 1. Lugares
+    if normalized in _LOCATION_NAMES:
+        return "location"
+
+    # 2. Organizaciones (nombres conocidos o sufijos)
+    if normalized in _ORG_NAMES:
+        return "organization"
+    tokens = normalized.split()
+    if tokens and tokens[-1].rstrip(".,") in _ORG_SUFFIXES:
+        return "organization"
+    # Dominios web
+    if "." in normalized and any(
+        normalized.endswith(tld) for tld in (".com", ".org", ".net", ".io", ".ai", ".app", ".co")
+    ):
+        return "organization"
+
+    # 3. Personas — múltiples palabras capitalizadas con longitud típica de nombre
+    words = name.split()
+    if 2 <= len(words) <= 4:
+        all_cap = all(w[:1].isupper() and w[1:].islower() for w in words if w)
+        # Evitar que títulos como "Proyecto Alejandria" se clasifiquen como personas
+        non_name_words = {
+            "proyecto", "project", "sistema", "system", "plan", "fase", "phase",
+            "archivo", "file", "carpeta", "folder", "reporte", "report",
+            "decisión", "decision", "análisis", "analysis", "reunión", "meeting",
+        }
+        first_lower = words[0].lower()
+        if all_cap and first_lower not in non_name_words and len(name) < 40:
+            return "person"
+
+    return "concept"
+
+
 def extract_entities(text: str) -> List[str]:
     entities: Set[str] = set()
     for match in ENTITY_RE.findall(text):

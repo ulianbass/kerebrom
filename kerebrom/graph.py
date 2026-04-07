@@ -198,7 +198,7 @@ _GRAPH_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kerebrom</title>
 <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" crossorigin="anonymous">
 <style>
 :root {
   /* Color tokens */
@@ -236,8 +236,8 @@ _GRAPH_HTML = """<!DOCTYPE html>
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
 
-  /* Type */
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  /* Type — SF Pro cae primero en Mac (ya está nativo), Inter como override web */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -390,6 +390,66 @@ body {
   padding: 0 var(--sp-3); font-size: 11px; color: var(--text-muted);
   font-variant-numeric: tabular-nums; min-width: 48px; text-align: center;
 }
+.zoom-sep {
+  width: 1px; height: 20px; background: var(--border);
+  margin: 0 4px;
+}
+
+/* ── MINIMAP ──────────────────────────── */
+.minimap {
+  position: fixed; bottom: var(--sp-5); right: var(--sp-5);
+  width: 180px; height: 120px;
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg); z-index: 60;
+  overflow: hidden;
+}
+.minimap svg { display: block; }
+.minimap circle { fill: var(--text-muted); opacity: 0.7; }
+.minimap-viewport {
+  position: absolute; border: 1.5px solid var(--brand);
+  background: rgba(168,85,247,0.08);
+  pointer-events: none; border-radius: 2px;
+}
+
+/* ── HELP PANEL ──────────────────────── */
+.help-panel {
+  position: fixed; bottom: calc(var(--sp-5) + 48px); left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--bg-panel); border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 90; width: 300px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.help-panel.open {
+  opacity: 1; pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+.help-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-4); border-bottom: 1px solid var(--border);
+}
+.help-title { font-size: 13px; font-weight: 600; }
+.help-close {
+  width: 22px; height: 22px; background: none; border: none;
+  color: var(--text-muted); cursor: pointer; font-size: 16px;
+  border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center;
+}
+.help-close:hover { background: var(--bg-hover); color: var(--text); }
+.help-body { padding: var(--sp-3) var(--sp-4); }
+.help-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: var(--sp-2) 0; font-size: 12px;
+}
+.help-row kbd {
+  background: var(--bg-canvas); border: 1px solid var(--border);
+  border-radius: 4px; padding: 2px 8px; font-size: 11px;
+  color: var(--text); font-family: ui-monospace, monospace;
+  min-width: 24px; text-align: center;
+}
+.help-row span { color: var(--text-muted); }
 
 /* ── DETAIL PANEL ──────────────────────────── */
 .detail-panel {
@@ -549,6 +609,32 @@ body {
   <div class="zoom-level" id="zoom-level">100%</div>
   <button class="zoom-btn" id="zoom-in" title="Zoom in (+)">+</button>
   <button class="zoom-btn" id="zoom-fit" title="Ajustar vista (F)">⊡</button>
+  <div class="zoom-sep"></div>
+  <button class="zoom-btn" id="help-toggle" title="Atajos de teclado (?)">?</button>
+</div>
+
+<!-- MINIMAP -->
+<div class="minimap" id="minimap">
+  <svg id="minimap-svg" width="180" height="120"></svg>
+  <div class="minimap-viewport" id="minimap-viewport"></div>
+</div>
+
+<!-- HELP PANEL -->
+<div class="help-panel" id="help-panel">
+  <div class="help-header">
+    <span class="help-title">Atajos de teclado</span>
+    <button class="help-close" id="help-close">×</button>
+  </div>
+  <div class="help-body">
+    <div class="help-row"><kbd>⌘K</kbd><span>Buscar</span></div>
+    <div class="help-row"><kbd>Esc</kbd><span>Deseleccionar / cerrar</span></div>
+    <div class="help-row"><kbd>F</kbd><span>Ajustar a la vista</span></div>
+    <div class="help-row"><kbd>+</kbd><span>Zoom in</span></div>
+    <div class="help-row"><kbd>−</kbd><span>Zoom out</span></div>
+    <div class="help-row"><kbd>Click</kbd><span>Seleccionar nodo</span></div>
+    <div class="help-row"><kbd>Drag</kbd><span>Mover nodo o lienzo</span></div>
+    <div class="help-row"><kbd>Scroll</kbd><span>Zoom</span></div>
+  </div>
 </div>
 
 <!-- DETAIL PANEL -->
@@ -613,6 +699,8 @@ const zoom = d3.zoom()
     // Show labels only when zoomed in enough
     gNodes.selectAll('text')
       .style('opacity', zoomLevel > 0.7 ? 1 : 0);
+    // Update minimap viewport indicator
+    updateMinimapViewport();
   });
 svg.call(zoom);
 
@@ -629,7 +717,7 @@ async function load() {
     renderFilters();
     renderGraph();
     document.getElementById('loading').classList.add('hidden');
-    setTimeout(fitView, 800);
+    // fitView se llamará automáticamente cuando la simulación converja
   } catch (e) {
     document.getElementById('loading').innerHTML = '<div style="color:#ef4444">Error: ' + e.message + '</div>';
   }
@@ -658,9 +746,9 @@ function renderFilters() {
     const color = TYPE_COLORS[k];
     const label = TYPE_LABELS[k];
     const count = counts[k] || 0;
-    const disabled = count === 0 ? 'disabled' : '';
-    activeFilters.add(k);
-    return '<div class="filter-item active ' + disabled + '" data-type="' + k + '">' +
+    const disabled = count === 0;
+    if (!disabled) activeFilters.add(k);
+    return '<div class="filter-item ' + (disabled ? 'disabled' : 'active') + '" data-type="' + k + '">' +
            '<div class="dot" style="background:' + color + '"></div>' +
            '<div class="name">' + label + '</div>' +
            '<div class="count">' + count + '</div>' +
@@ -700,12 +788,24 @@ function renderGraph() {
     n._radius = Math.max(4, Math.sqrt(n.val || 4) * 2.5);
   });
 
+  // Label bounding box estimation para evitar solape
+  allData.nodes.forEach(n => {
+    const label = n.name || '';
+    n._labelW = Math.min(label.length * 5.5, 180); // estimación ~5.5px por char
+    n._labelH = 14;
+  });
+
   simulation = d3.forceSimulation(allData.nodes)
-    .force('link', d3.forceLink(allData.links).id(d => d.id).distance(80).strength(0.3))
-    .force('charge', d3.forceManyBody().strength(-180).distanceMax(400))
+    .force('link', d3.forceLink(allData.links).id(d => d.id).distance(95).strength(0.25))
+    .force('charge', d3.forceManyBody().strength(-240).distanceMax(500))
     .force('center', d3.forceCenter(W() / 2, H() / 2))
-    .force('collision', d3.forceCollide().radius(d => d._radius + 4))
-    .alphaDecay(0.025);
+    // Collision más fuerte que incluye label height
+    .force('collision', d3.forceCollide()
+      .radius(d => d._radius + Math.max(d._labelW / 3, 18))
+      .strength(0.85))
+    // Force custom para evitar solape de etiquetas verticalmente
+    .force('labels', labelAvoidanceForce())
+    .alphaDecay(0.02);
 
   const link = gLinks.selectAll('line')
     .data(allData.links).join('line')
@@ -731,7 +831,7 @@ function renderGraph() {
       const name = d.name || '';
       return name.length > 30 ? name.slice(0, 28) + '…' : name;
     })
-    .style('opacity', 0);
+    .style('opacity', zoomLevel > 0.7 ? 1 : 0);
 
   node.on('mouseenter', (e, d) => {
     showTooltip(e, d);
@@ -749,11 +849,27 @@ function renderGraph() {
 
   svg.on('click', () => deselectNode());
 
+  let minimapTickCount = 0;
+  let autoFitDone = false;
   simulation.on('tick', () => {
     link
       .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
     node.attr('transform', d => `translate(${d.x},${d.y})`);
+    // Refresh minimap periodically during simulation
+    if (++minimapTickCount % 6 === 0) renderMinimap();
+    // Auto-fit cuando la simulación empieza a estabilizarse
+    if (!autoFitDone && simulation.alpha() < 0.1) {
+      autoFitDone = true;
+      fitView();
+    }
+  });
+  simulation.on('end', () => {
+    renderMinimap();
+    if (!autoFitDone) {
+      autoFitDone = true;
+      fitView();
+    }
   });
 }
 
@@ -979,14 +1095,14 @@ document.getElementById('zoom-fit').addEventListener('click', fitView);
 function fitView() {
   if (!allData) return;
   const bounds = gNodes.node().getBBox();
-  if (!bounds.width) return;
+  if (!bounds.width || !bounds.height) return;
   const fullW = W(), fullH = H();
-  const padding = 80;
-  const scale = Math.min(
-    (fullW - padding * 2) / bounds.width,
-    (fullH - padding * 2) / bounds.height,
-    2
-  );
+  const padding = 60;
+  const availW = Math.max(fullW - padding * 2, 200);
+  const availH = Math.max(fullH - padding * 2, 200);
+  let scale = Math.min(availW / bounds.width, availH / bounds.height);
+  // Clamp al rango permitido [0.1, 8]
+  scale = Math.max(0.1, Math.min(2, scale));
   const tx = fullW / 2 - scale * (bounds.x + bounds.width / 2);
   const ty = fullH / 2 - scale * (bounds.y + bounds.height / 2);
   svg.transition().duration(600)
@@ -1001,11 +1117,126 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// ═══════════════════════════════════════════════════════
+//  LABEL AVOIDANCE FORCE
+// ═══════════════════════════════════════════════════════
+function labelAvoidanceForce() {
+  let nodes;
+  function force(alpha) {
+    const k = alpha * 0.4;
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        // Bounding box de la etiqueta (debajo del nodo)
+        const aLabelY = a.y + a._radius + 12;
+        const bLabelY = b.y + b._radius + 12;
+        const dyLabels = bLabelY - aLabelY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dyLabels);
+        // Si las cajas de labels se solapan, empujar verticalmente
+        const xOverlap = (a._labelW + b._labelW) / 2;
+        const yOverlap = 16;
+        if (absDx < xOverlap && absDy < yOverlap) {
+          const push = (yOverlap - absDy) * k;
+          if (dy >= 0) {
+            b.vy = (b.vy || 0) + push;
+            a.vy = (a.vy || 0) - push;
+          } else {
+            b.vy = (b.vy || 0) - push;
+            a.vy = (a.vy || 0) + push;
+          }
+        }
+      }
+    }
+  }
+  force.initialize = (n) => { nodes = n; };
+  return force;
+}
+
+// ═══════════════════════════════════════════════════════
+//  MINIMAP
+// ═══════════════════════════════════════════════════════
+let minimapSvg = null;
+let minimapScale = 1;
+let minimapOffset = { x: 0, y: 0 };
+
+function renderMinimap() {
+  if (!allData) return;
+  minimapSvg = d3.select('#minimap-svg');
+  const mw = 180, mh = 120, pad = 10;
+  const bounds = gNodes.node().getBBox();
+  if (!bounds.width) return;
+  const sx = (mw - pad * 2) / bounds.width;
+  const sy = (mh - pad * 2) / bounds.height;
+  minimapScale = Math.min(sx, sy);
+  minimapOffset.x = pad - bounds.x * minimapScale + (mw - pad * 2 - bounds.width * minimapScale) / 2;
+  minimapOffset.y = pad - bounds.y * minimapScale + (mh - pad * 2 - bounds.height * minimapScale) / 2;
+
+  minimapSvg.selectAll('*').remove();
+  const g2 = minimapSvg.append('g')
+    .attr('transform', `translate(${minimapOffset.x},${minimapOffset.y}) scale(${minimapScale})`);
+
+  g2.selectAll('circle')
+    .data(allData.nodes.filter(n => n._visible !== false))
+    .join('circle')
+    .attr('cx', d => d.x)
+    .attr('cy', d => d.y)
+    .attr('r', d => Math.max(1.5, d._radius / 3))
+    .attr('fill', d => d._color)
+    .attr('opacity', 0.7);
+
+  updateMinimapViewport();
+}
+
+function updateMinimapViewport() {
+  const mw = 180, mh = 120;
+  const vp = document.getElementById('minimap-viewport');
+  // La vista visible en coordenadas del grafo
+  const k = currentTransform.k || 1;
+  const tx = currentTransform.x || 0;
+  const ty = currentTransform.y || 0;
+  const viewW = W() / k;
+  const viewH = H() / k;
+  const viewX = -tx / k;
+  const viewY = -ty / k;
+  // Proyectar a coordenadas del minimap
+  vp.style.left = (viewX * minimapScale + minimapOffset.x) + 'px';
+  vp.style.top = (viewY * minimapScale + minimapOffset.y) + 'px';
+  vp.style.width = (viewW * minimapScale) + 'px';
+  vp.style.height = (viewH * minimapScale) + 'px';
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELP PANEL
+// ═══════════════════════════════════════════════════════
+const helpPanel = document.getElementById('help-panel');
+document.getElementById('help-toggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  helpPanel.classList.toggle('open');
+});
+document.getElementById('help-close').addEventListener('click', () => {
+  helpPanel.classList.remove('open');
+});
+document.addEventListener('click', (e) => {
+  if (!helpPanel.contains(e.target) && e.target.id !== 'help-toggle') {
+    helpPanel.classList.remove('open');
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === '?' && document.activeElement !== searchInput) {
+    helpPanel.classList.toggle('open');
+  }
+});
+
 window.addEventListener('resize', () => {
   if (simulation) {
     simulation.force('center', d3.forceCenter(W() / 2, H() / 2));
     simulation.alpha(0.3).restart();
   }
+  updateMinimapViewport();
 });
 
 load();

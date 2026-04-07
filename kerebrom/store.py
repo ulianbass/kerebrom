@@ -1675,11 +1675,9 @@ class KerebromStore:
         lowered = entity_name.lower()
         if lowered in {DEFAULT_USER_ENTITY, "yo", "i"}:
             return "person"
-        if " " in entity_name and entity_name.split(" ", 1)[0].lower() in {"san", "santa", "new"}:
-            return "location"
-        if entity_name.isupper():
-            return "organization"
-        return "concept"
+        # Delegar a la heurística genérica de capture.py
+        from .capture import infer_entity_type
+        return infer_entity_type(entity_name)
 
     def _database_summary(self, db_path: Path) -> Dict[str, Any]:
         connection = sqlite3.connect(db_path)
