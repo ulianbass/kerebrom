@@ -605,38 +605,87 @@ body {
   max-width: 640px;
 }
 
+/* Layout hero + rolling cards */
+.stat-hero {
+  background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(168,85,247,0.02));
+  border: 1px solid rgba(168,85,247,0.3);
+  border-radius: var(--r-lg); padding: var(--sp-6);
+  margin-bottom: var(--sp-4);
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: center; gap: var(--sp-5);
+}
+.stat-hero-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--brand); margin-bottom: var(--sp-3);
+}
+.stat-hero-value {
+  font-size: 56px; font-weight: 700; line-height: 1;
+  letter-spacing: -0.03em; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.stat-hero-unit {
+  font-size: 18px; color: var(--text-muted); font-weight: 400; margin-left: var(--sp-2);
+}
+.stat-hero-meta {
+  text-align: right; display: flex; flex-direction: column; gap: var(--sp-2);
+  color: var(--text-muted); font-size: 12px;
+}
+.stat-hero-meta strong { color: var(--text); font-size: 14px; font-weight: 600; }
+
 .stat-cards {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--sp-4); margin-bottom: var(--sp-6);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3); margin-bottom: var(--sp-6);
+}
+@media (max-width: 980px) {
+  .stat-cards { grid-template-columns: repeat(2, 1fr); }
+  .stat-hero { grid-template-columns: 1fr; text-align: left; }
+  .stat-hero-meta { text-align: left; flex-direction: row; gap: var(--sp-4); }
 }
 .stat-card {
   background: var(--bg-panel); border: 1px solid var(--border);
-  border-radius: var(--r-lg); padding: var(--sp-5);
-  transition: border-color 0.2s, transform 0.2s;
+  border-radius: var(--r-lg); padding: var(--sp-4) var(--sp-5);
+  transition: border-color 0.2s;
 }
 .stat-card:hover { border-color: var(--border-strong); }
-.stat-card.highlight {
-  background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.02));
-  border-color: rgba(168,85,247,0.3);
-}
+.stat-card.empty .stat-card-value { color: var(--text-dim); }
 .stat-card-label {
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: var(--sp-3);
 }
 .stat-card-value {
-  font-size: 32px; font-weight: 700; line-height: 1;
+  font-size: 26px; font-weight: 700; line-height: 1;
   letter-spacing: -0.02em; color: var(--text);
   font-variant-numeric: tabular-nums;
-  margin-bottom: var(--sp-2);
 }
 .stat-card-unit {
-  font-size: 14px; color: var(--text-muted); font-weight: 400;
+  font-size: 12px; color: var(--text-muted); font-weight: 400;
 }
 .stat-card-delta {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; color: var(--text-muted); margin-top: var(--sp-3);
+  font-size: 11px; color: var(--text-muted); margin-top: var(--sp-2);
 }
-.stat-card-delta.positive { color: #10b981; }
+
+/* Empty state */
+.stats-empty {
+  background: var(--bg-panel); border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg); padding: var(--sp-7) var(--sp-5);
+  text-align: center; margin-bottom: var(--sp-6);
+}
+.stats-empty-icon {
+  font-size: 32px; opacity: 0.4; margin-bottom: var(--sp-4);
+}
+.stats-empty-title {
+  font-size: 16px; font-weight: 600; margin-bottom: var(--sp-3);
+  color: var(--text);
+}
+.stats-empty-text {
+  font-size: 13px; color: var(--text-muted); line-height: 1.6;
+  max-width: 460px; margin: 0 auto;
+}
+.stats-empty-text code {
+  background: var(--bg-elevated); padding: 2px 8px; border-radius: 4px;
+  font-family: ui-monospace, monospace; font-size: 12px; color: var(--brand);
+}
 
 .stats-row {
   display: grid; grid-template-columns: 1fr 1fr;
@@ -809,7 +858,7 @@ body {
       </p>
     </div>
 
-    <div class="stat-cards" id="stat-cards"></div>
+    <div id="stat-cards-container"></div>
 
     <div class="stats-row">
       <div class="stats-panel">
@@ -1599,34 +1648,62 @@ function renderStatCards(summary) {
   const last24h = summary.last_24h || {};
   const last7d = summary.last_7d || {};
   const last30d = summary.last_30d || {};
-  const html =
-    '<div class="stat-card highlight">' +
-      '<div class="stat-card-label">Total ahorrado</div>' +
-      '<div class="stat-card-value">' + fmtNum(total.tokens_saved_estimate || 0) +
-        ' <span class="stat-card-unit">tokens</span></div>' +
-      '<div class="stat-card-delta">' + (total.operations || 0) + ' operaciones</div>' +
-    '</div>' +
-    '<div class="stat-card">' +
-      '<div class="stat-card-label">Últimos 30 días</div>' +
-      '<div class="stat-card-value">' + fmtNum(last30d.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (last30d.ops || 0) + ' operaciones</div>' +
-    '</div>' +
-    '<div class="stat-card">' +
-      '<div class="stat-card-label">Últimos 7 días</div>' +
-      '<div class="stat-card-value">' + fmtNum(last7d.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (last7d.ops || 0) + ' operaciones</div>' +
-    '</div>' +
-    '<div class="stat-card">' +
-      '<div class="stat-card-label">Últimas 24 horas</div>' +
-      '<div class="stat-card-value">' + fmtNum(last24h.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (last24h.ops || 0) + ' operaciones</div>' +
-    '</div>' +
-    '<div class="stat-card">' +
-      '<div class="stat-card-label">Última hora</div>' +
-      '<div class="stat-card-value">' + fmtNum(lastHour.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (lastHour.ops || 0) + ' operaciones</div>' +
+  const container = document.getElementById('stat-cards-container');
+  const totalOps = total.operations || 0;
+
+  // Empty state dedicado cuando no hay datos
+  if (totalOps === 0) {
+    container.innerHTML =
+      '<div class="stats-empty">' +
+        '<div class="stats-empty-icon">◌</div>' +
+        '<div class="stats-empty-title">Aún no hay datos de uso</div>' +
+        '<div class="stats-empty-text">' +
+          'Kerebrom empieza a rastrear tokens en cuanto uses una herramienta de AI ' +
+          'conectada (Claude, Codex) y hagas un <code>recall</code>, <code>remember</code>, ' +
+          '<code>context</code> o <code>query</code>. Los números aparecerán aquí ' +
+          'en tiempo real en los próximos segundos.' +
+        '</div>' +
+      '</div>';
+    return;
+  }
+
+  // Hero card con el total destacado + metadata
+  const totalSaved = total.tokens_saved_estimate || 0;
+  const heroHtml =
+    '<div class="stat-hero">' +
+      '<div>' +
+        '<div class="stat-hero-label">Total ahorrado</div>' +
+        '<div class="stat-hero-value">' + fmtNum(totalSaved) +
+          '<span class="stat-hero-unit">tokens</span></div>' +
+      '</div>' +
+      '<div class="stat-hero-meta">' +
+        '<div><strong>' + totalOps.toLocaleString() + '</strong> operaciones</div>' +
+        '<div>desde que empezó el tracking</div>' +
+      '</div>' +
     '</div>';
-  document.getElementById('stat-cards').innerHTML = html;
+
+  // Tarjetas rolling (4 en fila)
+  const rollingCard = (label, data) => {
+    const saved = data.saved || 0;
+    const ops = data.ops || 0;
+    const emptyClass = saved === 0 ? ' empty' : '';
+    const deltaText = ops === 0 ? 'sin actividad' : ops + ' operación' + (ops === 1 ? '' : 'es');
+    return '<div class="stat-card' + emptyClass + '">' +
+      '<div class="stat-card-label">' + label + '</div>' +
+      '<div class="stat-card-value">' + fmtNum(saved) + '</div>' +
+      '<div class="stat-card-delta">' + deltaText + '</div>' +
+    '</div>';
+  };
+
+  const cardsHtml =
+    '<div class="stat-cards">' +
+      rollingCard('Últimos 30 días', last30d) +
+      rollingCard('Últimos 7 días', last7d) +
+      rollingCard('Últimas 24 horas', last24h) +
+      rollingCard('Última hora', lastHour) +
+    '</div>';
+
+  container.innerHTML = heroHtml + cardsHtml;
 }
 
 function renderTimeline(data) {
