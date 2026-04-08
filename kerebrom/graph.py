@@ -1493,8 +1493,21 @@ function switchView(view) {
 }
 
 document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => switchView(tab.dataset.view));
+  tab.addEventListener('click', () => {
+    switchView(tab.dataset.view);
+    history.replaceState(null, '', '#' + tab.dataset.view);
+  });
 });
+// Soporte para deep-link via hash: #stats abre directo en Estadisticas
+if (location.hash === '#stats') {
+  // Retrasar hasta que allData este cargado
+  const waitForData = setInterval(() => {
+    if (allData) {
+      clearInterval(waitForData);
+      switchView('stats');
+    }
+  }, 100);
+}
 
 function fmtNum(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';

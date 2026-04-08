@@ -7,6 +7,8 @@
 
 **No cloud. No API keys. No data leaves your machine.** Just a SQLite file that Claude Code, Codex, and Claude Desktop share as a long-term brain.
 
+![Kerebrom stats dashboard — measurable token savings](docs/stats-dashboard.png)
+
 ---
 
 ## Why it matters
@@ -98,6 +100,10 @@ kerebrom uninstall          # remove everything
 ```
 
 ---
+
+## The interactive graph
+
+![Interactive knowledge graph with D3 force-directed layout](docs/graph-view.png)
 
 ## The stats dashboard
 
