@@ -10,7 +10,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from .store import DEFAULT_PROJECT, KerebromStore
 
@@ -132,6 +132,18 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_arguments(graph_parser)
     graph_parser.add_argument("--port", type=int, default=8420, help="Puerto del servidor HTTP (default: 8420).")
 
+    stats_parser = subparsers.add_parser("stats", help="Mostrar estadísticas de ahorro de tokens.")
+    add_common_arguments(stats_parser)
+    stats_parser.add_argument("--timeline", action="store_true", help="Mostrar timeline de los últimos 30 días.")
+    stats_parser.add_argument("--by-operation", action="store_true", help="Mostrar desglose por operación.")
+    stats_parser.add_argument("--reset", action="store_true", help="Borrar todas las estadísticas.")
+    stats_parser.add_argument("--json", action="store_true", help="Salida en JSON.")
+
+    bench_parser = subparsers.add_parser("benchmark", help="Correr un benchmark que compara recall con/sin Kerebrom.")
+    add_common_arguments(bench_parser)
+    bench_parser.add_argument("--queries", type=int, default=10, help="Número de queries a ejecutar (default: 10).")
+    bench_parser.add_argument("--output", help="Guardar resultados como JSON en este path.")
+
     uninstall_parser = subparsers.add_parser("uninstall", help="Remove all traces of Kerebrom from this machine.")
     uninstall_parser.add_argument("--keep-pip", action="store_true", help="Skip pip uninstall (keep the Python package).")
     uninstall_parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt.")
@@ -150,6 +162,145 @@ def read_text(value: Optional[str]) -> str:
 
 def print_json(data: Any) -> None:
     print(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _fmt_num(n: int) -> str:
+    """Formatea un número grande: 1234567 -> '1.23M'."""
+    if n >= 1_000_000:
+        return "{:.2f}M".format(n / 1_000_000)
+    if n >= 1_000:
+        return "{:.1f}k".format(n / 1_000)
+    return str(n)
+
+
+def _print_stats_report(store: Any, args: Any, summary: Dict[str, Any]) -> None:
+    """Imprime un reporte legible de estadísticas de tokens."""
+    total = summary["total"]
+    today = summary["today"]
+    week = summary["week"]
+    month = summary["month"]
+
+    print()
+    print("═══ KEREBROM — ESTADÍSTICAS DE AHORRO DE TOKENS ═══")
+    print()
+    print("  Operaciones totales:     {}".format(_fmt_num(total["operations"])))
+    print("  Tokens devueltos (out):  {}".format(_fmt_num(total["tokens_output"])))
+    print()
+    print("  ┌─ AHORRO ESTIMADO ──────────────────────┐")
+    print("  │  Total:   {:>10} tokens                │".format(_fmt_num(total["tokens_saved_estimate"])))
+    print("  │  Mes:     {:>10} tokens   ({} ops)    │".format(_fmt_num(month["saved"]), month["ops"]))
+    print("  │  Semana:  {:>10} tokens   ({} ops)    │".format(_fmt_num(week["saved"]), week["ops"]))
+    print("  │  Hoy:     {:>10} tokens   ({} ops)    │".format(_fmt_num(today["saved"]), today["ops"]))
+    print("  └────────────────────────────────────────┘")
+    print()
+    print("  ⚠ Estimación conservadora basada en multiplicadores")
+    print("     por operación. No es una medición exacta.")
+
+    if args.by_operation:
+        print()
+        print("═══ DESGLOSE POR OPERACIÓN ═══")
+        print()
+        rows = store.tokens.by_operation(project=args.project)
+        if not rows:
+            print("  (sin datos)")
+        else:
+            print("  {:<12} {:>8} {:>12} {:>14}".format("Operación", "Ops", "Out tokens", "Ahorro est."))
+            print("  " + "─" * 50)
+            for r in rows:
+                print("  {:<12} {:>8} {:>12} {:>14}".format(
+                    r["operation"],
+                    _fmt_num(r["operations"]),
+                    _fmt_num(r["tokens_output"]),
+                    _fmt_num(r["tokens_saved"]),
+                ))
+
+    if args.timeline:
+        print()
+        print("═══ TIMELINE (últimos 30 días) ═══")
+        print()
+        rows = store.tokens.timeline(days=30, project=args.project)
+        if not rows:
+            print("  (sin datos)")
+        else:
+            max_saved = max(r["saved"] for r in rows) or 1
+            for r in rows:
+                bar_len = int((r["saved"] / max_saved) * 30)
+                bar = "█" * bar_len
+                print("  {}  {:<30}  {:>10}".format(r["day"], bar, _fmt_num(r["saved"])))
+    print()
+
+
+def _run_benchmark(store: Any, queries: int = 10, project: str = "default") -> Dict[str, Any]:
+    """Corre un benchmark que mide el costo real de una serie de operaciones.
+
+    Ejecuta N recalls con queries variadas extraídas de las memorias
+    existentes, mide tokens input/output y reporta el ahorro estimado
+    total.
+    """
+    from .tokens import count_tokens
+    import time as _time
+
+    # Obtener queries variadas de memorias existentes (primera línea de cada una)
+    all_mems = store.query(project=project, limit=queries * 3)
+    if not all_mems:
+        return {"error": "No hay memorias para hacer benchmark. Guarda algunas primero."}
+
+    # Sample de queries (usamos la primera oración de varias memorias)
+    import random
+    sample = random.sample(all_mems, min(queries, len(all_mems)))
+    test_queries = []
+    for mem in sample:
+        first_line = mem.content.split(".")[0][:60]
+        if first_line:
+            test_queries.append(first_line)
+
+    results = []
+    total_in = 0
+    total_out = 0
+    total_saved = 0
+    start = _time.time()
+
+    for q in test_queries:
+        t0 = _time.time()
+        recalled = store.recall(query=q, project=project, limit=5)
+        dt = _time.time() - t0
+        q_tokens = count_tokens(q)
+        out_text = "\n".join(r.content for r in recalled)
+        out_tokens = count_tokens(out_text)
+        saved = int(out_tokens * 3.0)  # mult de recall
+        total_in += q_tokens
+        total_out += out_tokens
+        total_saved += saved
+        results.append({
+            "query": q,
+            "memories_returned": len(recalled),
+            "tokens_input": q_tokens,
+            "tokens_output": out_tokens,
+            "tokens_saved_estimate": saved,
+            "latency_ms": round(dt * 1000, 1),
+        })
+
+    total_time = _time.time() - start
+    return {
+        "benchmark": "kerebrom_recall",
+        "queries_executed": len(results),
+        "project": project,
+        "total_time_seconds": round(total_time, 2),
+        "avg_latency_ms": round(total_time * 1000 / max(1, len(results)), 1),
+        "totals": {
+            "tokens_input": total_in,
+            "tokens_output": total_out,
+            "tokens_saved_estimate": total_saved,
+            "savings_ratio": round(total_saved / max(1, total_in), 2),
+        },
+        "results": results,
+        "disclaimer": (
+            "Este benchmark mide tokens reales devueltos por Kerebrom. "
+            "El ahorro estimado usa un multiplicador conservador (3x para recall) "
+            "bajo la premisa de que sin Kerebrom el modelo tendría que leer "
+            "archivos o transcripts más largos para obtener la misma información."
+        ),
+    }
 
 
 def resolve_passphrase(args: Any) -> Optional[str]:
@@ -323,6 +474,31 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             store.close()
             from .graph import launch_graph
             launch_graph(db_path=Path(args.db), port=args.port, passphrase=passphrase)
+            return 0
+
+        if args.command == "stats":
+            if args.reset:
+                deleted = store.tokens.reset()
+                print_json({"reset": True, "rows_deleted": deleted})
+                return 0
+            summary = store.tokens.summary(project=args.project)
+            if args.json:
+                output = {"summary": summary}
+                if args.timeline:
+                    output["timeline"] = store.tokens.timeline(days=30, project=args.project)
+                if args.by_operation:
+                    output["by_operation"] = store.tokens.by_operation(project=args.project)
+                print_json(output)
+            else:
+                _print_stats_report(store, args, summary)
+            return 0
+
+        if args.command == "benchmark":
+            result = _run_benchmark(store, queries=args.queries, project=args.project)
+            if args.output:
+                from pathlib import Path as _Path
+                _Path(args.output).write_text(json.dumps(result, indent=2, ensure_ascii=False))
+            print_json(result)
             return 0
 
         if args.command == "backup":

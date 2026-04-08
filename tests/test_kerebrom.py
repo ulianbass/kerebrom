@@ -1660,5 +1660,82 @@ class SoporSetupTests(unittest.TestCase):
             self.assertIn("temporal", msg)
 
 
+class TokenTrackerTests(unittest.TestCase):
+    """Tests para el sistema de seguimiento de tokens."""
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.tempdir.name) / "kerebrom.db"
+        self.store = KerebromStore(self.db_path)
+        self.store.initialize()
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.tempdir.cleanup()
+
+    def test_count_tokens(self) -> None:
+        from kerebrom.tokens import count_tokens
+        self.assertEqual(count_tokens(""), 0)
+        # La estimacion char/4 debe dar al menos 1 para texto no vacio
+        self.assertGreaterEqual(count_tokens("hola mundo"), 1)
+        self.assertGreater(count_tokens("a" * 100), 10)
+
+    def test_remember_tracks(self) -> None:
+        self.store.remember(content="Una memoria destilada sobre algo importante.", kind="core")
+        summary = self.store.tokens.summary()
+        self.assertEqual(summary["total"]["operations"], 1)
+        # remember tiene multiplier 0 → no hay ahorro
+        self.assertEqual(summary["total"]["tokens_saved_estimate"], 0)
+
+    def test_recall_tracks_with_savings(self) -> None:
+        self.store.remember(content="Contenido de prueba para el recall test suite.", kind="semantic")
+        results = self.store.recall(query="prueba", limit=5)
+        self.assertGreaterEqual(len(results), 1)
+        summary = self.store.tokens.summary()
+        # remember + recall = 2 operaciones
+        self.assertEqual(summary["total"]["operations"], 2)
+        # recall debe haber generado ahorro estimado > 0
+        self.assertGreater(summary["total"]["tokens_saved_estimate"], 0)
+
+    def test_by_operation_breakdown(self) -> None:
+        self.store.remember(content="Memoria A de prueba con contenido distinto.")
+        self.store.recall(query="prueba")
+        self.store.recall(query="memoria")
+        ops = self.store.tokens.by_operation()
+        ops_dict = {o["operation"]: o for o in ops}
+        self.assertIn("remember", ops_dict)
+        self.assertIn("recall", ops_dict)
+        self.assertEqual(ops_dict["remember"]["operations"], 1)
+        self.assertEqual(ops_dict["recall"]["operations"], 2)
+
+    def test_timeline(self) -> None:
+        self.store.remember(content="Memoria para timeline test con suficiente contenido.")
+        timeline = self.store.tokens.timeline(days=30)
+        self.assertGreaterEqual(len(timeline), 1)
+        # Debe tener la fecha de hoy
+        self.assertIn("day", timeline[-1])
+        self.assertIn("saved", timeline[-1])
+
+    def test_reset(self) -> None:
+        self.store.remember(content="Memoria que luego se borra del tracker")
+        summary_before = self.store.tokens.summary()
+        self.assertGreater(summary_before["total"]["operations"], 0)
+        deleted = self.store.tokens.reset()
+        self.assertGreater(deleted, 0)
+        summary_after = self.store.tokens.summary()
+        self.assertEqual(summary_after["total"]["operations"], 0)
+
+    def test_tracker_never_raises(self) -> None:
+        """Incluso si algo falla internamente, el tracker nunca debe lanzar."""
+        # Llamada directa con input invalido
+        self.store.tokens.track(
+            operation="recall",
+            input_text=None,  # type: ignore
+            output_text="salida",
+        )
+        # Si llegamos aquí sin excepción, el contrato se cumple
+        self.assertTrue(True)
+
+
 if __name__ == "__main__":
     unittest.main()

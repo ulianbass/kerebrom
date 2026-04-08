@@ -154,6 +154,19 @@ class KerebromStore:
         self._runtime_db_path: Optional[Path] = None
         self._lock_handle: Optional[Any] = None
         self._cleanup_registered = False
+        # Token tracker para estadisticas de ahorro
+        from .tokens import TokenTracker
+        self._token_tracker = TokenTracker(self._token_connect)
+
+    def _token_connect(self) -> sqlite3.Connection:
+        """Conexion simple para el TokenTracker (comparte el mismo DB)."""
+        sqlite_path = self._prepare_sqlite_path()
+        return sqlite3.connect(str(sqlite_path), timeout=30.0)
+
+    @property
+    def tokens(self):
+        """Expose token tracker para lectura de estadisticas."""
+        return self._token_tracker
 
     @contextmanager
     def connect(self) -> Iterable[sqlite3.Connection]:
@@ -602,10 +615,19 @@ class KerebromStore:
             for subject_entity_id, predicate in relation_keys:
                 self._refresh_relation_state(connection, project, subject_entity_id, predicate, now)
 
-        return {
+        result = {
             "inserted": True,
             "memory": self.get_memory(memory_id).to_dict(),
         }
+        # Track token usage para estadisticas de ahorro
+        self._token_tracker.track(
+            operation="remember",
+            input_text=content,
+            output_text="",
+            project=project,
+            memories_count=1,
+        )
+        return result
 
     def get_memory(self, memory_id: int) -> MemoryRecord:
         self.initialize()
@@ -751,6 +773,16 @@ class KerebromStore:
         # Models the human "oh wait, now I remember!" experience.
         if reactivate and not include_inactive:
             refreshed = self._try_reactivate(query_embedding, project, limit, refreshed)
+
+        # Track token savings estimate
+        output_text = "\n".join(r.content for r in refreshed)
+        self._token_tracker.track(
+            operation="recall",
+            input_text=query,
+            output_text=output_text,
+            project=project,
+            memories_count=len(refreshed),
+        )
 
         return refreshed
 
@@ -1031,12 +1063,23 @@ class KerebromStore:
             }
 
         # Layer 3 — full detail (original behaviour)
-        return {
+        result = {
             "query": query,
             "layer": 3,
             "facts": facts,
             "memories": [memory.to_dict() for memory in memories],
         }
+        # Track tokens (recall interno ya track-eo, pero context tiene su propio mult)
+        output_text = "\n".join(m.content for m in memories)
+        self._token_tracker.track(
+            operation="context",
+            input_text=query,
+            output_text=output_text,
+            project=project,
+            memories_count=len(memories),
+            metadata={"layer": layer},
+        )
+        return result
 
     # ------------------------------------------------------------------
     # Automatic maintenance — runs transparently on recall
@@ -1251,7 +1294,19 @@ class KerebromStore:
 
         with self.connect() as connection:
             rows = connection.execute(sql, params).fetchall()
-            return [MemoryRecord.from_row(row) for row in rows]
+            results = [MemoryRecord.from_row(row) for row in rows]
+
+        # Track tokens
+        filter_summary = "kind={} tags={} src={}".format(kind, tags, source)
+        output_text = "\n".join(r.content for r in results)
+        self._token_tracker.track(
+            operation="query",
+            input_text=filter_summary,
+            output_text=output_text,
+            project=project,
+            memories_count=len(results),
+        )
+        return results
 
     def get_entity_references(self, entity_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """Obtener todas las memorias que referencian una entidad dada, con dirección."""

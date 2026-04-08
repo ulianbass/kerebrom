@@ -273,8 +273,27 @@ body {
 }
 .brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .header-stats {
-  display: flex; gap: var(--sp-4); margin-right: auto;
+  display: flex; gap: var(--sp-4); margin-right: auto; margin-left: var(--sp-5);
   font-size: 12px; color: var(--text-muted);
+}
+
+/* ── TABS ─────────────────────────── */
+.tabs {
+  display: flex; gap: 2px; align-items: center;
+  background: var(--bg-elevated); padding: 3px;
+  border-radius: var(--r-md); margin-right: var(--sp-4);
+}
+.tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border: none; background: transparent;
+  color: var(--text-muted); cursor: pointer; border-radius: var(--r-sm);
+  font-family: inherit; font-size: 12px; font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  background: var(--bg-panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 .stat { display: flex; align-items: center; gap: var(--sp-2); }
 .stat-num { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -536,6 +555,129 @@ body {
 .empty-text { font-size: 13px; }
 .empty.hidden { display: none; }
 
+/* ── STATS VIEW ───────────────────────── */
+.stats-view {
+  position: fixed; top: 56px; left: 240px; right: 0; bottom: 0;
+  background: var(--bg-canvas); overflow-y: auto;
+  display: none;
+}
+.stats-view.active { display: block; }
+#canvas-wrap.hidden { display: none; }
+
+.stats-container {
+  max-width: 1100px; margin: 0 auto;
+  padding: var(--sp-7) var(--sp-5);
+}
+.stats-header { margin-bottom: var(--sp-6); }
+.stats-title {
+  font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
+  margin-bottom: var(--sp-3);
+}
+.stats-subtitle {
+  font-size: 14px; color: var(--text-muted); line-height: 1.6;
+  max-width: 640px;
+}
+
+.stat-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-4); margin-bottom: var(--sp-6);
+}
+.stat-card {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: var(--sp-5);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.stat-card:hover { border-color: var(--border-strong); }
+.stat-card.highlight {
+  background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.02));
+  border-color: rgba(168,85,247,0.3);
+}
+.stat-card-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: var(--sp-3);
+}
+.stat-card-value {
+  font-size: 32px; font-weight: 700; line-height: 1;
+  letter-spacing: -0.02em; color: var(--text);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: var(--sp-2);
+}
+.stat-card-unit {
+  font-size: 14px; color: var(--text-muted); font-weight: 400;
+}
+.stat-card-delta {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text-muted); margin-top: var(--sp-3);
+}
+.stat-card-delta.positive { color: #10b981; }
+
+.stats-row {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4); margin-bottom: var(--sp-5);
+}
+.stats-row:first-of-type { grid-template-columns: 1fr; }
+.stats-panel {
+  background: var(--bg-panel); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: var(--sp-5);
+}
+.stats-panel-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-dim);
+  margin-bottom: var(--sp-4);
+}
+
+/* Timeline chart (SVG) */
+.timeline-chart { height: 180px; position: relative; }
+.timeline-chart svg { width: 100%; height: 100%; }
+.timeline-bar { fill: var(--brand); transition: fill 0.2s; }
+.timeline-bar:hover { fill: #c084fc; }
+.timeline-axis { stroke: var(--border); stroke-width: 1; }
+.timeline-label {
+  font-size: 10px; fill: var(--text-dim); font-family: var(--font);
+}
+
+/* Ops table */
+.ops-table {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+.ops-row {
+  display: grid; grid-template-columns: 80px 1fr auto;
+  gap: var(--sp-3); align-items: center;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.ops-row:last-child { border-bottom: none; }
+.ops-name { font-size: 12px; font-weight: 500; color: var(--text); }
+.ops-bar-wrap {
+  height: 6px; background: var(--bg-elevated); border-radius: 3px;
+  overflow: hidden;
+}
+.ops-bar { height: 100%; background: var(--brand); transition: width 0.4s; }
+.ops-value {
+  font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  min-width: 60px; text-align: right;
+}
+
+/* Formula box */
+.formula-box { display: flex; flex-direction: column; gap: var(--sp-2); }
+.formula-row {
+  display: grid; grid-template-columns: 80px 60px 1fr;
+  gap: var(--sp-3); font-size: 12px; align-items: center;
+  padding: var(--sp-2) 0;
+}
+.formula-row .op-name {
+  color: var(--text); font-weight: 500; font-family: ui-monospace, monospace;
+}
+.formula-row .op-mult {
+  color: var(--brand); font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.formula-row .op-desc { color: var(--text-muted); }
+.formula-disclaimer {
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); line-height: 1.5;
+}
+
 /* ── LOADING ──────────────────────────── */
 .loading {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -572,6 +714,24 @@ body {
     <div class="brand-mark">K</div>
     <div class="brand-name">Kerebrom</div>
   </div>
+  <nav class="tabs">
+    <button class="tab active" data-view="graph">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/>
+        <circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+        <line x1="12" y1="12" x2="5" y2="5"/><line x1="12" y1="12" x2="19" y2="5"/>
+        <line x1="12" y1="12" x2="5" y2="19"/><line x1="12" y1="12" x2="19" y2="19"/>
+      </svg>
+      <span>Grafo</span>
+    </button>
+    <button class="tab" data-view="stats">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+        <line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+      <span>Estadísticas</span>
+    </button>
+  </nav>
   <div class="header-stats" id="header-stats"></div>
   <div class="search">
     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -600,6 +760,64 @@ body {
   <div class="empty hidden" id="empty">
     <div class="empty-icon">○</div>
     <div class="empty-text">No hay nodos visibles<br>Activa al menos un filtro</div>
+  </div>
+</div>
+
+<!-- STATS VIEW -->
+<div id="stats-view" class="stats-view">
+  <div class="stats-container">
+    <div class="stats-header">
+      <h1 class="stats-title">Ahorro de tokens estimado</h1>
+      <p class="stats-subtitle">
+        Kerebrom rastrea cada operación de memoria y estima cuántos tokens
+        habrías gastado sin él. Los números son aproximaciones conservadoras.
+      </p>
+    </div>
+
+    <div class="stat-cards" id="stat-cards"></div>
+
+    <div class="stats-row">
+      <div class="stats-panel">
+        <div class="stats-panel-title">Últimos 30 días</div>
+        <div class="timeline-chart" id="timeline-chart"></div>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stats-panel">
+        <div class="stats-panel-title">Por operación</div>
+        <div class="ops-table" id="ops-table"></div>
+      </div>
+      <div class="stats-panel">
+        <div class="stats-panel-title">Cómo se calcula</div>
+        <div class="formula-box">
+          <div class="formula-row">
+            <span class="op-name">recall</span>
+            <span class="op-mult">× 3.0</span>
+            <span class="op-desc">evita lecturas repetidas de archivos</span>
+          </div>
+          <div class="formula-row">
+            <span class="op-name">context</span>
+            <span class="op-mult">× 5.0</span>
+            <span class="op-desc">evita reconstrucción desde transcripts</span>
+          </div>
+          <div class="formula-row">
+            <span class="op-name">query</span>
+            <span class="op-mult">× 2.0</span>
+            <span class="op-desc">consultas filtradas</span>
+          </div>
+          <div class="formula-row">
+            <span class="op-name">remember</span>
+            <span class="op-mult">× 0.0</span>
+            <span class="op-desc">solo cuesta, no ahorra</span>
+          </div>
+          <div class="formula-disclaimer">
+            Multiplicadores conservadores. El ahorro real depende del prompt
+            y del tamaño del proyecto.
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1239,6 +1457,162 @@ window.addEventListener('resize', () => {
   updateMinimapViewport();
 });
 
+// ═══════════════════════════════════════════════════════
+//  TABS + STATS VIEW
+// ═══════════════════════════════════════════════════════
+let currentView = 'graph';
+let statsLoaded = false;
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.view === view);
+  });
+  const canvasWrap = document.getElementById('canvas-wrap');
+  const statsView = document.getElementById('stats-view');
+  const sidebar = document.querySelector('.sidebar');
+  const minimap = document.getElementById('minimap');
+  const zoomControls = document.querySelector('.zoom-controls');
+
+  if (view === 'graph') {
+    canvasWrap.classList.remove('hidden');
+    statsView.classList.remove('active');
+    if (sidebar) sidebar.style.display = '';
+    if (minimap) minimap.style.display = '';
+    if (zoomControls) zoomControls.style.display = '';
+  } else {
+    canvasWrap.classList.add('hidden');
+    statsView.classList.add('active');
+    if (sidebar) sidebar.style.display = 'none';
+    if (minimap) minimap.style.display = 'none';
+    if (zoomControls) zoomControls.style.display = 'none';
+    // Ajustar stats view para ocupar todo el ancho sin sidebar
+    statsView.style.left = '0';
+    if (!statsLoaded) loadStats();
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => switchView(tab.dataset.view));
+});
+
+function fmtNum(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(2) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n.toString();
+}
+
+async function loadStats() {
+  try {
+    const [summaryRes, timelineRes, opsRes] = await Promise.all([
+      fetch('/api/stats/summary').then(r => r.json()),
+      fetch('/api/stats/timeline').then(r => r.json()),
+      fetch('/api/stats/operations').then(r => r.json()),
+    ]);
+    renderStatCards(summaryRes);
+    renderTimeline(timelineRes);
+    renderOpsTable(opsRes);
+    statsLoaded = true;
+  } catch (e) {
+    console.error('Error cargando stats:', e);
+  }
+}
+
+function renderStatCards(summary) {
+  const total = summary.total || {};
+  const today = summary.today || {};
+  const week = summary.week || {};
+  const month = summary.month || {};
+  const html =
+    '<div class="stat-card highlight">' +
+      '<div class="stat-card-label">Total ahorrado</div>' +
+      '<div class="stat-card-value">' + fmtNum(total.tokens_saved_estimate || 0) +
+        ' <span class="stat-card-unit">tokens</span></div>' +
+      '<div class="stat-card-delta">' + (total.operations || 0) + ' operaciones</div>' +
+    '</div>' +
+    '<div class="stat-card">' +
+      '<div class="stat-card-label">Este mes</div>' +
+      '<div class="stat-card-value">' + fmtNum(month.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (month.ops || 0) + ' operaciones</div>' +
+    '</div>' +
+    '<div class="stat-card">' +
+      '<div class="stat-card-label">Esta semana</div>' +
+      '<div class="stat-card-value">' + fmtNum(week.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (week.ops || 0) + ' operaciones</div>' +
+    '</div>' +
+    '<div class="stat-card">' +
+      '<div class="stat-card-label">Hoy</div>' +
+      '<div class="stat-card-value">' + fmtNum(today.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (today.ops || 0) + ' operaciones</div>' +
+    '</div>';
+  document.getElementById('stat-cards').innerHTML = html;
+}
+
+function renderTimeline(data) {
+  const container = document.getElementById('timeline-chart');
+  if (!data || data.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:var(--sp-5);color:var(--text-dim);font-size:12px">Sin datos todavía. Usa Kerebrom un poco y vuelve.</div>';
+    return;
+  }
+  const w = container.offsetWidth || 600;
+  const h = 180;
+  const padL = 40, padR = 16, padT = 16, padB = 32;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+  const maxVal = Math.max(...data.map(d => d.saved), 1);
+  const barW = chartW / data.length - 2;
+
+  let svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">';
+  // Eje X
+  svg += '<line x1="' + padL + '" y1="' + (h - padB) + '" x2="' + (w - padR) + '" y2="' + (h - padB) + '" class="timeline-axis"/>';
+  // Gridlines horizontales (4)
+  for (let i = 1; i <= 4; i++) {
+    const y = padT + (chartH / 4) * i;
+    svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (w - padR) + '" y2="' + y + '" stroke="rgba(255,255,255,0.04)"/>';
+  }
+  // Labels Y
+  for (let i = 0; i <= 4; i++) {
+    const v = Math.round((maxVal / 4) * (4 - i));
+    const y = padT + (chartH / 4) * i + 4;
+    svg += '<text x="' + (padL - 6) + '" y="' + y + '" class="timeline-label" text-anchor="end">' + fmtNum(v) + '</text>';
+  }
+  // Bars
+  data.forEach((d, i) => {
+    const barH = (d.saved / maxVal) * chartH;
+    const x = padL + (chartW / data.length) * i + 1;
+    const y = h - padB - barH;
+    svg += '<rect class="timeline-bar" x="' + x + '" y="' + y + '" width="' + barW + '" height="' + barH + '" rx="2">';
+    svg += '<title>' + d.day + ': ' + fmtNum(d.saved) + ' tokens (' + d.ops + ' ops)</title>';
+    svg += '</rect>';
+  });
+  // Labels X (primer y último)
+  if (data.length > 0) {
+    svg += '<text x="' + padL + '" y="' + (h - 8) + '" class="timeline-label">' + data[0].day.slice(5) + '</text>';
+    svg += '<text x="' + (w - padR) + '" y="' + (h - 8) + '" class="timeline-label" text-anchor="end">' + data[data.length - 1].day.slice(5) + '</text>';
+  }
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderOpsTable(ops) {
+  const container = document.getElementById('ops-table');
+  if (!ops || ops.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Sin datos todavía.</div>';
+    return;
+  }
+  const maxSaved = Math.max(...ops.map(o => o.tokens_saved), 1);
+  let html = '';
+  ops.forEach(o => {
+    const pct = (o.tokens_saved / maxSaved) * 100;
+    html += '<div class="ops-row">' +
+      '<div class="ops-name">' + o.operation + '</div>' +
+      '<div class="ops-bar-wrap"><div class="ops-bar" style="width:' + pct + '%"></div></div>' +
+      '<div class="ops-value">' + fmtNum(o.tokens_saved) + ' · ' + o.operations + ' ops</div>' +
+    '</div>';
+  });
+  container.innerHTML = html;
+}
+
 load();
 </script>
 </body>
@@ -1264,6 +1638,15 @@ class _GraphHandler(BaseHTTPRequestHandler):
             self._send(_GRAPH_HTML, "text/html")
         elif self.path == "/api/graph":
             self._send(json.dumps(self.graph_data), "application/json")
+        elif self.path == "/api/stats/summary":
+            summary = self.store.tokens.summary()
+            self._send(json.dumps(summary), "application/json")
+        elif self.path == "/api/stats/timeline":
+            timeline = self.store.tokens.timeline(days=30)
+            self._send(json.dumps(timeline), "application/json")
+        elif self.path == "/api/stats/operations":
+            ops = self.store.tokens.by_operation()
+            self._send(json.dumps(ops), "application/json")
         elif self.path.startswith("/api/memory/"):
             try:
                 mid = int(self.path.split("/")[-1])
