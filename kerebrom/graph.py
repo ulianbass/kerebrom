@@ -569,9 +569,36 @@ body {
   padding: var(--sp-7) var(--sp-5);
 }
 .stats-header { margin-bottom: var(--sp-6); }
+.stats-title-row {
+  display: flex; align-items: center; gap: var(--sp-4);
+  margin-bottom: var(--sp-3); flex-wrap: wrap;
+}
 .stats-title {
   font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
-  margin-bottom: var(--sp-3);
+}
+.live-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 12px 5px 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  border-radius: 100px;
+  font-size: 11px; font-weight: 600; color: #10b981;
+  letter-spacing: 0.04em;
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  animation: live-pulse 2s infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.live-updated {
+  color: var(--text-dim); font-weight: 500;
+  font-variant-numeric: tabular-nums; margin-left: 4px;
 }
 .stats-subtitle {
   font-size: 14px; color: var(--text-muted); line-height: 1.6;
@@ -767,10 +794,18 @@ body {
 <div id="stats-view" class="stats-view">
   <div class="stats-container">
     <div class="stats-header">
-      <h1 class="stats-title">Ahorro de tokens estimado</h1>
+      <div class="stats-title-row">
+        <h1 class="stats-title">Ahorro de tokens estimado</h1>
+        <div class="live-badge">
+          <span class="live-dot"></span>
+          <span>EN VIVO</span>
+          <span class="live-updated" id="live-updated"></span>
+        </div>
+      </div>
       <p class="stats-subtitle">
         Kerebrom rastrea cada operación de memoria y estima cuántos tokens
-        habrías gastado sin él. Los números son aproximaciones conservadoras.
+        habrías gastado sin él. Los números son aproximaciones conservadoras
+        y se actualizan automáticamente cada 5 segundos.
       </p>
     </div>
 
@@ -1462,6 +1497,8 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════════════════════
 let currentView = 'graph';
 let statsLoaded = false;
+let statsRefreshTimer = null;
+const STATS_REFRESH_INTERVAL_MS = 5000; // refresh cada 5 segundos en vivo
 
 function switchView(view) {
   currentView = view;
@@ -1480,6 +1517,11 @@ function switchView(view) {
     if (sidebar) sidebar.style.display = '';
     if (minimap) minimap.style.display = '';
     if (zoomControls) zoomControls.style.display = '';
+    // Detener refresh cuando no estamos en stats
+    if (statsRefreshTimer) {
+      clearInterval(statsRefreshTimer);
+      statsRefreshTimer = null;
+    }
   } else {
     canvasWrap.classList.add('hidden');
     statsView.classList.add('active');
@@ -1488,9 +1530,23 @@ function switchView(view) {
     if (zoomControls) zoomControls.style.display = 'none';
     // Ajustar stats view para ocupar todo el ancho sin sidebar
     statsView.style.left = '0';
-    if (!statsLoaded) loadStats();
+    loadStats();
+    // Iniciar auto-refresh en vivo mientras el tab este abierto
+    if (statsRefreshTimer) clearInterval(statsRefreshTimer);
+    statsRefreshTimer = setInterval(() => {
+      if (currentView === 'stats') {
+        loadStats();
+      }
+    }, STATS_REFRESH_INTERVAL_MS);
   }
 }
+
+// Al volver a la pestana activa, refrescar inmediatamente
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentView === 'stats') {
+    loadStats();
+  }
+});
 
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -1526,6 +1582,12 @@ async function loadStats() {
     renderTimeline(timelineRes);
     renderOpsTable(opsRes);
     statsLoaded = true;
+    // Indicador de ultima actualizacion
+    const updated = document.getElementById('live-updated');
+    if (updated) {
+      const now = new Date();
+      updated.textContent = '· ' + now.toLocaleTimeString('es', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+    }
   } catch (e) {
     console.error('Error cargando stats:', e);
   }

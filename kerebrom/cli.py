@@ -236,10 +236,24 @@ def _run_benchmark(store: Any, queries: int = 10, project: str = "default") -> D
     Ejecuta N recalls con queries variadas extraídas de las memorias
     existentes, mide tokens input/output y reporta el ahorro estimado
     total.
+
+    El tracker de tokens se desactiva durante el benchmark para que las
+    operaciones artificiales NO contaminen las estadísticas reales de uso.
     """
     from .tokens import count_tokens
     import time as _time
 
+    # Desactivar tracking durante el benchmark — no queremos contaminar
+    # las estadísticas reales con queries artificiales.
+    store.tokens.disable()
+    try:
+        return _run_benchmark_inner(store, queries, project, count_tokens, _time)
+    finally:
+        store.tokens.enable()
+
+
+def _run_benchmark_inner(store, queries, project, count_tokens, _time):
+    """Lógica interna del benchmark (tracking ya está desactivado)."""
     # Obtener queries variadas de memorias existentes (primera línea de cada una)
     all_mems = store.query(project=project, limit=queries * 3)
     if not all_mems:

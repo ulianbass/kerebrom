@@ -62,6 +62,17 @@ class TokenTracker:
     def __init__(self, connection_factory):
         """connection_factory: callable que devuelve una conexion sqlite3 abierta."""
         self._connect = connection_factory
+        self._enabled = True
+
+    # ── Habilitar/deshabilitar ───────────────────────────
+
+    def disable(self) -> None:
+        """Desactiva temporalmente el tracking (util para benchmarks)."""
+        self._enabled = False
+
+    def enable(self) -> None:
+        """Reactiva el tracking."""
+        self._enabled = True
 
     # ── Schema ───────────────────────────────────────────
 
@@ -101,7 +112,12 @@ class TokenTracker:
         memories_count: int = 0,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Registra una operacion. Silenciosa ante errores."""
+        """Registra una operacion. Silenciosa ante errores.
+
+        No hace nada si el tracker esta deshabilitado.
+        """
+        if not self._enabled:
+            return
         try:
             tokens_in = count_tokens(input_text)
             tokens_out = count_tokens(output_text)
