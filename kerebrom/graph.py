@@ -1595,9 +1595,10 @@ async function loadStats() {
 
 function renderStatCards(summary) {
   const total = summary.total || {};
-  const today = summary.today || {};
-  const week = summary.week || {};
-  const month = summary.month || {};
+  const lastHour = summary.last_hour || {};
+  const last24h = summary.last_24h || {};
+  const last7d = summary.last_7d || {};
+  const last30d = summary.last_30d || {};
   const html =
     '<div class="stat-card highlight">' +
       '<div class="stat-card-label">Total ahorrado</div>' +
@@ -1606,19 +1607,24 @@ function renderStatCards(summary) {
       '<div class="stat-card-delta">' + (total.operations || 0) + ' operaciones</div>' +
     '</div>' +
     '<div class="stat-card">' +
-      '<div class="stat-card-label">Este mes</div>' +
-      '<div class="stat-card-value">' + fmtNum(month.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (month.ops || 0) + ' operaciones</div>' +
+      '<div class="stat-card-label">Últimos 30 días</div>' +
+      '<div class="stat-card-value">' + fmtNum(last30d.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (last30d.ops || 0) + ' operaciones</div>' +
     '</div>' +
     '<div class="stat-card">' +
-      '<div class="stat-card-label">Esta semana</div>' +
-      '<div class="stat-card-value">' + fmtNum(week.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (week.ops || 0) + ' operaciones</div>' +
+      '<div class="stat-card-label">Últimos 7 días</div>' +
+      '<div class="stat-card-value">' + fmtNum(last7d.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (last7d.ops || 0) + ' operaciones</div>' +
     '</div>' +
     '<div class="stat-card">' +
-      '<div class="stat-card-label">Hoy</div>' +
-      '<div class="stat-card-value">' + fmtNum(today.saved || 0) + '</div>' +
-      '<div class="stat-card-delta">' + (today.ops || 0) + ' operaciones</div>' +
+      '<div class="stat-card-label">Últimas 24 horas</div>' +
+      '<div class="stat-card-value">' + fmtNum(last24h.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (last24h.ops || 0) + ' operaciones</div>' +
+    '</div>' +
+    '<div class="stat-card">' +
+      '<div class="stat-card-label">Última hora</div>' +
+      '<div class="stat-card-value">' + fmtNum(lastHour.saved || 0) + '</div>' +
+      '<div class="stat-card-delta">' + (lastHour.ops || 0) + ' operaciones</div>' +
     '</div>';
   document.getElementById('stat-cards').innerHTML = html;
 }

@@ -152,7 +152,12 @@ class TokenTracker:
     # ── Consulta agregada ────────────────────────────────
 
     def summary(self, project: Optional[str] = None) -> Dict[str, Any]:
-        """Retorna un resumen agregado: totales, hoy, semana, mes."""
+        """Retorna un resumen agregado con ventanas rolling.
+
+        A diferencia de cortes por dia/semana/mes calendario, estas
+        ventanas cuentan hacia atras desde el momento actual — asi
+        los numeros se diferencian inmediatamente y reflejan uso real.
+        """
         with self._connect() as conn:
             self.ensure_schema(conn)
             where = ""
@@ -174,7 +179,8 @@ class TokenTracker:
             ).fetchone()
 
             now = datetime.now(timezone.utc)
-            today_cut = (now.replace(hour=0, minute=0, second=0, microsecond=0)).isoformat()
+            hour_cut = (now - timedelta(hours=1)).isoformat()
+            day_cut = (now - timedelta(hours=24)).isoformat()
             week_cut = (now - timedelta(days=7)).isoformat()
             month_cut = (now - timedelta(days=30)).isoformat()
 
@@ -202,12 +208,18 @@ class TokenTracker:
                     "tokens_output": int(totals[2] or 0),
                     "tokens_saved_estimate": int(totals[3] or 0),
                 },
-                "today": _period(today_cut),
+                "last_hour": _period(hour_cut),
+                "last_24h": _period(day_cut),
+                "last_7d": _period(week_cut),
+                "last_30d": _period(month_cut),
+                # Retrocompat — alias para clientes viejos
+                "today": _period(day_cut),
                 "week": _period(week_cut),
                 "month": _period(month_cut),
                 "disclaimer": (
                     "Tokens saved es una estimacion basada en multiplicadores "
-                    "conservadores. No representa un ahorro medido exacto."
+                    "conservadores. No representa un ahorro medido exacto. "
+                    "Las ventanas son rolling: cuentan hacia atras desde ahora."
                 ),
             }
 
