@@ -129,6 +129,15 @@ Never say "I don't know" without checking Kerebrom first.
 """
 
 
+def _is_subpath(child: Path, parent: Path) -> bool:
+    """True si `child` esta dentro de `parent`."""
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
 def _is_temp_path(db_path: Path) -> bool:
     """Detect if db_path is a temporary/sandbox path.
 
@@ -587,7 +596,32 @@ def _setup_dashboard_daemon(
     plist_dir = Path.home() / "Library" / "LaunchAgents"
     plist_path = plist_dir / "{}.plist".format(label)
 
-    # Comando que lanza el dashboard
+    # macOS TCC: launchd NO tiene permiso para ~/Documents, ~/Desktop,
+    # ~/Downloads. Si kerebrom vive ahi, hay que instalarlo primero a
+    # user site-packages (~/Library/Python/X.Y/lib/python/site-packages)
+    # que SI es accesible sin prompt TCC.
+    repo_root = Path(__file__).resolve().parent.parent
+    _PROTECTED_DIRS = (Path.home() / "Documents", Path.home() / "Desktop", Path.home() / "Downloads")
+    needs_install = any(_is_subpath(repo_root, p) for p in _PROTECTED_DIRS)
+
+    if needs_install:
+        import subprocess as _sp_install
+        import tempfile, shutil as _sh
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_copy = Path(tmpdir) / "kerebrom_src"
+                _sh.copytree(str(repo_root), str(tmp_copy), ignore=_sh.ignore_patterns(
+                    ".git", "build", "dist", "*.egg-info", "__pycache__", ".pytest_cache",
+                ))
+                _sp_install.run(
+                    [sys.executable, "-m", "pip", "install", "--user", "--quiet",
+                     "--force-reinstall", "--no-deps", str(tmp_copy)],
+                    check=False, capture_output=True,
+                )
+        except Exception:
+            pass
+
+    # Comando que lanza el dashboard (sin PYTHONPATH: usa user site-packages)
     daemon_args = [sys.executable, "-m", "kerebrom", "graph", "--db", str(db_path), "--port", "8420"]
     if passphrase_env:
         daemon_args.extend(["--passphrase-env", passphrase_env])
