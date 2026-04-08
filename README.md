@@ -1,126 +1,179 @@
 # Kerebrom
 
-[Leer en Espanol](README.es.md)
+[Leer en Español](README.es.md)
 
-Kerebrom is a local-first persistent memory engine for AI coding tools. It gives Claude Code, Codex, and Claude Desktop a shared long-term memory that survives across conversations — no cloud services, no external databases, just a single SQLite file on your machine.
+> **Local-first persistent memory for AI coding tools.**
+> Claude and Codex stop asking you the same questions. Your projects stay in context. Your tokens stop bleeding.
 
-## Features
+**No cloud. No API keys. No data leaves your machine.** Just a SQLite file that Claude Code, Codex, and Claude Desktop share as a long-term brain.
 
-- **Single-file SQLite** storage with WAL for concurrent access.
-- **Hybrid retrieval** combining keyword search (FTS5), semantic similarity, recency, access frequency, and entity graph overlap.
-- **Entity graph** with fact triples, contradiction detection, and automatic invalidation.
-- **Progressive disclosure** — compact, summary, or full-detail context layers.
-- **Privacy-first** — sensitive value scrubbing before storage; optional encrypted-at-rest mode.
-- **Automatic maintenance** — memory decay, episodic-to-semantic consolidation, and scheduled cleanup.
-- **MCP server** over stdio — works with any tool that speaks Model Context Protocol.
-- **Auto-setup** — one command detects and configures Claude Code, Codex, and Claude Desktop.
-- **Portable backups** — `.kbk` snapshot files for disaster recovery and migration.
+---
+
+## Why it matters
+
+Every AI coding assistant forgets. Every new conversation starts from zero. You re-explain your project, your preferences, your decisions. You re-read files. You pay tokens for context the model should already know.
+
+Kerebrom fixes that. One persistent brain, shared across your AI tools, **running 100% on your machine**.
+
+### Measured impact
+
+Real numbers from `kerebrom benchmark` on a 150-memory project (April 2026):
+
+| Metric | Value |
+|---|---|
+| Average recall latency | **60ms** |
+| Tokens input per query | **~15** |
+| Tokens output per recall | **~2,400** |
+| **Estimated savings ratio** | **~500×** |
+
+> Savings are **conservative estimates**, not measured A/B tests. The multiplier (recall × 3.0) assumes the model would otherwise re-read ~3× more content to find the same information. Your real savings depend on the size of your project and how often you reuse context.
+
+Reproduce it yourself:
+
+```bash
+kerebrom benchmark --queries 10 --output my-benchmark.json
+```
+
+---
 
 ## Install
 
 ```bash
+git clone https://github.com/ulianbass/kerebrom.git
+cd kerebrom
 pip install .
+kerebrom setup
 ```
 
-## Quick start
+`kerebrom setup` auto-detects Claude Code, Claude Desktop, and Codex on your machine and wires Kerebrom as an MCP server into each of them. It's idempotent — run it anytime to repair configs.
+
+---
+
+## What you get
+
+### For every AI tool you use
+- **One shared brain.** Claude learns something, Codex knows it next time.
+- **Persistent across restarts.** Nothing lives in a chat window.
+- **Auto-consolidation.** A scheduled agent (Sopor) reads your transcripts and distills them into structured memories — never copying your words literally, always rewriting as facts.
+
+### For your privacy
+- **100% local.** SQLite file in `~/.kerebrom/kerebrom.db`. Nothing sent anywhere.
+- **Sensitive value scrubbing.** API keys, emails, and known PII patterns get redacted before storage.
+- **Optional encryption at rest.** AES-256 via system `openssl`.
+
+### For your wallet
+- **Token tracking built in.** Every `recall`, `context`, and `query` is counted.
+- **Stats dashboard.** Open `kerebrom graph` to see tokens saved by day, by operation, and cumulative.
+- **Reproducible benchmarks.** `kerebrom benchmark` exports JSON you can publish.
+
+### For your brain
+- **Interactive knowledge graph.** D3-force visualization of every entity and memory in your database, with filters, search, zoom, and click-to-focus.
+- **Structured queries.** Filter by `kind`, `tags`, `importance`, date ranges, and arbitrary JSON metadata.
+- **Entity inference.** People, locations, organizations, and concepts are classified automatically.
+
+---
+
+## Commands
 
 ```bash
-# Auto-configure all detected AI tools
-python3 -m kerebrom setup --db ~/.kerebrom/kerebrom.db
+kerebrom setup              # configure AI tools (idempotent)
+kerebrom serve              # start MCP server over stdio
+kerebrom graph              # open the interactive knowledge graph + stats dashboard
 
-# Store memories
-python3 -m kerebrom remember --db ~/.kerebrom/kerebrom.db "The API uses JWT tokens with 24h expiry."
-python3 -m kerebrom remember --db ~/.kerebrom/kerebrom.db "User prefers dark mode and Spanish language."
+kerebrom remember "…"       # save a memory intentionally
+kerebrom recall "query"     # hybrid search (semantic + keyword + graph)
+kerebrom context "query"    # progressive disclosure bundle
+kerebrom query --kind core  # structured filters
+kerebrom facts              # list semantic triples
+kerebrom entities           # list known people, places, concepts
+kerebrom gaps               # list knowledge gaps (referenced but unknown)
 
-# Search memories
-python3 -m kerebrom recall --db ~/.kerebrom/kerebrom.db "authentication"
+kerebrom stats              # terminal report of token savings
+kerebrom benchmark          # run a measurable benchmark
+kerebrom sopor              # manually consolidate transcripts
 
-# View entity graph
-python3 -m kerebrom facts --db ~/.kerebrom/kerebrom.db
-
-# Get structured context for an AI prompt
-python3 -m kerebrom context --db ~/.kerebrom/kerebrom.db "project architecture" --layer 2
-
-# Start MCP server
-python3 -m kerebrom serve --db ~/.kerebrom/kerebrom.db
+kerebrom snapshot           # portable .kbk backup
+kerebrom revive             # restore from .kbk
+kerebrom uninstall          # remove everything
 ```
 
-## CLI commands
+---
 
-| Command | Description |
-|---------|-------------|
-| `setup` | Auto-detect AI tools and configure MCP + hooks |
-| `remember` | Store a new memory |
-| `recall` | Search memories by query |
-| `forget` | Invalidate a memory by ID or scrub sensitive data |
-| `context` | Get a structured context bundle (facts + memories) |
-| `entities` | List known entities in the knowledge graph |
-| `facts` | List active semantic triples |
-| `consolidate` | Merge related episodic memories into semantic ones |
-| `decay` | Apply importance decay to old memories |
-| `backup` | Create a SQLite database copy |
-| `snapshot` | Create a portable `.kbk` backup file |
-| `revive` | Restore memories from a `.kbk` file |
-| `export` | Export memories as JSON |
-| `serve` | Start the MCP stdio server |
-| `sopor` | Consolidate transcript sessions into memories |
+## The stats dashboard
 
-## How setup works
+When you run `kerebrom graph`, the web UI has two tabs:
 
-`kerebrom setup` auto-detects installed AI tools and configures each one:
+**Grafo** — D3-force interactive visualization of your memory graph:
+- Color-coded by type (person, location, organization, concept, memory kind)
+- Search, filter, zoom, minimap, keyboard shortcuts (⌘K, Esc, F, ?)
+- Click a node to see its memories and connections
+- Auto label-collision avoidance
 
-- **Claude Code** — registers MCP server in `.mcp.json`, adds usage instructions to `CLAUDE.md`, disables built-in file-based memory, installs passive capture hooks.
-- **Claude Desktop** — configures MCP in `claude_desktop_config.json` (Chat + Cowork).
-- **Codex** — registers MCP in `config.toml`, adds instructions to `AGENTS.md`.
-- **LaunchAgent** (macOS) — installs a periodic agent that auto-repairs configs if removed.
+**Estadísticas** — live dashboard of what Kerebrom is saving you:
+- 4 stat cards: total saved, this month, this week, today
+- 30-day timeline bar chart (SVG, no external libs)
+- Breakdown by operation (recall, context, query, remember)
+- Transparent formula box explaining every multiplier
+
+---
 
 ## Architecture
 
 ```
 ~/.kerebrom/
-  kerebrom.db        # SQLite database (memories, entities, facts, embeddings)
-  reports/           # Versioned maintenance reports
-  backups/           # Versioned .kbk snapshot files
-  Kerebrom           # Wrapper script for LaunchAgent
+  kerebrom.db          single SQLite file (memories, entities, facts,
+                       embeddings, token_stats)
+  reports/             versioned Sopor maintenance reports
+  backups/             versioned .kbk snapshots
+  Kerebrom.app/        macOS bundle for the auto-repair LaunchAgent
 ```
 
-The database is the single source of truth. All AI tools connect to the same MCP server and share the same memory pool.
+Every tool (Claude Code, Claude Desktop, Codex) connects to the same MCP server and sees the same database. There's no sync, no server, no cloud — it's one file.
 
-## Encrypted-at-rest mode
+### The auto-repair layer
+
+On macOS, `kerebrom setup` installs a LaunchAgent that periodically ensures the MCP configs stay registered. If Claude Code rewrites `settings.json` or a tool update breaks a config, the agent restores it automatically. No cron, no Docker, no systemd.
+
+### Sopor — the consolidation agent
+
+Sopor runs as a scheduled task inside Claude Code **and** as an automation inside Codex. Both versions share a single generic prompt that:
+
+1. Reads recent transcripts from `~/.claude/projects` and `~/.codex/sessions`
+2. **Distills** ideas — never copies the user's words literally
+3. Validates each idea against the "will this matter in 30 days?" filter
+4. Merges partial memories into stronger unified ones
+5. Writes a report to `~/.kerebrom/reports/`
+
+The prompt is installed automatically by `kerebrom setup` — nothing to configure.
+
+---
+
+## Honest limitations
+
+- **"Tokens saved" is an estimate.** It uses conservative multipliers per operation type (recall × 3, context × 5, query × 2). It's not an A/B measurement. The dashboard, stats output, and benchmark report all say this explicitly.
+- **Embeddings default to hash** if you don't have `onnxruntime` or `sentence-transformers` installed. Hash embeddings are deterministic but don't capture semantic similarity as well. Install `onnxruntime` for proper local neural embeddings.
+- **Encrypted mode uses system `openssl`**, not SQLCipher. While a process is actively using the database, a temporary plaintext file exists in `/tmp`.
+- **Sopor runs on Claude Code and Codex.** If you use neither, the consolidation step is manual (`kerebrom sopor --all`).
+- **macOS is a first-class target.** Linux and Windows work for the core engine and MCP server, but the LaunchAgent auto-repair is macOS-only.
+
+---
+
+## Tests
 
 ```bash
-export KEREBROM_PASSPHRASE="your-passphrase"
-python3 -m kerebrom init --db ~/.kerebrom/secure.kdb --passphrase-env KEREBROM_PASSPHRASE
-python3 -m kerebrom setup --db ~/.kerebrom/secure.kdb --passphrase-env KEREBROM_PASSPHRASE
-```
-
-Wraps SQLite inside an encrypted container using the system `openssl` binary. Compatible with all CLI commands and the MCP server.
-
-## Testing
-
-```bash
-# Unit tests
 python3 -m pytest tests/test_kerebrom.py
-
-# Single-machine release smoke
-python3 scripts/local_release_smoke.py
-
-# Full release gate (tests + smoke + venv install + benchmarks)
-python3 scripts/release_gate.py
 ```
 
-## Known limits
+111 tests cover the store, MCP server, setup, token tracker, Sopor consolidation, backup/restore, and encryption.
 
-- Retrieval uses deterministic hash embeddings, not neural embeddings yet.
-- Encrypted mode uses the system `openssl` binary rather than SQLCipher.
-- Encrypted mode creates a temporary plaintext file while a process is actively using the database.
+---
 
 ## Author
 
-Created by **Ulian Bass**.
+Created by **Ulian Bass** — Pedro Julián Arribas Monzón.
 
-Copyright (c) 2026 Ulian Bass. All rights reserved.
+Copyright © 2026 Ulian Bass. All rights reserved.
 
 ## License
 
-Proprietary. See [LICENSE](LICENSE) for terms.
+Proprietary — source is public for auditing and local use. See [LICENSE](LICENSE) for terms.

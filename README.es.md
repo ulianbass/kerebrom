@@ -2,125 +2,178 @@
 
 [Read in English](README.md)
 
-Kerebrom es un motor de memoria persistente local para herramientas de AI. Le da a Claude Code, Codex y Claude Desktop una memoria compartida a largo plazo que sobrevive entre conversaciones — sin servicios en la nube, sin bases de datos externas, solo un archivo SQLite en tu maquina.
+> **Memoria persistente local para herramientas de AI.**
+> Claude y Codex dejan de preguntarte lo mismo dos veces. Tus proyectos mantienen contexto. Dejas de sangrar tokens.
 
-## Caracteristicas
+**Sin nube. Sin API keys. Nada sale de tu máquina.** Solo un archivo SQLite que Claude Code, Codex y Claude Desktop comparten como un cerebro a largo plazo.
 
-- **SQLite en un solo archivo** con WAL para acceso concurrente.
-- **Busqueda hibrida** combinando palabras clave (FTS5), similitud semantica, recencia, frecuencia de acceso y grafo de entidades.
-- **Grafo de entidades** con tripletas de hechos, deteccion de contradicciones e invalidacion automatica.
-- **Divulgacion progresiva** — contexto compacto, resumen o detalle completo.
-- **Privacidad primero** — limpieza de valores sensibles antes de guardar; modo encriptado opcional.
-- **Mantenimiento automatico** — decaimiento de memorias, consolidacion episodica-a-semantica y limpieza programada.
-- **Servidor MCP** via stdio — funciona con cualquier herramienta que hable Model Context Protocol.
-- **Auto-setup** — un comando detecta y configura Claude Code, Codex y Claude Desktop.
-- **Backups portables** — archivos `.kbk` para recuperacion y migracion.
+---
 
-## Instalacion
+## Por qué importa
+
+Cada asistente AI de código olvida. Cada conversación nueva empieza desde cero. Re-explicas tu proyecto, tus preferencias, tus decisiones. Vuelven a leer los mismos archivos. Pagas tokens por contexto que el modelo debería ya saber.
+
+Kerebrom lo arregla. Un cerebro persistente compartido entre tus AI tools, **corriendo 100% en tu máquina**.
+
+### Impacto medido
+
+Números reales de `kerebrom benchmark` sobre un proyecto con 150 memorias (abril 2026):
+
+| Métrica | Valor |
+|---|---|
+| Latencia promedio de recall | **60ms** |
+| Tokens input por query | **~15** |
+| Tokens output por recall | **~2,400** |
+| **Ratio de ahorro estimado** | **~500×** |
+
+> El ahorro es una **estimación conservadora**, no una medición A/B exacta. El multiplicador (recall × 3.0) asume que sin Kerebrom el modelo tendría que releer ~3× más contenido para encontrar la misma información. El ahorro real depende del tamaño de tu proyecto y de cuánto reutilices contexto.
+
+Repróducelo tú:
 
 ```bash
+kerebrom benchmark --queries 10 --output mi-benchmark.json
+```
+
+---
+
+## Instalación
+
+```bash
+git clone https://github.com/ulianbass/kerebrom.git
+cd kerebrom
 pip install .
+kerebrom setup
 ```
 
-## Inicio rapido
+`kerebrom setup` auto-detecta Claude Code, Claude Desktop y Codex en tu máquina y registra a Kerebrom como servidor MCP en cada uno. Es idempotente — puedes correrlo en cualquier momento para reparar configs.
+
+---
+
+## Lo que obtienes
+
+### Para cada AI tool
+- **Un cerebro compartido.** Claude aprende algo, Codex lo sabe la próxima vez.
+- **Persistente entre reinicios.** Nada vive en la ventana del chat.
+- **Auto-consolidación.** Un agente programado (Sopor) lee tus transcripts y los destila en memorias estructuradas — nunca copia tus palabras literalmente, siempre reescribe como hechos.
+
+### Para tu privacidad
+- **100% local.** Un archivo SQLite en `~/.kerebrom/kerebrom.db`. Nada sale a ningún lado.
+- **Limpieza de datos sensibles.** API keys, emails y patrones de PII conocidos se redactan antes de guardarse.
+- **Cifrado opcional en reposo.** AES-256 vía `openssl` del sistema.
+
+### Para tu cartera
+- **Token tracking incluido.** Cada `recall`, `context` y `query` se cuenta.
+- **Dashboard de estadísticas.** Abre `kerebrom graph` para ver tokens ahorrados por día, por operación y acumulados.
+- **Benchmarks reproducibles.** `kerebrom benchmark` exporta JSON que puedes publicar.
+
+### Para tu cerebro
+- **Grafo de conocimiento interactivo.** Visualización D3-force de cada entidad y memoria en tu base de datos, con filtros, búsqueda, zoom y click para enfocar.
+- **Consultas estructuradas.** Filtra por `kind`, `tags`, `importance`, rangos de fecha y metadata JSON arbitraria.
+- **Inferencia de entidades.** Personas, lugares, organizaciones y conceptos se clasifican automáticamente.
+
+---
+
+## Comandos
 
 ```bash
-# Auto-configurar todas las herramientas AI detectadas
-python3 -m kerebrom setup --db ~/.kerebrom/kerebrom.db
+kerebrom setup              # configurar AI tools (idempotente)
+kerebrom serve              # iniciar servidor MCP sobre stdio
+kerebrom graph              # abrir el grafo interactivo + dashboard de stats
 
-# Guardar memorias
-python3 -m kerebrom remember --db ~/.kerebrom/kerebrom.db "La API usa tokens JWT con expiracion de 24h."
-python3 -m kerebrom remember --db ~/.kerebrom/kerebrom.db "El usuario prefiere modo oscuro y espanol."
+kerebrom remember "…"       # guardar una memoria intencionalmente
+kerebrom recall "query"     # búsqueda híbrida (semántica + keyword + grafo)
+kerebrom context "query"    # paquete de divulgación progresiva
+kerebrom query --kind core  # filtros estructurados
+kerebrom facts              # listar tripletas semánticas
+kerebrom entities           # listar personas, lugares, conceptos
+kerebrom gaps               # listar huecos de conocimiento
 
-# Buscar memorias
-python3 -m kerebrom recall --db ~/.kerebrom/kerebrom.db "autenticacion"
+kerebrom stats              # reporte de ahorro de tokens en terminal
+kerebrom benchmark          # correr benchmark medible
+kerebrom sopor              # consolidar transcripts manualmente
 
-# Ver grafo de entidades
-python3 -m kerebrom facts --db ~/.kerebrom/kerebrom.db
-
-# Obtener contexto estructurado para un prompt
-python3 -m kerebrom context --db ~/.kerebrom/kerebrom.db "arquitectura del proyecto" --layer 2
-
-# Iniciar servidor MCP
-python3 -m kerebrom serve --db ~/.kerebrom/kerebrom.db
+kerebrom snapshot           # backup portable .kbk
+kerebrom revive             # restaurar desde .kbk
+kerebrom uninstall          # eliminar todo
 ```
 
-## Comandos CLI
+---
 
-| Comando | Descripcion |
-|---------|-------------|
-| `setup` | Auto-detectar herramientas AI y configurar MCP + hooks |
-| `remember` | Guardar una nueva memoria |
-| `recall` | Buscar memorias por query |
-| `forget` | Invalidar una memoria por ID o limpiar datos sensibles |
-| `context` | Obtener un paquete de contexto estructurado (hechos + memorias) |
-| `entities` | Listar entidades conocidas en el grafo |
-| `facts` | Listar tripletas semanticas activas |
-| `consolidate` | Fusionar memorias episodicas relacionadas en semanticas |
-| `decay` | Aplicar decaimiento de importancia a memorias viejas |
-| `backup` | Crear copia de la base de datos SQLite |
-| `snapshot` | Crear archivo de backup portable `.kbk` |
-| `revive` | Restaurar memorias desde un archivo `.kbk` |
-| `export` | Exportar memorias como JSON |
-| `serve` | Iniciar el servidor MCP via stdio |
-| `sopor` | Consolidar transcripts de sesiones en memorias |
+## El dashboard de stats
 
-## Como funciona el setup
+Cuando corres `kerebrom graph`, la UI web tiene dos tabs:
 
-`kerebrom setup` auto-detecta las herramientas AI instaladas y configura cada una:
+**Grafo** — visualización interactiva D3-force de tu grafo de memoria:
+- Coloreado por tipo (persona, lugar, organización, concepto, tipo de memoria)
+- Búsqueda, filtros, zoom, minimap, atajos de teclado (⌘K, Esc, F, ?)
+- Click en un nodo para ver sus memorias y conexiones
+- Evitación automática de solape de etiquetas
 
-- **Claude Code** — registra servidor MCP en `.mcp.json`, agrega instrucciones a `CLAUDE.md`, desactiva la memoria basada en archivos, instala hooks de captura pasiva.
-- **Claude Desktop** — configura MCP en `claude_desktop_config.json` (Chat + Cowork).
-- **Codex** — registra MCP en `config.toml`, agrega instrucciones a `AGENTS.md`.
-- **LaunchAgent** (macOS) — instala un agente periodico que auto-repara configs si se eliminan.
+**Estadísticas** — dashboard en vivo de lo que Kerebrom te está ahorrando:
+- 4 stat cards: total ahorrado, este mes, esta semana, hoy
+- Gráfico de barras SVG de los últimos 30 días (sin librerías externas)
+- Desglose por operación (recall, context, query, remember)
+- Caja transparente que explica cada multiplicador
+
+---
 
 ## Arquitectura
 
 ```
 ~/.kerebrom/
-  kerebrom.db        # Base de datos SQLite (memorias, entidades, hechos, embeddings)
-  reports/           # Reportes de mantenimiento versionados
-  backups/           # Archivos de backup .kbk versionados
-  Kerebrom           # Script wrapper para LaunchAgent
+  kerebrom.db          archivo SQLite único (memorias, entidades, hechos,
+                       embeddings, token_stats)
+  reports/             reportes de mantenimiento de Sopor versionados
+  backups/             snapshots .kbk versionados
+  Kerebrom.app/        bundle macOS para el LaunchAgent de auto-reparación
 ```
 
-La base de datos es la unica fuente de verdad. Todas las herramientas AI se conectan al mismo servidor MCP y comparten el mismo pool de memorias.
+Cada herramienta (Claude Code, Claude Desktop, Codex) se conecta al mismo servidor MCP y ve la misma base de datos. No hay sync, no hay servidor, no hay nube — es un archivo.
 
-## Modo encriptado
+### La capa de auto-reparación
+
+En macOS, `kerebrom setup` instala un LaunchAgent que periódicamente se asegura de que las configs MCP sigan registradas. Si Claude Code reescribe `settings.json` o una actualización rompe una config, el agente la restaura automáticamente. Sin cron, sin Docker, sin systemd.
+
+### Sopor — el agente de consolidación
+
+Sopor corre como tarea programada dentro de Claude Code **y** como automatización dentro de Codex. Ambas versiones comparten un prompt genérico que:
+
+1. Lee transcripts recientes de `~/.claude/projects` y `~/.codex/sessions`
+2. **Destila** ideas — nunca copia las palabras del usuario literalmente
+3. Valida cada idea contra el filtro "¿importará en 30 días?"
+4. Fusiona memorias parciales en versiones unificadas más fuertes
+5. Escribe un reporte en `~/.kerebrom/reports/`
+
+El prompt se instala automáticamente con `kerebrom setup` — nada que configurar.
+
+---
+
+## Límites honestos
+
+- **"Tokens ahorrados" es una estimación.** Usa multiplicadores conservadores por operación (recall × 3, context × 5, query × 2). No es una medición A/B. El dashboard, la salida de stats y el reporte de benchmark lo dicen explícitamente.
+- **Los embeddings caen a hash** si no tienes `onnxruntime` o `sentence-transformers` instalados. Los hash embeddings son deterministas pero no capturan similitud semántica tan bien. Instala `onnxruntime` para embeddings neurales locales.
+- **El modo cifrado usa `openssl` del sistema**, no SQLCipher. Mientras un proceso usa la DB activamente, existe un archivo temporal en texto plano en `/tmp`.
+- **Sopor corre en Claude Code y Codex.** Si no usas ninguno, la consolidación es manual (`kerebrom sopor --all`).
+- **macOS es el target principal.** Linux y Windows funcionan para el motor core y el servidor MCP, pero el LaunchAgent de auto-reparación es solo macOS.
+
+---
+
+## Tests
 
 ```bash
-export KEREBROM_PASSPHRASE="tu-contrasena"
-python3 -m kerebrom init --db ~/.kerebrom/secure.kdb --passphrase-env KEREBROM_PASSPHRASE
-python3 -m kerebrom setup --db ~/.kerebrom/secure.kdb --passphrase-env KEREBROM_PASSPHRASE
-```
-
-Envuelve SQLite dentro de un contenedor encriptado usando el binario `openssl` del sistema. Compatible con todos los comandos CLI y el servidor MCP.
-
-## Testing
-
-```bash
-# Tests unitarios
 python3 -m pytest tests/test_kerebrom.py
-
-# Smoke test en maquina local
-python3 scripts/local_release_smoke.py
-
-# Release gate completo (tests + smoke + instalacion venv + benchmarks)
-python3 scripts/release_gate.py
 ```
 
-## Limites conocidos
+111 tests cubren el store, servidor MCP, setup, token tracker, consolidación de Sopor, backup/restore y cifrado.
 
-- La busqueda usa embeddings hash deterministicos, no embeddings neuronales aun.
-- El modo encriptado usa el binario `openssl` del sistema en vez de SQLCipher.
-- El modo encriptado crea un archivo temporal en texto plano mientras un proceso usa activamente la base de datos.
+---
 
 ## Autor
 
-Creado por **Ulian Bass**.
+Creado por **Ulian Bass** — Pedro Julián Arribas Monzón.
 
-Copyright (c) 2026 Ulian Bass. Todos los derechos reservados.
+Copyright © 2026 Ulian Bass. Todos los derechos reservados.
 
 ## Licencia
 
-Propietario. Ver [LICENSE](LICENSE) para los terminos.
+Proprietary — el código es público para auditoría y uso local. Ver [LICENSE](LICENSE) para los términos.
