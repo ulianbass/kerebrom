@@ -844,7 +844,7 @@ body {
   <div class="stats-container">
     <div class="stats-header">
       <div class="stats-title-row">
-        <h1 class="stats-title">Ahorro de tokens estimado</h1>
+        <h1 class="stats-title">Tokens de contexto servidos</h1>
         <div class="live-badge">
           <span class="live-dot"></span>
           <span>EN VIVO</span>
@@ -852,9 +852,11 @@ body {
         </div>
       </div>
       <p class="stats-subtitle">
-        Kerebrom rastrea cada operación de memoria y estima cuántos tokens
-        habrías gastado sin él. Los números son aproximaciones conservadoras
-        y se actualizan automáticamente cada 5 segundos.
+        Cantidad real de información que Kerebrom ha inyectado en tus
+        conversaciones de AI. Sin multiplicadores inventados — solo el
+        contenido medido de cada <code>recall</code>, <code>context</code>
+        y <code>query</code>. Es el mínimo de tokens que no tuviste que
+        reintroducir manualmente en tus prompts.
       </p>
     </div>
 
@@ -873,31 +875,33 @@ body {
         <div class="ops-table" id="ops-table"></div>
       </div>
       <div class="stats-panel">
-        <div class="stats-panel-title">Cómo se calcula</div>
+        <div class="stats-panel-title">Cómo se mide</div>
         <div class="formula-box">
           <div class="formula-row">
             <span class="op-name">recall</span>
-            <span class="op-mult">× 3.0</span>
-            <span class="op-desc">evita lecturas repetidas de archivos</span>
+            <span class="op-mult">=</span>
+            <span class="op-desc">tokens del contenido devuelto al modelo</span>
           </div>
           <div class="formula-row">
             <span class="op-name">context</span>
-            <span class="op-mult">× 5.0</span>
-            <span class="op-desc">evita reconstrucción desde transcripts</span>
+            <span class="op-mult">=</span>
+            <span class="op-desc">tokens del paquete de contexto servido</span>
           </div>
           <div class="formula-row">
             <span class="op-name">query</span>
-            <span class="op-mult">× 2.0</span>
-            <span class="op-desc">consultas filtradas</span>
+            <span class="op-mult">=</span>
+            <span class="op-desc">tokens de los resultados filtrados</span>
           </div>
           <div class="formula-row">
             <span class="op-name">remember</span>
-            <span class="op-mult">× 0.0</span>
-            <span class="op-desc">solo cuesta, no ahorra</span>
+            <span class="op-mult">—</span>
+            <span class="op-desc">no sirve contexto, solo persiste</span>
           </div>
           <div class="formula-disclaimer">
-            Multiplicadores conservadores. El ahorro real depende del prompt
-            y del tamaño del proyecto.
+            Medición directa sin multiplicadores. Es el mínimo real que
+            Kerebrom inyectó en tus conversaciones. Sin Kerebrom habrías
+            tenido que introducir estos tokens manualmente o dejar que
+            el modelo reconstruya el contexto (gastando aún más).
           </div>
         </div>
       </div>
@@ -1668,29 +1672,29 @@ function renderStatCards(summary) {
   }
 
   // Hero card con el total destacado + metadata
-  const totalSaved = total.tokens_saved_estimate || 0;
+  const totalServed = total.tokens_served || total.tokens_saved_estimate || 0;
   const heroHtml =
     '<div class="stat-hero">' +
       '<div>' +
-        '<div class="stat-hero-label">Total ahorrado</div>' +
-        '<div class="stat-hero-value">' + fmtNum(totalSaved) +
+        '<div class="stat-hero-label">Contexto servido al modelo</div>' +
+        '<div class="stat-hero-value">' + fmtNum(totalServed) +
           '<span class="stat-hero-unit">tokens</span></div>' +
       '</div>' +
       '<div class="stat-hero-meta">' +
         '<div><strong>' + totalOps.toLocaleString() + '</strong> operaciones</div>' +
-        '<div>desde que empezó el tracking</div>' +
+        '<div>medición real · sin multiplicadores</div>' +
       '</div>' +
     '</div>';
 
   // Tarjetas rolling (4 en fila)
   const rollingCard = (label, data) => {
-    const saved = data.saved || 0;
+    const served = data.served || data.saved || 0;
     const ops = data.ops || 0;
-    const emptyClass = saved === 0 ? ' empty' : '';
+    const emptyClass = served === 0 ? ' empty' : '';
     const deltaText = ops === 0 ? 'sin actividad' : ops + ' operación' + (ops === 1 ? '' : 'es');
     return '<div class="stat-card' + emptyClass + '">' +
       '<div class="stat-card-label">' + label + '</div>' +
-      '<div class="stat-card-value">' + fmtNum(saved) + '</div>' +
+      '<div class="stat-card-value">' + fmtNum(served) + '</div>' +
       '<div class="stat-card-delta">' + deltaText + '</div>' +
     '</div>';
   };

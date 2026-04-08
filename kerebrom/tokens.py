@@ -1,15 +1,24 @@
 # Copyright (c) 2026 Ulian Bass. All rights reserved.
 # This software is proprietary. See LICENSE for terms.
 
-"""Token tracking y estimacion de ahorro para Kerebrom.
+"""Token tracking para Kerebrom.
 
 Cada operacion de memoria (recall, context, query, remember) se registra
-para poder estimar cuantos tokens evita el uso de Kerebrom comparado con
-un AI sin memoria persistente.
+con los tokens reales de entrada y salida. La metrica principal es
+'tokens de contexto servidos' — la cantidad real de informacion util
+que Kerebrom inyecto al modelo de IA. Es 100% medible, sin multiplicadores
+arbitrarios.
 
-La estimacion es una heuristica conservadora basada en multiplicadores
-por operacion. No es una medicion exacta — se marca como 'estimate' en
-todas las metricas expuestas al usuario.
+Interpretacion honesta:
+- Sin Kerebrom, el modelo no tendria acceso a esa informacion y tendrias
+  que proveerla manualmente (re-explicando tu proyecto) o pidiendole al
+  modelo que la reconstruya desde archivos/transcripts (gastando tokens
+  de lectura).
+- Por eso 'tokens servidos' se interpreta como un ahorro minimo conservador:
+  al menos esos tokens no los tuviste que reintroducir en tus prompts.
+- El ahorro real puede ser mayor (porque reconstruir contexto suele
+  requerir 2-5x mas tokens que inyectar el resumen destilado), pero
+  no lo inflamos — reportamos solo lo que medimos.
 """
 from __future__ import annotations
 
@@ -17,20 +26,6 @@ import json
 import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
-
-
-# ── Multiplicadores de ahorro (heuristica conservadora) ──
-# Basados en la premisa de que sin Kerebrom, el modelo tendria que
-# reconstruir el contexto desde archivos/transcripts.
-SAVINGS_MULTIPLIER = {
-    "recall": 3.0,      # evita que el modelo relea archivos buscando la info
-    "context": 5.0,     # evita reconstruccion completa desde transcripts
-    "query": 2.0,       # consulta filtrada, ahorro menor
-    "remember": 0.0,    # no ahorra, solo costea el almacenamiento
-    "forget": 0.0,
-    "entities": 1.5,
-    "facts": 1.5,
-}
 
 
 def count_tokens(text: str) -> int:
@@ -115,18 +110,26 @@ class TokenTracker:
         """Registra una operacion. Silenciosa ante errores.
 
         No hace nada si el tracker esta deshabilitado.
+
+        Metrica honesta: tokens_served = tokens_output (contexto servido
+        al modelo). No usa multiplicadores inventados. Solo cuenta lo que
+        realmente Kerebrom le dio al modelo.
         """
         if not self._enabled:
             return
         try:
             tokens_in = count_tokens(input_text)
             tokens_out = count_tokens(output_text)
-            multiplier = SAVINGS_MULTIPLIER.get(operation, 1.0)
-            tokens_saved = int(tokens_out * multiplier)
+            # Operaciones que escriben (remember/forget) no sirven contexto
+            writes_only = operation in ("remember", "forget")
+            tokens_served = 0 if writes_only else tokens_out
             now = datetime.now(timezone.utc).isoformat()
 
             with self._connect() as conn:
                 self.ensure_schema(conn)
+                # Nota: el schema historico tiene una columna llamada
+                # 'tokens_saved' — la mantenemos para retrocompat pero
+                # ahora guarda 'tokens_served' (la metrica honesta).
                 conn.execute(
                     """
                     INSERT INTO token_stats
@@ -140,7 +143,7 @@ class TokenTracker:
                         project,
                         tokens_in,
                         tokens_out,
-                        tokens_saved,
+                        tokens_served,
                         memories_count,
                         json.dumps(metadata or {}),
                     ),
@@ -172,7 +175,7 @@ class TokenTracker:
                     COUNT(*) as ops,
                     COALESCE(SUM(tokens_input), 0) as tok_in,
                     COALESCE(SUM(tokens_output), 0) as tok_out,
-                    COALESCE(SUM(tokens_saved), 0) as tok_saved
+                    COALESCE(SUM(tokens_saved), 0) as tok_served
                 FROM token_stats {where}
                 """,
                 params,
@@ -194,19 +197,25 @@ class TokenTracker:
                     f"""
                     SELECT
                         COUNT(*) as ops,
-                        COALESCE(SUM(tokens_saved), 0) as saved
+                        COALESCE(SUM(tokens_saved), 0) as served
                     FROM token_stats {where_period}
                     """,
                     local_params,
                 ).fetchone()
-                return {"ops": int(row[0] or 0), "saved": int(row[1] or 0)}
+                served = int(row[1] or 0)
+                # 'saved' es alias para retrocompat
+                return {"ops": int(row[0] or 0), "served": served, "saved": served}
 
+            total_served = int(totals[3] or 0)
             return {
                 "total": {
                     "operations": int(totals[0] or 0),
                     "tokens_input": int(totals[1] or 0),
                     "tokens_output": int(totals[2] or 0),
-                    "tokens_saved_estimate": int(totals[3] or 0),
+                    # Metrica honesta: tokens de contexto servidos al modelo
+                    "tokens_served": total_served,
+                    # Alias retrocompat
+                    "tokens_saved_estimate": total_served,
                 },
                 "last_hour": _period(hour_cut),
                 "last_24h": _period(day_cut),
@@ -217,9 +226,10 @@ class TokenTracker:
                 "week": _period(week_cut),
                 "month": _period(month_cut),
                 "disclaimer": (
-                    "Tokens saved es una estimacion basada en multiplicadores "
-                    "conservadores. No representa un ahorro medido exacto. "
-                    "Las ventanas son rolling: cuentan hacia atras desde ahora."
+                    "Metrica honesta: tokens de contexto servidos al modelo. "
+                    "Sin multiplicadores inventados. Es el minimo que Kerebrom "
+                    "te evito introducir manualmente en tus prompts. Ventanas "
+                    "rolling cuentan hacia atras desde ahora."
                 ),
             }
 

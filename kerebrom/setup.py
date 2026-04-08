@@ -565,6 +565,111 @@ def _setup_launchagent(
     return True, "LaunchAgent: instalado (auto-reparación cada 10 min)"
 
 
+def _setup_dashboard_daemon(
+    db_path: Path,
+    passphrase_env: Optional[str] = None,
+    passphrase_file: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """Instala el dashboard del grafo como daemon independiente.
+
+    A diferencia del preview server de Claude Code, este daemon vive
+    en el sistema y sobrevive a cualquier app que el usuario cierre.
+    El dashboard siempre queda accesible en http://127.0.0.1:8420
+    mientras el usuario tenga sesion iniciada.
+    """
+    if sys.platform != "darwin":
+        return False, "Dashboard daemon: solo disponible en macOS"
+
+    if _is_temp_path(db_path):
+        return True, "Dashboard daemon: omitido (ruta temporal)"
+
+    label = "com.kerebrom.dashboard"
+    plist_dir = Path.home() / "Library" / "LaunchAgents"
+    plist_path = plist_dir / "{}.plist".format(label)
+
+    # Comando que lanza el dashboard
+    daemon_args = [sys.executable, "-m", "kerebrom", "graph", "--db", str(db_path), "--port", "8420"]
+    if passphrase_env:
+        daemon_args.extend(["--passphrase-env", passphrase_env])
+    if passphrase_file:
+        daemon_args.extend(["--passphrase-file", passphrase_file])
+
+    # Log dir para stdout/stderr (no /dev/null — para poder debuggear)
+    log_dir = db_path.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    stdout_log = log_dir / "dashboard.out.log"
+    stderr_log = log_dir / "dashboard.err.log"
+
+    program_args_xml = "\n    ".join(
+        "<string>{}</string>".format(arg) for arg in daemon_args
+    )
+
+    plist_content = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{label}</string>
+  <key>ProgramArguments</key>
+  <array>
+    {program_args}
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>{stdout_log}</string>
+  <key>StandardErrorPath</key>
+  <string>{stderr_log}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+</dict>
+</plist>
+""".format(
+        label=label,
+        program_args=program_args_xml,
+        stdout_log=stdout_log,
+        stderr_log=stderr_log,
+    )
+
+    plist_dir.mkdir(parents=True, exist_ok=True)
+
+    import subprocess as _sp
+
+    def _is_loaded() -> bool:
+        result = _sp.run(
+            ["launchctl", "print", "gui/{}/{}".format(os.getuid(), label)],
+            capture_output=True, text=True,
+        )
+        return result.returncode == 0
+
+    if plist_path.exists() and plist_path.read_text(encoding="utf-8") == plist_content and _is_loaded():
+        return True, "Dashboard daemon: ya instalado"
+
+    plist_path.write_text(plist_content, encoding="utf-8")
+
+    _sp.run(
+        ["launchctl", "bootout", "gui/{}/{}".format(os.getuid(), label)],
+        capture_output=True,
+    )
+    result = _sp.run(
+        ["launchctl", "bootstrap", "gui/{}".format(os.getuid()), str(plist_path)],
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        _sp.run(["launchctl", "unload", str(plist_path)], capture_output=True)
+        _sp.run(["launchctl", "load", str(plist_path)], capture_output=True)
+
+    return True, "Dashboard daemon: instalado (http://127.0.0.1:8420, KeepAlive)"
+
+
 # ── Prompt genérico de Sopor Plenus ──────────────────────────────────
 # Se usa tanto para el SKILL.md de Claude Code como para el
 # automation.toml de Codex. Sin datos personales del usuario.
@@ -787,6 +892,7 @@ _TOOLS = [
     ("Codex", _setup_codex),
     ("Sopor", _setup_sopor),
     ("LaunchAgent", _setup_launchagent),
+    ("Dashboard daemon", _setup_dashboard_daemon),
 ]
 
 

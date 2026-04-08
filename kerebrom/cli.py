@@ -175,28 +175,32 @@ def _fmt_num(n: int) -> str:
 
 def _print_stats_report(store: Any, args: Any, summary: Dict[str, Any]) -> None:
     """Imprime un reporte legible de estadísticas de tokens."""
+    def _served(period):
+        return period.get("served", period.get("saved", 0))
+
     total = summary["total"]
-    last_hour = summary.get("last_hour", {"ops": 0, "saved": 0})
-    last_24h = summary.get("last_24h", {"ops": 0, "saved": 0})
-    last_7d = summary.get("last_7d", {"ops": 0, "saved": 0})
-    last_30d = summary.get("last_30d", {"ops": 0, "saved": 0})
+    last_hour = summary.get("last_hour", {"ops": 0, "served": 0})
+    last_24h = summary.get("last_24h", {"ops": 0, "served": 0})
+    last_7d = summary.get("last_7d", {"ops": 0, "served": 0})
+    last_30d = summary.get("last_30d", {"ops": 0, "served": 0})
+    total_served = total.get("tokens_served", total.get("tokens_saved_estimate", 0))
 
     print()
-    print("═══ KEREBROM — ESTADÍSTICAS DE AHORRO DE TOKENS ═══")
+    print("═══ KEREBROM — TOKENS DE CONTEXTO SERVIDOS ═══")
     print()
     print("  Operaciones totales:     {}".format(_fmt_num(total["operations"])))
-    print("  Tokens devueltos (out):  {}".format(_fmt_num(total["tokens_output"])))
+    print("  Tokens de input:         {}".format(_fmt_num(total["tokens_input"])))
     print()
-    print("  ┌─ AHORRO ESTIMADO (rolling) ─────────────┐")
-    print("  │  Total:         {:>10} tokens          │".format(_fmt_num(total["tokens_saved_estimate"])))
-    print("  │  Últimos 30d:   {:>10} tokens  ({} ops)".format(_fmt_num(last_30d["saved"]), last_30d["ops"]))
-    print("  │  Últimos 7d:    {:>10} tokens  ({} ops)".format(_fmt_num(last_7d["saved"]), last_7d["ops"]))
-    print("  │  Últimas 24h:   {:>10} tokens  ({} ops)".format(_fmt_num(last_24h["saved"]), last_24h["ops"]))
-    print("  │  Última hora:   {:>10} tokens  ({} ops)".format(_fmt_num(last_hour["saved"]), last_hour["ops"]))
+    print("  ┌─ CONTEXTO SERVIDO AL MODELO (rolling) ──┐")
+    print("  │  Total:         {:>10} tokens          │".format(_fmt_num(total_served)))
+    print("  │  Últimos 30d:   {:>10} tokens  ({} ops)".format(_fmt_num(_served(last_30d)), last_30d["ops"]))
+    print("  │  Últimos 7d:    {:>10} tokens  ({} ops)".format(_fmt_num(_served(last_7d)), last_7d["ops"]))
+    print("  │  Últimas 24h:   {:>10} tokens  ({} ops)".format(_fmt_num(_served(last_24h)), last_24h["ops"]))
+    print("  │  Última hora:   {:>10} tokens  ({} ops)".format(_fmt_num(_served(last_hour)), last_hour["ops"]))
     print("  └──────────────────────────────────────────┘")
     print()
-    print("  ⚠ Estimación conservadora. Ventanas rolling")
-    print("     hacia atrás desde este momento.")
+    print("  Medición honesta: tokens reales inyectados")
+    print("  al modelo. Sin multiplicadores inventados.")
 
     if args.by_operation:
         print()
