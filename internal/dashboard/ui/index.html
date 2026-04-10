@@ -676,41 +676,19 @@ body {
       </div>
     </div>
 
-    <div class="stats-row">
-      <div class="stats-panel">
-        <div class="stats-panel-title">Por operación</div>
-        <div class="ops-table" id="ops-table"></div>
+    <!-- IMPACT METRICS: the 3 actually useful measurements -->
+    <div class="stats-row" style="grid-template-columns: 1fr 1fr 1fr;">
+      <div class="stats-panel" id="impact-repetition">
+        <div class="stats-panel-title">Repetición evitada</div>
+        <div style="color:var(--text-dim);font-size:12px;">Cargando...</div>
       </div>
-      <div class="stats-panel">
-        <div class="stats-panel-title">Cómo se mide</div>
-        <div class="formula-box">
-          <div class="formula-row">
-            <span class="op-name">recall</span>
-            <span class="op-mult">=</span>
-            <span class="op-desc">tokens del contenido devuelto al modelo</span>
-          </div>
-          <div class="formula-row">
-            <span class="op-name">context</span>
-            <span class="op-mult">=</span>
-            <span class="op-desc">tokens del paquete de contexto servido</span>
-          </div>
-          <div class="formula-row">
-            <span class="op-name">query</span>
-            <span class="op-mult">=</span>
-            <span class="op-desc">tokens de los resultados filtrados</span>
-          </div>
-          <div class="formula-row">
-            <span class="op-name">remember</span>
-            <span class="op-mult">—</span>
-            <span class="op-desc">no sirve contexto, solo persiste</span>
-          </div>
-          <div class="formula-disclaimer">
-            Medición directa sin multiplicadores. Es el mínimo real que
-            Kerebrom inyectó en tus conversaciones. Sin Kerebrom habrías
-            tenido que introducir estos tokens manualmente o dejar que
-            el modelo reconstruya el contexto (gastando aún más).
-          </div>
-        </div>
+      <div class="stats-panel" id="impact-coverage">
+        <div class="stats-panel-title">Cobertura del grafo</div>
+        <div style="color:var(--text-dim);font-size:12px;">Cargando...</div>
+      </div>
+      <div class="stats-panel" id="impact-lifecycle">
+        <div class="stats-panel-title">Ciclo de vida</div>
+        <div style="color:var(--text-dim);font-size:12px;">Cargando...</div>
       </div>
     </div>
   </div>
@@ -1433,14 +1411,16 @@ function fmtNum(n) {
 
 async function loadStats() {
   try {
-    const [summaryRes, timelineRes, opsRes] = await Promise.all([
+    const [summaryRes, timelineRes, opsRes, impactRes] = await Promise.all([
       fetch('/api/stats/summary').then(r => r.json()),
       fetch('/api/stats/timeline').then(r => r.json()),
       fetch('/api/stats/operations').then(r => r.json()),
+      fetch('/api/stats/impact').then(r => r.json()),
     ]);
     renderStatCards(summaryRes);
     renderTimeline(timelineRes);
     renderOpsTable(opsRes);
+    renderImpactMetrics(impactRes);
     statsLoaded = true;
     // Indicador de ultima actualizacion
     const updated = document.getElementById('live-updated');
@@ -1580,6 +1560,60 @@ function renderOpsTable(ops) {
     '</div>';
   });
   container.innerHTML = html;
+}
+
+function renderImpactMetrics(impact) {
+  if (!impact) return;
+
+  // 1. Repetition
+  const rep = impact.repetition || {};
+  const repEl = document.getElementById('impact-repetition');
+  const hitPct = Math.round((rep.hit_rate || 0) * 100);
+  const hitColor = hitPct >= 70 ? '#10b981' : hitPct >= 40 ? '#f59e0b' : '#ef4444';
+  repEl.innerHTML =
+    '<div class="stats-panel-title">Repetición evitada</div>' +
+    '<div style="font-size:36px;font-weight:700;color:' + hitColor + ';margin:12px 0">' + hitPct + '%</div>' +
+    '<div style="font-size:12px;color:var(--text-muted);line-height:1.6">' +
+      '<strong>' + (rep.high_confidence || 0) + '</strong> de ' + (rep.total_recalls || 0) + ' consultas devolvieron contexto útil.<br>' +
+      'Cada una es información que no tuviste que re-explicar.' +
+    '</div>';
+
+  // 2. Coverage
+  const cov = impact.coverage || {};
+  const covPct = Math.round(cov.coverage_percent || 0);
+  const covColor = covPct >= 80 ? '#10b981' : covPct >= 50 ? '#f59e0b' : '#ef4444';
+  const covEl = document.getElementById('impact-coverage');
+  covEl.innerHTML =
+    '<div class="stats-panel-title">Cobertura del grafo</div>' +
+    '<div style="font-size:36px;font-weight:700;color:' + covColor + ';margin:12px 0">' + (cov.total_entities || 0) + '</div>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:-8px;margin-bottom:8px">entidades conocidas</div>' +
+    '<div style="font-size:12px;color:var(--text-muted);line-height:1.6">' +
+      '<strong>' + (cov.connected_memories || 0) + '</strong> con múltiples memorias (bien conectadas)<br>' +
+      '<strong>' + (cov.unresolved_gaps || 0) + '</strong> huecos sin resolver' +
+    '</div>';
+
+  // 3. Lifecycle
+  const lc = impact.lifecycle || {};
+  const useColor = (lc.useful_percent || 0) >= 50 ? '#10b981' : '#f59e0b';
+  const wasteColor = (lc.waste_percent || 0) > 30 ? '#ef4444' : '#10b981';
+  const lcEl = document.getElementById('impact-lifecycle');
+  lcEl.innerHTML =
+    '<div class="stats-panel-title">Ciclo de vida (episódicas)</div>' +
+    '<div style="display:flex;gap:24px;margin:12px 0">' +
+      '<div style="text-align:center">' +
+        '<div style="font-size:28px;font-weight:700;color:' + useColor + '">' + Math.round(lc.useful_percent || 0) + '%</div>' +
+        '<div style="font-size:10px;color:var(--text-dim)">consultadas</div>' +
+      '</div>' +
+      '<div style="text-align:center">' +
+        '<div style="font-size:28px;font-weight:700;color:' + wasteColor + '">' + Math.round(lc.waste_percent || 0) + '%</div>' +
+        '<div style="font-size:10px;color:var(--text-dim)">desperdicio</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="font-size:12px;color:var(--text-muted);line-height:1.6">' +
+      '<strong>' + (lc.total_episodic || 0) + '</strong> episódicas total · ' +
+      '<strong>' + (lc.consolidated || 0) + '</strong> consolidadas · ' +
+      '<strong>' + (lc.zombified || 0) + '</strong> decayeron' +
+    '</div>';
 }
 
 load();

@@ -58,8 +58,13 @@ func RegisterRoutes(mux *http.ServeMux, s *store.Store, project string) {
 	})
 
 	mux.HandleFunc("/api/stats/timeline", func(w http.ResponseWriter, r *http.Request) {
-		// Return empty timeline for now (token tracker records via MCP).
 		writeJSONDash(w, []any{}, nil)
+	})
+
+	// Impact metrics: the 3 actually useful metrics.
+	mux.HandleFunc("/api/stats/impact", func(w http.ResponseWriter, r *http.Request) {
+		metrics, err := s.BuildImpactMetrics(project)
+		writeJSONDash(w, metrics, err)
 	})
 
 	mux.HandleFunc("/api/stats/operations", func(w http.ResponseWriter, r *http.Request) {
