@@ -37,6 +37,12 @@ var commonWords = map[string]bool{
 	"bien": true, "mal": true, "hay": true, "tiene": true, "hace": true,
 	"solo": true, "donde": true, "cuando": true, "porque": true,
 	"tambien": true, "siempre": true, "nunca": true, "ahora": true,
+	"nombre": true, "legal": true, "pais": true, "idioma": true,
+	"actividad": true, "principal": true, "broker": true, "cuenta": true,
+	"proyecto": true, "actual": true, "anterior": true, "dominio": true,
+	"objetivo": true, "herramientas": true, "resumen": true, "estado": true,
+	"resultado": true, "total": true, "nuevo": true, "viejo": true,
+	"repo": true, "version": true, "nota": true, "contexto": true,
 	// Tech
 	"function": true, "return": true, "import": true, "export": true,
 	"class": true, "interface": true, "struct": true, "type": true,
@@ -72,8 +78,37 @@ func CanonicalizeEntity(name string) string {
 }
 
 // InferEntityType guesses the type based on heuristics.
+// techWords are terms that should NEVER be classified as person.
+var techWords = map[string]bool{
+	"go": true, "python": true, "rust": true, "java": true, "api": true,
+	"sdk": true, "cli": true, "sql": true, "http": true, "mcp": true,
+	"json": true, "html": true, "css": true, "git": true, "npm": true,
+	"docker": true, "linux": true, "mac": true, "windows": true,
+	"trading": true, "strategy": true, "backtest": true, "profit": true,
+	"loss": true, "sharpe": true, "drawdown": true, "equity": true,
+	"bitcoin": true, "btc": true, "eth": true, "crypto": true,
+	"bollinger": true, "macd": true, "rsi": true, "ema": true, "sma": true,
+	"fibonacci": true, "donchian": true, "volume": true, "price": true,
+	"code": true, "desktop": true, "server": true, "client": true,
+	"dashboard": true, "database": true, "memory": true, "cache": true,
+	"test": true, "debug": true, "deploy": true, "build": true,
+	"config": true, "setup": true, "install": true, "update": true,
+	"no": true, "si": true, "ok": true, "yes": true, "not": true,
+	"new": true, "old": true, "top": true, "best": true, "next": true,
+	"total": true, "result": true, "resumen": true, "repo": true,
+	"railway": true, "cloudflare": true, "vercel": true, "heroku": true,
+	"sqlite": true, "postgresql": true, "redis": true, "kafka": true,
+	"es": true, "en": true, "de": true, "la": true, "el": true,
+}
+
 func InferEntityType(name string) string {
 	lower := strings.ToLower(name)
+
+	// Single-word tech terms → always concept.
+	if techWords[lower] {
+		return "concept"
+	}
+
 	// Location indicators
 	locations := []string{"city", "country", "state", "province", "town",
 		"ciudad", "pais", "estado", "guatemala", "mexico", "colombia",
@@ -87,13 +122,21 @@ func InferEntityType(name string) string {
 	// Organization indicators
 	orgs := []string{"inc", "corp", "ltd", "llc", "company", "foundation",
 		"university", "institute", "google", "microsoft", "anthropic",
-		"openai", "github", "apple", "amazon", "meta"}
+		"openai", "github", "apple", "amazon", "meta",
+		"quantfury", "binance", "codex", "claude"}
 	for _, org := range orgs {
 		if strings.Contains(lower, org) {
 			return "organization"
 		}
 	}
+	// Multi-word with tech terms → concept.
+	for _, w := range strings.Fields(lower) {
+		if techWords[w] {
+			return "concept"
+		}
+	}
 	// Default: if starts with capital and is short, likely a person.
+	// But only if ALL words look like proper names (no numbers, no special chars).
 	words := strings.Fields(name)
 	if len(words) <= 3 && len(words) >= 1 {
 		allCapitalized := true
