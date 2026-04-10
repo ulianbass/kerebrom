@@ -1411,18 +1411,15 @@ function fmtNum(n) {
 
 async function loadStats() {
   try {
-    const [summaryRes, timelineRes, opsRes, impactRes] = await Promise.all([
+    const [summaryRes, timelineRes, opsRes] = await Promise.all([
       fetch('/api/stats/summary').then(r => r.json()),
       fetch('/api/stats/timeline').then(r => r.json()),
       fetch('/api/stats/operations').then(r => r.json()),
-      fetch('/api/stats/impact').then(r => r.json()),
     ]);
     renderStatCards(summaryRes);
     renderTimeline(timelineRes);
     renderOpsTable(opsRes);
-    renderImpactMetrics(impactRes);
     statsLoaded = true;
-    // Indicador de ultima actualizacion
     const updated = document.getElementById('live-updated');
     if (updated) {
       const now = new Date();
@@ -1430,6 +1427,13 @@ async function loadStats() {
     }
   } catch (e) {
     console.error('Error cargando stats:', e);
+  }
+  // Impact metrics loaded independently (never blocks the rest).
+  try {
+    const impactRes = await fetch('/api/stats/impact').then(r => r.json());
+    renderImpactMetrics(impactRes);
+  } catch (e) {
+    console.error('Error cargando impact:', e);
   }
 }
 
