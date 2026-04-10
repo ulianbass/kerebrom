@@ -43,6 +43,16 @@ var commonWords = map[string]bool{
 	"objetivo": true, "herramientas": true, "resumen": true, "estado": true,
 	"resultado": true, "total": true, "nuevo": true, "viejo": true,
 	"repo": true, "version": true, "nota": true, "contexto": true,
+	// WWWL format + common words that slip through
+	"learned": true, "date": true,
+	"personal": true, "long": true, "only": true, "once": true,
+	"prefiero": true, "tengo": true, "trabajo": true,
+	"binario": true, "motor": true, "regla": true, "meta": true,
+	"ya": true, "uso": true, "estrategia": true,
+	"disciplina": true, "fase": true, "pipeline": true, "fundamento": true,
+	"fondos": true, "fuente": true, "premium": true, "live": true,
+	"marca": true, "publica": true, "handoff": true, "completado": true,
+	"aprobada": true, "descartadas": true, "rechazados": true,
 	// Tech
 	"function": true, "return": true, "import": true, "export": true,
 	"class": true, "interface": true, "struct": true, "type": true,
@@ -99,6 +109,11 @@ var techWords = map[string]bool{
 	"railway": true, "cloudflare": true, "vercel": true, "heroku": true,
 	"sqlite": true, "postgresql": true, "redis": true, "kafka": true,
 	"es": true, "en": true, "de": true, "la": true, "el": true,
+	// Project names and trading terms (not people)
+	"falage": true, "quamtos": true, "kerebrom": true, "alejandria": true,
+	"eois": true, "fre": true, "ibs": true, "orb": true,
+	"databento": true, "wyckoff": true, "ict": true,
+	"breakthrough": true, "estrategia": true,
 }
 
 func InferEntityType(name string) string {

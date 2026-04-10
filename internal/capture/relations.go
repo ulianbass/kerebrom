@@ -18,10 +18,12 @@ type relationPattern struct {
 }
 
 var relationPatterns = []relationPattern{
-	// Name
+	// Name (first person + third person + WWWL format)
 	{"name", regexp.MustCompile(`(?i)(?:me llamo|my name is|i'?m|soy)\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)`), 0.95, "person"},
-	// Location
+	{"name", regexp.MustCompile(`(?i)(?:nombre[:\s]+|name[:\s]+)([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)`), 0.90, "person"},
+	// Location (first person + third person + WWWL)
 	{"lives_in", regexp.MustCompile(`(?i)(?:vivo en|i live in|resido en)\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)`), 0.92, "location"},
+	{"lives_in", regexp.MustCompile(`(?i)(?:de |from )(Guatemala|Mexico|Colombia|Argentina|España|Peru|Chile|Ecuador|Bolivia)`), 0.90, "location"},
 	{"from", regexp.MustCompile(`(?i)(?:soy de|i'?m from|vengo de)\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)`), 0.85, "location"},
 	// Work
 	{"works_at", regexp.MustCompile(`(?i)(?:trabajo en|work (?:at|for)|i work at)\s+([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]+)*)`), 0.90, "organization"},
