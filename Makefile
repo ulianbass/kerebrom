@@ -4,6 +4,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 build:
 	go build -ldflags="-s -w -X main.version=$(VERSION)" -o bin/kerebrom ./cmd/kerebrom
+	@mkdir -p ~/.local/bin && cp bin/kerebrom ~/.local/bin/kerebrom
 
 build-onnx:
 	go build -tags onnx -ldflags="-s -w -X main.version=$(VERSION)" -o bin/kerebrom-onnx ./cmd/kerebrom
