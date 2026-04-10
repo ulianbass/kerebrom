@@ -312,17 +312,31 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 	return mcp.NewToolResultText(string(b)), nil
 }
 
-// serverInstructions — short and directive, modeled after Engram.
-// These are sent via WithInstructions() in the MCP initialize response.
-const serverInstructions = `Kerebrom provides persistent memory that survives across sessions.
+// serverInstructions — aggressive proactive behavior.
+// More directive than Engram: evaluate EVERY message, not just decisions.
+const serverInstructions = `Kerebrom provides persistent memory that survives across sessions and is shared across all AI tools.
 
 CORE TOOLS (always available — use without asking):
-  recall — search memories. ALWAYS call BEFORE answering any question about the user, projects, or history.
-  remember — save decisions, bugs, discoveries, preferences PROACTIVELY (do not wait to be asked)
-  context — get facts + relevant memories (call at session start)
+  recall — search memories
+  remember — save new information
+  context — load facts + memories at session start
   entities — list known people, projects, concepts
-  facts — list semantic relations (who uses what, who lives where)
+  facts — list semantic relations
 
-PROACTIVE SAVE RULE: Call remember immediately after ANY decision, bug fix, discovery, or preference — not just when asked.
+MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-PROACTIVE RECALL RULE: Call recall BEFORE responding to ANY question where prior context could help. If unsure, call recall anyway.`
+1. RECALL FIRST: Before answering ANY question, call recall with a relevant query. Do this even if you think you know the answer. The user expects you to check memory first.
+
+2. SAVE ALWAYS: After EVERY user message, evaluate if it contains new information worth persisting. Save if you detect:
+   - Personal facts (name, location, preferences, pets, family, work)
+   - Decisions or choices made
+   - Technical preferences or stack changes
+   - Project status updates
+   - Corrections to previous information
+   - Opinions, likes, dislikes
+   - Any fact the user would expect you to know next time
+   If in doubt, save it. Too many memories is better than forgetting.
+
+3. CONTEXT AT START: On the first message of a conversation, call context to load prior knowledge.
+
+Use kind="core" for identity/preferences. Use kind="episodic" for events. Use kind="semantic" for facts.`
