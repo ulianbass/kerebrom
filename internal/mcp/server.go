@@ -19,6 +19,7 @@ func NewServer(s *store.Store, project string) *server.MCPServer {
 		"kerebrom",
 		"2.0.0",
 		server.WithToolCapabilities(true),
+		server.WithInstructions(serverInstructions),
 	)
 
 	// 1. remember
@@ -313,3 +314,42 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 	}
 	return mcp.NewToolResultText(string(b)), nil
 }
+
+// serverInstructions are sent to the client via the MCP protocol on initialize.
+// This is how the AI knows when and how to use Kerebrom — no CLAUDE.md needed.
+const serverInstructions = `You have access to Kerebrom, a persistent memory system that survives across conversations and is shared with other AI tools.
+
+## Core tools (always available)
+- recall — Search memories. ALWAYS call this before answering questions about the user, their projects, preferences, or history.
+- remember — Store new information. Call PROACTIVELY after decisions, bug fixes, discoveries, preferences, or any important context.
+- context — Load a full context bundle (facts + memories) at the start of a conversation.
+- forget — Invalidate outdated or incorrect memories.
+- entities — List known people, projects, concepts.
+- facts — List semantic relations (who → relation → what).
+
+## When to use recall
+ALWAYS call recall BEFORE responding to:
+- "Who am I?", "What's my name?", identity questions
+- Questions about projects, preferences, or past decisions
+- Technical questions about the user's stack or architecture
+- Any question where prior context would improve the answer
+
+If recall returns nothing relevant, say so honestly. Never invent information.
+
+## When to use remember
+Call remember IMMEDIATELY after:
+- Design or architecture decisions (what and WHY)
+- User preferences or corrections
+- Bug fixes (problem + root cause + fix)
+- Project state changes (started, completed, blocked)
+- Technical discoveries or learnings
+- Any information that should persist across conversations
+
+Use kind="core" for identity/preferences (never decays).
+Use kind="episodic" for events and work sessions (default).
+Use kind="semantic" for technical facts.
+
+## Preferences
+- Respond in the user's language
+- Be direct and concise
+`
