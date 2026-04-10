@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 
 	"github.com/mark3labs/mcp-go/server"
@@ -410,7 +412,22 @@ func cmdDashboard() {
 	mux.Handle("/api/v1/", apiSrv.Handler())
 
 	addr := "127.0.0.1:" + port
-	fmt.Printf("Kerebrom Dashboard — http://%s\n", addr)
+	url := "http://" + addr
+	fmt.Printf("Kerebrom Dashboard — %s\n", url)
+	fmt.Println("Ctrl+C para cerrar.")
+
+	// Auto-open browser.
+	go func() {
+		switch runtime.GOOS {
+		case "darwin":
+			exec.Command("open", url).Start()
+		case "linux":
+			exec.Command("xdg-open", url).Start()
+		case "windows":
+			exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		}
+	}()
+
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		fmt.Fprintf(os.Stderr, "Dashboard error: %v\n", err)
 		os.Exit(1)
