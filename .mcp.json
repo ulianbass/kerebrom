@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "Kerebrom": {
+      "command": "/Library/Developer/CommandLineTools/usr/bin/python3",
+      "args": ["-m", "kerebrom", "serve", "--db", "/Users/ulianbass/.kerebrom/kerebrom.db"],
+      "env": {
+        "PYTHONPATH": "/Users/ulianbass/Library/Python/3.9/lib/python/site-packages:/Users/ulianbass"
+      }
+    }
+  }
+}

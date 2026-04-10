@@ -1,39 +1,5 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-*.egg
-
-# Virtual environments
-venv/
-.venv/
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Kerebrom runtime
+bin/
 *.db
-*.db-wal
-*.db-shm
-*.lock
-*.kbk
-
-# Local MCP config and reports (contain machine-specific paths)
-.mcp.json
-kerebrom-report.md
-.claude/settings.local.json
-
-# Local launch config (per-machine absolute paths)
-.claude/launch.json
+*.exe
+dist/
+.DS_Store
