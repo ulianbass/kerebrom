@@ -14,6 +14,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/ulianbass/kerebrom/internal/embed"
+	"github.com/ulianbass/kerebrom/internal/tokens"
 )
 
 const DefaultProject = "default"
@@ -99,6 +100,7 @@ type Store struct {
 	path     string
 	embedder embed.Embedder
 	cache    *embed.LRUCache
+	tracker  *tokens.Tracker
 	mu       sync.Mutex
 }
 
@@ -121,6 +123,8 @@ func NewStore(dbPath string, opts ...StoreOption) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	// Initialize token tracker after migration (needs the table).
+	s.tracker = tokens.NewTracker(db)
 	return s, nil
 }
 
@@ -132,8 +136,16 @@ func WithEmbedder(e embed.Embedder) StoreOption {
 	return func(s *Store) { s.embedder = e }
 }
 
-// Close releases the database connection.
-func (s *Store) Close() error { return s.db.Close() }
+// Close flushes pending token events and releases the database connection.
+func (s *Store) Close() error {
+	if s.tracker != nil {
+		s.tracker.Flush()
+	}
+	return s.db.Close()
+}
+
+// Tracker returns the token tracker for external use.
+func (s *Store) Tracker() *tokens.Tracker { return s.tracker }
 
 // DB returns the underlying *sql.DB for use by subsystems (e.g. token tracker).
 func (s *Store) DB() *sql.DB { return s.db }

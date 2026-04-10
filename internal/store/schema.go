@@ -139,7 +139,7 @@ CREATE TABLE IF NOT EXISTS token_stats (
     project        TEXT    NOT NULL DEFAULT 'default',
     tokens_input   INTEGER NOT NULL DEFAULT 0,
     tokens_output  INTEGER NOT NULL DEFAULT 0,
-    tokens_served  INTEGER NOT NULL DEFAULT 0,
+    tokens_saved   INTEGER NOT NULL DEFAULT 0,
     memories_count INTEGER NOT NULL DEFAULT 0,
     metadata       TEXT    NOT NULL DEFAULT '{}'
 );

@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/ulianbass/kerebrom/internal/store"
-	"github.com/ulianbass/kerebrom/internal/tokens"
 )
 
 //go:embed ui/*
@@ -19,8 +18,8 @@ var uiFS embed.FS
 
 // RegisterRoutes mounts the dashboard on the given mux.
 func RegisterRoutes(mux *http.ServeMux, s *store.Store, project string) {
-	// Create token tracker for stats endpoints.
-	tracker := tokens.NewTracker(s.DB())
+	// Use the store's token tracker for stats endpoints.
+	tracker := s.Tracker()
 
 	// Serve embedded UI files.
 	sub, _ := fs.Sub(uiFS, "ui")

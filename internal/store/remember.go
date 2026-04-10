@@ -100,6 +100,11 @@ func (s *Store) Remember(content, project, kind, source string, importance, conf
 		return nil, err
 	}
 
+	// Track tokens (write-only: served = 0).
+	if s.tracker != nil {
+		s.tracker.Track("remember", content, "", project, 1, nil)
+	}
+
 	mem := &MemoryRecord{
 		ID:          id,
 		Project:     project,

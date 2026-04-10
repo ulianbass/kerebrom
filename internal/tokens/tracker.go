@@ -1,5 +1,5 @@
 // Package tokens provides honest token tracking for memory operations.
-// tokens_served = tokens_output for reads, 0 for writes.
+// tokens_saved = tokens_output for reads, 0 for writes.
 package tokens
 
 import (
@@ -45,7 +45,7 @@ var writesOnly = map[string]bool{
 	"forget":   true,
 }
 
-// Track records a single operation. For write-only ops, tokens_served = 0.
+// Track records a single operation. For write-only ops, tokens_saved = 0.
 func (t *Tracker) Track(operation, inputText, outputText, project string, memoriesCount int, metadata map[string]any) {
 	if !t.enabled || t.db == nil {
 		return
@@ -66,22 +66,14 @@ func (t *Tracker) Track(operation, inputText, outputText, project string, memori
 		}
 	}
 
+	// Write immediately (no batching — MCP servers handle 1-2 ops at a time).
 	t.mu.Lock()
-	t.batch = append(t.batch, event{
-		timestamp:     time.Now().UTC().Format(time.RFC3339),
-		operation:     operation,
-		project:       project,
-		tokensInput:   tokIn,
-		tokensOutput:  tokOut,
-		tokensServed:  tokServed,
-		memoriesCount: memoriesCount,
-		metadata:      metaJSON,
-	})
-	// Auto-flush when batch reaches 50.
-	if len(t.batch) >= 50 {
-		t.flushLocked()
-	}
-	t.mu.Unlock()
+	defer t.mu.Unlock()
+	t.db.Exec(`INSERT INTO token_stats
+		(timestamp, operation, project, tokens_input, tokens_output, tokens_saved, memories_count, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		time.Now().UTC().Format(time.RFC3339), operation, project,
+		tokIn, tokOut, tokServed, memoriesCount, metaJSON)
 }
 
 // Flush writes pending events to the database.
@@ -100,7 +92,7 @@ func (t *Tracker) flushLocked() {
 		return
 	}
 	stmt, err := tx.Prepare(`INSERT INTO token_stats
-		(timestamp, operation, project, tokens_input, tokens_output, tokens_served, memories_count, metadata)
+		(timestamp, operation, project, tokens_input, tokens_output, tokens_saved, memories_count, metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		tx.Rollback()
@@ -117,7 +109,7 @@ func (t *Tracker) flushLocked() {
 // TokenSummary contains aggregated stats.
 type TokenSummary struct {
 	TotalOps     int            `json:"total_ops"`
-	TokensServed int            `json:"tokens_served"`
+	TokensServed int            `json:"tokens_saved"`
 	TokensInput  int            `json:"tokens_input"`
 	Periods      map[string]Period `json:"periods"` // last_hour, last_24h, last_7d, last_30d
 }
@@ -145,7 +137,7 @@ func (t *Tracker) Summary(project string) (*TokenSummary, error) {
 	}
 
 	// Total.
-	row := t.db.QueryRow("SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_served),0), COALESCE(SUM(tokens_input),0) FROM token_stats "+projectFilter, args...)
+	row := t.db.QueryRow("SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_saved),0), COALESCE(SUM(tokens_input),0) FROM token_stats "+projectFilter, args...)
 	row.Scan(&s.TotalOps, &s.TokensServed, &s.TokensInput)
 
 	// Rolling windows.
@@ -157,7 +149,7 @@ func (t *Tracker) Summary(project string) (*TokenSummary, error) {
 	}
 	for name, dur := range windows {
 		cutoff := time.Now().UTC().Add(-dur).Format(time.RFC3339)
-		q := "SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_served),0) FROM token_stats WHERE timestamp >= ?"
+		q := "SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_saved),0) FROM token_stats WHERE timestamp >= ?"
 		qArgs := []any{cutoff}
 		if project != "" {
 			q += " AND project = ?"

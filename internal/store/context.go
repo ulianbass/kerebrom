@@ -1,5 +1,7 @@
 package store
 
+import "encoding/json"
+
 // ContextResult is the progressive disclosure response.
 type ContextResult struct {
 	Query    string        `json:"query"`
@@ -81,6 +83,12 @@ func (s *Store) BuildContext(query, project string, limit, layer int) (*ContextR
 	}
 	if result.Memories == nil {
 		result.Memories = []ContextItem{}
+	}
+
+	// Track tokens (FIX P0: only context tracks, not recall internally).
+	if s.tracker != nil {
+		outputBytes, _ := json.Marshal(result)
+		s.tracker.Track("context", query, string(outputBytes), project, len(result.Memories), map[string]any{"layer": layer})
 	}
 
 	return result, nil

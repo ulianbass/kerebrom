@@ -221,6 +221,17 @@ func (s *Store) Recall(query, project string, opts RecallOptions) ([]*MemoryReco
 	if len(memories) > opts.Limit {
 		memories = memories[:opts.Limit]
 	}
+
+	// Track tokens (read: served = output content).
+	if s.tracker != nil && opts.Touch {
+		var outputBuilder strings.Builder
+		for _, m := range memories {
+			outputBuilder.WriteString(m.Content)
+			outputBuilder.WriteString("\n")
+		}
+		s.tracker.Track("recall", query, outputBuilder.String(), project, len(memories), nil)
+	}
+
 	return memories, nil
 }
 
