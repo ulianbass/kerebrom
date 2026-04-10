@@ -336,17 +336,43 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
 3. CONTEXT AT START: On the first message of a conversation, call context.
 
-HOW TO SAVE — distill facts, never dump conversation:
-  GOOD: "Objetivo financiero Falage: $3,000-$5,000 USD mensuales"
-  BAD:  "El usuario dijo que quiere que su sistema genere entre 3000 y 5000 dolares"
-  GOOD: "Preferencia: tema negro para Quamtos v2"
-  BAD:  "Yo puse blanco pero al usuario no le gusta el blanco porque prefiere negro"
+MEMORY FORMAT — every memory MUST follow this structure:
+
+  [PROJECT] What: concise fact or decision
+  Why: why this matters or what motivated it
+  Where: project, file, system, or area affected
+  Learned: what to remember for next time
+  Date: YYYY-MM-DD
+
+Examples:
+
+  "[PERSONAL] What: Ulian Bass (Pedro Julian Arribas Monzon), Guatemala
+  Why: core identity — always use 'Ulian', español neutro, never Argentine voseo
+  Where: all interactions
+  Learned: address him as Ulian, respond in neutral Spanish
+  Date: 2026-04-10"
+
+  "[FALAGE] What: objetivo financiero es $3,000-$5,000 USD mensuales con trading sistematico
+  Why: define the project scope — NOT manual trading, this is quantitative research
+  Where: Proyecto Falage, capital inicial $5,000
+  Learned: all strategies must be validated with real costs (4bps) before approval
+  Date: 2026-04-04"
+
+  "[QUAMTOS] What: user prefers dark/black theme for the trading UI
+  Why: explicit preference — he rejected a white theme
+  Where: Quamtos v2 frontend (app.quamtos.com)
+  Learned: always use dark theme, full-width layout, no side margins
+  Date: 2026-04-10"
 
 Rules:
-  - Save the FACT, not the conversation
-  - One fact per remember call (not a paragraph with everything)
-  - Include project/context: "Falage: ...", "Quamtos: ...", "Personal: ..."
-  - Preferences → kind="core" (never decay)
-  - Events/status → kind="episodic"
+  - What = the fact. Start with [PROJECT] tag. One sentence.
+  - Why = motivation or importance. One sentence.
+  - Where = scope (project, file, area). One line.
+  - Learned = actionable takeaway for future sessions. One sentence.
+  - Date = actual date (YYYY-MM-DD), never "today" or "recently"
+  - One fact per remember call. Multiple facts = multiple calls.
+  - Save the DISTILLED CONCLUSION, never the raw conversation.
+  - Preferences/identity → kind="core"
+  - Events/sessions → kind="episodic"
   - Technical facts → kind="semantic"
-  - Never save: greetings, confirmations, "ok", "listo", code output`
+  - Never save: greetings, "ok", "listo", code output, confirmations`
