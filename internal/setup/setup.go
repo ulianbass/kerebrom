@@ -1,4 +1,8 @@
 // Package setup auto-configures AI tools (Claude Code, Codex, etc.) to use Kerebrom.
+//
+// Philosophy (same as Engram): ONLY install the MCP server entry.
+// Do NOT modify CLAUDE.md, settings.json, hooks, or any other native app files.
+// The MCP server provides its own instructions via the protocol.
 package setup
 
 import (
@@ -27,6 +31,7 @@ func Run(dbPath, binaryPath string) []Result {
 	return results
 }
 
+// setupClaudeCode ONLY writes the MCP config file. Nothing else.
 func setupClaudeCode(dbPath, binPath string) Result {
 	home, _ := os.UserHomeDir()
 	claudeDir := filepath.Join(home, ".claude")
@@ -34,7 +39,6 @@ func setupClaudeCode(dbPath, binPath string) Result {
 		return Result{"Claude Code", false, "~/.claude/ not found"}
 	}
 
-	// Write MCP config.
 	mcpDir := filepath.Join(claudeDir, "mcp")
 	os.MkdirAll(mcpDir, 0755)
 	mcpPath := filepath.Join(mcpDir, "kerebrom.json")
@@ -48,35 +52,10 @@ func setupClaudeCode(dbPath, binPath string) Result {
 		return Result{"Claude Code", false, fmt.Sprintf("write MCP config: %v", err)}
 	}
 
-	// Update settings.json to allow kerebrom tools.
-	settingsPath := filepath.Join(claudeDir, "settings.json")
-	settings := map[string]any{}
-	if b, err := os.ReadFile(settingsPath); err == nil {
-		json.Unmarshal(b, &settings)
-	}
-	// Add to permissions allowlist.
-	perms, _ := settings["permissions"].(map[string]any)
-	if perms == nil {
-		perms = map[string]any{}
-	}
-	allow, _ := perms["allow"].([]any)
-	hasKerebrom := false
-	for _, a := range allow {
-		if s, ok := a.(string); ok && strings.Contains(s, "Kerebrom") {
-			hasKerebrom = true
-		}
-	}
-	if !hasKerebrom {
-		allow = append(allow, "mcp__Kerebrom__*")
-		perms["allow"] = allow
-		settings["permissions"] = perms
-		b, _ := json.MarshalIndent(settings, "", "  ")
-		os.WriteFile(settingsPath, b, 0644)
-	}
-
-	return Result{"Claude Code", true, "MCP config + settings updated"}
+	return Result{"Claude Code", true, "MCP config installed"}
 }
 
+// setupClaudeDesktop ONLY adds mcpServers entry. Does not touch preferences.
 func setupClaudeDesktop(dbPath, binPath string) Result {
 	home, _ := os.UserHomeDir()
 	var configPath string
@@ -90,7 +69,7 @@ func setupClaudeDesktop(dbPath, binPath string) Result {
 	}
 
 	if _, err := os.Stat(filepath.Dir(configPath)); os.IsNotExist(err) {
-		return Result{"Claude Desktop", false, "Claude Desktop config dir not found"}
+		return Result{"Claude Desktop", false, "config dir not found"}
 	}
 
 	config := map[string]any{}
@@ -114,6 +93,7 @@ func setupClaudeDesktop(dbPath, binPath string) Result {
 	return Result{"Claude Desktop", true, "MCP server configured"}
 }
 
+// setupCodex ONLY adds the MCP server entry to config.toml.
 func setupCodex(dbPath, binPath string) Result {
 	home, _ := os.UserHomeDir()
 	codexDir := filepath.Join(home, ".codex")
@@ -121,14 +101,17 @@ func setupCodex(dbPath, binPath string) Result {
 		return Result{"Codex", false, "~/.codex/ not found"}
 	}
 
-	// Codex uses config.toml — append if not present.
 	configPath := filepath.Join(codexDir, "config.toml")
 	existing, _ := os.ReadFile(configPath)
-	if strings.Contains(string(existing), "kerebrom") {
+
+	// Check if Kerebrom MCP is already configured (not just mentioned in text).
+	if strings.Contains(string(existing), "[mcp_servers.Kerebrom]") ||
+		strings.Contains(string(existing), "[mcp_servers.kerebrom]") {
 		return Result{"Codex", true, "already configured"}
 	}
+
 	entry := fmt.Sprintf(`
-[mcp_servers.kerebrom]
+[mcp_servers.Kerebrom]
 command = %q
 args = ["serve", "--db", %q]
 `, binPath, dbPath)
@@ -143,13 +126,11 @@ args = ["serve", "--db", %q]
 
 // FindBinary returns the absolute path to the kerebrom binary.
 func FindBinary() string {
-	// 1. The current executable.
 	if exe, err := os.Executable(); err == nil {
 		if abs, err := filepath.Abs(exe); err == nil {
 			return abs
 		}
 	}
-	// 2. PATH lookup.
 	if p, err := exec.LookPath("kerebrom"); err == nil {
 		if abs, err := filepath.Abs(p); err == nil {
 			return abs
