@@ -135,6 +135,9 @@ func WithEmbedder(e embed.Embedder) StoreOption {
 // Close releases the database connection.
 func (s *Store) Close() error { return s.db.Close() }
 
+// DB returns the underlying *sql.DB for use by subsystems (e.g. token tracker).
+func (s *Store) DB() *sql.DB { return s.db }
+
 // migrate runs the schema DDL statements, then applies incremental migrations
 // for databases created by the Python version.
 func (s *Store) migrate() error {
