@@ -336,43 +336,21 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
 3. CONTEXT AT START: On the first message of a conversation, call context.
 
-MEMORY FORMAT — every memory MUST follow this structure:
+HOW TO SAVE — write memories as natural, readable facts:
 
-  [PROJECT] What: concise fact or decision
-  Why: why this matters or what motivated it
-  Where: project, file, system, or area affected
-  Learned: what to remember for next time
-  Date: YYYY-MM-DD
+  GOOD: "Ulian Bass, de Guatemala. Prefiere español neutro, nunca voseo argentino."
+  GOOD: "Proyecto Falage: objetivo USD 3,000-5,000 mensuales con trading sistematico."
+  GOOD: "Prefiero tema oscuro para Quamtos. Full-width, sin margenes laterales."
+  GOOD: "Tengo tres perros: Mickey, Satoshi y Max."
 
-Examples:
-
-  "[PERSONAL] What: Ulian Bass (Pedro Julian Arribas Monzon), Guatemala
-  Why: core identity — always use 'Ulian', español neutro, never Argentine voseo
-  Where: all interactions
-  Learned: address him as Ulian, respond in neutral Spanish
-  Date: 2026-04-10"
-
-  "[FALAGE] What: objetivo financiero es $3,000-$5,000 USD mensuales con trading sistematico
-  Why: define the project scope — NOT manual trading, this is quantitative research
-  Where: Proyecto Falage, capital inicial $5,000
-  Learned: all strategies must be validated with real costs (4bps) before approval
-  Date: 2026-04-04"
-
-  "[QUAMTOS] What: user prefers dark/black theme for the trading UI
-  Why: explicit preference — he rejected a white theme
-  Where: Quamtos v2 frontend (app.quamtos.com)
-  Learned: always use dark theme, full-width layout, no side margins
-  Date: 2026-04-10"
+  BAD: "[PERSONAL] What: Ulian Bass. Why: identity. Where: all. Learned: use Ulian."
+  BAD: "El usuario dijo que no le gusta el blanco porque yo puse blanco..."
 
 Rules:
-  - What = the fact. Start with [PROJECT] tag. One sentence.
-  - Why = motivation or importance. One sentence.
-  - Where = scope (project, file, area). One line.
-  - Learned = actionable takeaway for future sessions. One sentence.
-  - Date = actual date (YYYY-MM-DD), never "today" or "recently"
-  - One fact per remember call. Multiple facts = multiple calls.
-  - Save the DISTILLED CONCLUSION, never the raw conversation.
-  - Preferences/identity → kind="core"
-  - Events/sessions → kind="episodic"
-  - Technical facts → kind="semantic"
-  - Never save: greetings, "ok", "listo", code output, confirmations`
+  - Write as if explaining to a colleague. Natural language, first person when possible.
+  - Start with a clear title/topic — not a template tag.
+  - One fact per remember call.
+  - Use kind="core" for identity and preferences (never decay).
+  - Use kind="episodic" for events and sessions.
+  - Use kind="semantic" for technical facts and decisions.
+  - Never save: greetings, "ok", "listo", code output, confirmations.`
