@@ -31,7 +31,18 @@ func Run(dbPath, binaryPath string) []Result {
 	return results
 }
 
-// setupClaudeCode ONLY writes the MCP config file. Nothing else.
+// Tools that should be auto-approved (same approach as Engram).
+var autoApproveTools = []string{
+	"mcp__Kerebrom__recall",
+	"mcp__Kerebrom__remember",
+	"mcp__Kerebrom__context",
+	"mcp__Kerebrom__entities",
+	"mcp__Kerebrom__facts",
+	"mcp__Kerebrom__query",
+	"mcp__Kerebrom__gaps",
+}
+
+// setupClaudeCode writes MCP config + adds tools to permissions allowlist.
 func setupClaudeCode(dbPath, binPath string) Result {
 	home, _ := os.UserHomeDir()
 	claudeDir := filepath.Join(home, ".claude")
@@ -39,6 +50,7 @@ func setupClaudeCode(dbPath, binPath string) Result {
 		return Result{"Claude Code", false, "~/.claude/ not found"}
 	}
 
+	// 1. Write MCP config.
 	mcpDir := filepath.Join(claudeDir, "mcp")
 	os.MkdirAll(mcpDir, 0755)
 	mcpPath := filepath.Join(mcpDir, "kerebrom.json")
@@ -52,7 +64,35 @@ func setupClaudeCode(dbPath, binPath string) Result {
 		return Result{"Claude Code", false, fmt.Sprintf("write MCP config: %v", err)}
 	}
 
-	return Result{"Claude Code", true, "MCP config installed"}
+	// 2. Add tools to permissions allowlist (like Engram does).
+	// Without this, Claude asks permission before each tool call.
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	settings := map[string]any{}
+	if b, err := os.ReadFile(settingsPath); err == nil {
+		json.Unmarshal(b, &settings)
+	}
+	perms, _ := settings["permissions"].(map[string]any)
+	if perms == nil {
+		perms = map[string]any{}
+	}
+	allow, _ := perms["allow"].([]any)
+	existing := map[string]bool{}
+	for _, a := range allow {
+		if s, ok := a.(string); ok {
+			existing[s] = true
+		}
+	}
+	for _, tool := range autoApproveTools {
+		if !existing[tool] {
+			allow = append(allow, tool)
+		}
+	}
+	perms["allow"] = allow
+	settings["permissions"] = perms
+	b, _ := json.MarshalIndent(settings, "", "  ")
+	os.WriteFile(settingsPath, b, 0644)
+
+	return Result{"Claude Code", true, "MCP config + permissions installed"}
 }
 
 // setupClaudeDesktop ONLY adds mcpServers entry. Does not touch preferences.

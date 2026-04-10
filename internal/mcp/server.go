@@ -13,6 +13,15 @@ import (
 	"github.com/ulianbass/kerebrom/internal/store"
 )
 
+// Annotation helpers.
+var (
+	readOnly    = mcp.ToolAnnotation{ReadOnlyHint: boolPtr(true), DestructiveHint: boolPtr(false), IdempotentHint: boolPtr(true)}
+	writeOp     = mcp.ToolAnnotation{ReadOnlyHint: boolPtr(false), DestructiveHint: boolPtr(false), IdempotentHint: boolPtr(false)}
+	destructive = mcp.ToolAnnotation{ReadOnlyHint: boolPtr(false), DestructiveHint: boolPtr(true), IdempotentHint: boolPtr(false)}
+)
+
+func boolPtr(b bool) *bool { return &b }
+
 // NewServer creates an MCP server wired to the given Store.
 func NewServer(s *store.Store, project string) *server.MCPServer {
 	srv := server.NewMCPServer(
@@ -22,10 +31,22 @@ func NewServer(s *store.Store, project string) *server.MCPServer {
 		server.WithInstructions(serverInstructions),
 	)
 
-	// 1. remember
+	// === CORE TOOLS (always available, auto-approved) ===
+
+	srv.AddTool(
+		mcp.NewTool("recall",
+			mcp.WithDescription("Search memories. ALWAYS call BEFORE answering questions about the user, their projects, or history."),
+			mcp.WithToolAnnotation(readOnly),
+			mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language search query")),
+			mcp.WithNumber("limit", mcp.Description("Max memories to return (default 5)")),
+		),
+		makeRecallHandler(s, project),
+	)
+
 	srv.AddTool(
 		mcp.NewTool("remember",
-			mcp.WithDescription("Store a new memory. Call proactively after decisions, bug fixes, discoveries."),
+			mcp.WithDescription("Store a new memory. Call PROACTIVELY after decisions, bug fixes, discoveries — do not wait to be asked."),
+			mcp.WithToolAnnotation(writeOp),
 			mcp.WithString("content", mcp.Required(), mcp.Description("The memory content to store")),
 			mcp.WithString("kind", mcp.Description("Memory tier: core, episodic, semantic, procedural"), mcp.Enum("core", "episodic", "semantic", "procedural")),
 			mcp.WithNumber("importance", mcp.Description("Importance score 0-1 (default 0.5)")),
@@ -36,29 +57,10 @@ func NewServer(s *store.Store, project string) *server.MCPServer {
 		makeRememberHandler(s, project),
 	)
 
-	// 2. recall
-	srv.AddTool(
-		mcp.NewTool("recall",
-			mcp.WithDescription("Search memories by semantic + keyword + graph query. Use to retrieve relevant context."),
-			mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language search query")),
-			mcp.WithNumber("limit", mcp.Description("Max memories to return (default 5)")),
-		),
-		makeRecallHandler(s, project),
-	)
-
-	// 3. forget
-	srv.AddTool(
-		mcp.NewTool("forget",
-			mcp.WithDescription("Invalidate a specific memory by ID"),
-			mcp.WithNumber("memory_id", mcp.Required(), mcp.Description("The ID of the memory to invalidate")),
-		),
-		makeForgetHandler(s, project),
-	)
-
-	// 4. context
 	srv.AddTool(
 		mcp.NewTool("context",
-			mcp.WithDescription("Build a rich recall context — returns facts and relevant memories in progressive disclosure."),
+			mcp.WithDescription("Load full context bundle (facts + memories). Call at session start."),
+			mcp.WithToolAnnotation(readOnly),
 			mcp.WithString("query", mcp.Required(), mcp.Description("Natural-language context query")),
 			mcp.WithNumber("limit", mcp.Description("Max memories in context (default 5)")),
 			mcp.WithNumber("layer", mcp.Description("Disclosure layer: 1=compact, 2=summary, 3=full detail")),
@@ -66,28 +68,39 @@ func NewServer(s *store.Store, project string) *server.MCPServer {
 		makeContextHandler(s, project),
 	)
 
-	// 5. entities
 	srv.AddTool(
 		mcp.NewTool("entities",
-			mcp.WithDescription("List known entities in the knowledge graph"),
+			mcp.WithDescription("List known people, projects, concepts in the knowledge graph."),
+			mcp.WithToolAnnotation(readOnly),
 			mcp.WithNumber("limit", mcp.Description("Max entities to return (default 20)")),
 		),
 		makeEntitiesHandler(s, project),
 	)
 
-	// 6. facts
 	srv.AddTool(
 		mcp.NewTool("facts",
-			mcp.WithDescription("List active semantic facts (subject → predicate → object)"),
+			mcp.WithDescription("List semantic relations (who → relation → what)."),
+			mcp.WithToolAnnotation(readOnly),
 			mcp.WithNumber("limit", mcp.Description("Max facts to return (default 20)")),
 		),
 		makeFactsHandler(s, project),
 	)
 
-	// 7. query
+	// === SECONDARY TOOLS ===
+
+	srv.AddTool(
+		mcp.NewTool("forget",
+			mcp.WithDescription("Invalidate a specific memory by ID."),
+			mcp.WithToolAnnotation(destructive),
+			mcp.WithNumber("memory_id", mcp.Required(), mcp.Description("The ID of the memory to invalidate")),
+		),
+		makeForgetHandler(s, project),
+	)
+
 	srv.AddTool(
 		mcp.NewTool("query",
-			mcp.WithDescription("Structured query with filters: kind, tags, importance, dates, metadata"),
+			mcp.WithDescription("Structured query with filters: kind, tags, importance."),
+			mcp.WithToolAnnotation(readOnly),
 			mcp.WithString("kind", mcp.Description("Filter by kind"), mcp.Enum("core", "episodic", "semantic", "procedural")),
 			mcp.WithArray("tags", mcp.Description("Filter by tags"), mcp.WithStringItems()),
 			mcp.WithNumber("importance_min", mcp.Description("Minimum importance (0-1)")),
@@ -97,23 +110,13 @@ func NewServer(s *store.Store, project string) *server.MCPServer {
 		makeQueryHandler(s, project),
 	)
 
-	// 8. gaps
 	srv.AddTool(
 		mcp.NewTool("gaps",
-			mcp.WithDescription("List unresolved references — knowledge gaps in the graph"),
+			mcp.WithDescription("List unresolved knowledge gaps."),
+			mcp.WithToolAnnotation(readOnly),
 			mcp.WithNumber("limit", mcp.Description("Max gaps to return (default 20)")),
 		),
 		makeGapsHandler(s, project),
-	)
-
-	// 9. sopor
-	srv.AddTool(
-		mcp.NewTool("sopor",
-			mcp.WithDescription("Consolidate memories from Claude Code session transcripts"),
-			mcp.WithString("session", mcp.Description("Which transcript: 'latest', 'all', or a session ID")),
-			mcp.WithString("project_path", mcp.Description("Filesystem path of the project")),
-		),
-		makeSoporHandler(s, project),
 	)
 
 	return srv
@@ -245,12 +248,6 @@ func makeGapsHandler(s *store.Store, project string) server.ToolHandlerFunc {
 	}
 }
 
-func makeSoporHandler(s *store.Store, project string) server.ToolHandlerFunc {
-	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Sopor will be fully implemented in Phase 5.
-		return mcp.NewToolResultText("Sopor consolidation: not yet implemented in Go build. Coming in Phase 5."), nil
-	}
-}
 
 // --- Helpers ---
 
@@ -315,41 +312,17 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 	return mcp.NewToolResultText(string(b)), nil
 }
 
-// serverInstructions are sent to the client via the MCP protocol on initialize.
-// This is how the AI knows when and how to use Kerebrom — no CLAUDE.md needed.
-const serverInstructions = `You have access to Kerebrom, a persistent memory system that survives across conversations and is shared with other AI tools.
+// serverInstructions — short and directive, modeled after Engram.
+// These are sent via WithInstructions() in the MCP initialize response.
+const serverInstructions = `Kerebrom provides persistent memory that survives across sessions.
 
-## Core tools (always available)
-- recall — Search memories. ALWAYS call this before answering questions about the user, their projects, preferences, or history.
-- remember — Store new information. Call PROACTIVELY after decisions, bug fixes, discoveries, preferences, or any important context.
-- context — Load a full context bundle (facts + memories) at the start of a conversation.
-- forget — Invalidate outdated or incorrect memories.
-- entities — List known people, projects, concepts.
-- facts — List semantic relations (who → relation → what).
+CORE TOOLS (always available — use without asking):
+  recall — search memories. ALWAYS call BEFORE answering any question about the user, projects, or history.
+  remember — save decisions, bugs, discoveries, preferences PROACTIVELY (do not wait to be asked)
+  context — get facts + relevant memories (call at session start)
+  entities — list known people, projects, concepts
+  facts — list semantic relations (who uses what, who lives where)
 
-## When to use recall
-ALWAYS call recall BEFORE responding to:
-- "Who am I?", "What's my name?", identity questions
-- Questions about projects, preferences, or past decisions
-- Technical questions about the user's stack or architecture
-- Any question where prior context would improve the answer
+PROACTIVE SAVE RULE: Call remember immediately after ANY decision, bug fix, discovery, or preference — not just when asked.
 
-If recall returns nothing relevant, say so honestly. Never invent information.
-
-## When to use remember
-Call remember IMMEDIATELY after:
-- Design or architecture decisions (what and WHY)
-- User preferences or corrections
-- Bug fixes (problem + root cause + fix)
-- Project state changes (started, completed, blocked)
-- Technical discoveries or learnings
-- Any information that should persist across conversations
-
-Use kind="core" for identity/preferences (never decays).
-Use kind="episodic" for events and work sessions (default).
-Use kind="semantic" for technical facts.
-
-## Preferences
-- Respond in the user's language
-- Be direct and concise
-`
+PROACTIVE RECALL RULE: Call recall BEFORE responding to ANY question where prior context could help. If unsure, call recall anyway.`
