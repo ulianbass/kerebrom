@@ -1,0 +1,41 @@
+version: 2
+builds:
+  - id: kerebrom
+    main: ./cmd/kerebrom
+    binary: kerebrom
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+
+brews:
+  - name: kerebrom
+    repository:
+      owner: ulianbass
+      name: homebrew-kerebrom
+    homepage: https://github.com/ulianbass/kerebrom-go
+    description: "AI memory with hybrid search, knowledge graph, and bio-inspired decay"
+    license: Proprietary
+    install: |
+      bin.install "kerebrom"
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
