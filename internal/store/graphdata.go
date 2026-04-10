@@ -163,6 +163,13 @@ func (s *Store) BuildGraphData(project string) (*GraphData, error) {
 		var pred string
 		var conf float64
 		relRows.Scan(&subID, &pred, &objID, &conf)
+		// Only include links where both entities are in the node set.
+		if _, ok := entNames[subID]; !ok {
+			continue
+		}
+		if _, ok := entNames[objID]; !ok {
+			continue
+		}
 		data.Links = append(data.Links, GraphLink{
 			Source: fmt.Sprintf("e_%d", subID),
 			Target: fmt.Sprintf("e_%d", objID),
