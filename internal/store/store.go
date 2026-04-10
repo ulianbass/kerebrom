@@ -135,11 +135,10 @@ func WithEmbedder(e embed.Embedder) StoreOption {
 // Close releases the database connection.
 func (s *Store) Close() error { return s.db.Close() }
 
-// migrate runs the schema DDL statements.
+// migrate runs the schema DDL statements, then applies incremental migrations
+// for databases created by the Python version.
 func (s *Store) migrate() error {
-	// Split by semicolons and execute each statement.
-	// We must handle multi-statement execution carefully because
-	// modernc.org/sqlite may not support ExecMulti well.
+	// Run schema DDL (CREATE IF NOT EXISTS is idempotent).
 	stmts := splitStatements(schema)
 	for _, stmt := range stmts {
 		stmt = strings.TrimSpace(stmt)
@@ -147,13 +146,35 @@ func (s *Store) migrate() error {
 			continue
 		}
 		if _, err := s.db.Exec(stmt); err != nil {
-			// Skip errors from PRAGMA in some modes.
-			if strings.HasPrefix(strings.ToUpper(stmt), "PRAGMA") {
+			// Skip errors from PRAGMA, and from CREATE INDEX on missing columns
+			// (handled by ALTER TABLE below).
+			upper := strings.ToUpper(stmt)
+			if strings.HasPrefix(upper, "PRAGMA") ||
+				strings.Contains(upper, "CREATE INDEX") {
 				continue
 			}
 			return fmt.Errorf("exec %q: %w", truncate(stmt, 80), err)
 		}
 	}
+
+	// Incremental migrations for Python-era databases.
+	// ALTER TABLE ADD COLUMN is idempotent-safe: if column exists, it errors
+	// and we ignore it.
+	alterStmts := []string{
+		`ALTER TABLE memories ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, stmt := range alterStmts {
+		s.db.Exec(stmt) // ignore "duplicate column" errors
+	}
+
+	// Now create indexes that depend on new columns.
+	indexStmts := []string{
+		`CREATE INDEX IF NOT EXISTS idx_memories_content_hash ON memories(project, content_hash)`,
+	}
+	for _, stmt := range indexStmts {
+		s.db.Exec(stmt)
+	}
+
 	return nil
 }
 
