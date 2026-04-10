@@ -106,12 +106,21 @@ func (t *Tracker) flushLocked() {
 	t.batch = t.batch[:0]
 }
 
-// TokenSummary contains aggregated stats.
+// TokenSummary matches the format expected by the dashboard JS.
+// The JS expects: summary.total.operations, summary.total.tokens_served,
+// summary.last_hour.ops, summary.last_hour.served, etc.
 type TokenSummary struct {
-	TotalOps     int            `json:"total_ops"`
-	TokensServed int            `json:"tokens_saved"`
-	TokensInput  int            `json:"tokens_input"`
-	Periods      map[string]Period `json:"periods"` // last_hour, last_24h, last_7d, last_30d
+	Total   TotalPeriod `json:"total"`
+	LastHour  Period    `json:"last_hour"`
+	Last24h   Period    `json:"last_24h"`
+	Last7d    Period    `json:"last_7d"`
+	Last30d   Period    `json:"last_30d"`
+}
+
+type TotalPeriod struct {
+	Operations   int `json:"operations"`
+	TokensServed int `json:"tokens_served"`
+	TokensInput  int `json:"tokens_input"`
 }
 
 // Period is a rolling window aggregate.
@@ -120,11 +129,9 @@ type Period struct {
 	Served int `json:"served"`
 }
 
-// Summary returns aggregated token statistics.
+// Summary returns aggregated token statistics in the format the dashboard JS expects.
 func (t *Tracker) Summary(project string) (*TokenSummary, error) {
-	t.Flush() // ensure all buffered events are written
-
-	s := &TokenSummary{Periods: map[string]Period{}}
+	s := &TokenSummary{}
 	if t.db == nil {
 		return s, nil
 	}
@@ -137,27 +144,29 @@ func (t *Tracker) Summary(project string) (*TokenSummary, error) {
 	}
 
 	// Total.
-	row := t.db.QueryRow("SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_saved),0), COALESCE(SUM(tokens_input),0) FROM token_stats "+projectFilter, args...)
-	row.Scan(&s.TotalOps, &s.TokensServed, &s.TokensInput)
+	t.db.QueryRow("SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_saved),0), COALESCE(SUM(tokens_input),0) FROM token_stats "+projectFilter, args...).
+		Scan(&s.Total.Operations, &s.Total.TokensServed, &s.Total.TokensInput)
 
 	// Rolling windows.
-	windows := map[string]time.Duration{
-		"last_hour": time.Hour,
-		"last_24h":  24 * time.Hour,
-		"last_7d":   7 * 24 * time.Hour,
-		"last_30d":  30 * 24 * time.Hour,
+	type windowDef struct {
+		dur  time.Duration
+		dest *Period
 	}
-	for name, dur := range windows {
-		cutoff := time.Now().UTC().Add(-dur).Format(time.RFC3339)
+	windows := []windowDef{
+		{time.Hour, &s.LastHour},
+		{24 * time.Hour, &s.Last24h},
+		{7 * 24 * time.Hour, &s.Last7d},
+		{30 * 24 * time.Hour, &s.Last30d},
+	}
+	for _, w := range windows {
+		cutoff := time.Now().UTC().Add(-w.dur).Format(time.RFC3339)
 		q := "SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens_saved),0) FROM token_stats WHERE timestamp >= ?"
 		qArgs := []any{cutoff}
 		if project != "" {
 			q += " AND project = ?"
 			qArgs = append(qArgs, project)
 		}
-		var p Period
-		t.db.QueryRow(q, qArgs...).Scan(&p.Ops, &p.Served)
-		s.Periods[name] = p
+		t.db.QueryRow(q, qArgs...).Scan(&w.dest.Ops, &w.dest.Served)
 	}
 
 	return s, nil
