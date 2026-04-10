@@ -72,13 +72,6 @@ func (s *Store) BuildImpactMetrics(project string) (*ImpactMetrics, error) {
 		Scan(&m.Coverage.TotalEntities)
 
 	s.db.QueryRow(`
-		SELECT COUNT(DISTINCT e.id) FROM entities e
-		JOIN memory_entities me ON e.id = me.entity_id
-		WHERE e.project = ?
-		GROUP BY e.id HAVING COUNT(me.memory_id) >= 2`, project).
-		Scan(&m.Coverage.ConnectedMemories)
-	// Fix: the above query returns rows, not a count. Use a subquery.
-	s.db.QueryRow(`
 		SELECT COUNT(*) FROM (
 			SELECT e.id FROM entities e
 			JOIN memory_entities me ON e.id = me.entity_id

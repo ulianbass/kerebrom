@@ -47,9 +47,10 @@ func (s *Store) processEntitiesAndRelations(tx *sql.Tx, memoryID int64, project,
 		if err != nil {
 			continue
 		}
-		tx.Exec(`INSERT OR IGNORE INTO memory_entities (memory_id, entity_id, role) VALUES (?, ?, 'mention')`,
+		// INSERT OR IGNORE: errors are expected duplicates, safe to ignore.
+		_, _ = tx.Exec(`INSERT OR IGNORE INTO memory_entities (memory_id, entity_id, role) VALUES (?, ?, 'mention')`,
 			memoryID, entityID)
-		tx.Exec(`INSERT OR IGNORE INTO entity_references (entity_id, memory_id, direction, created_at) VALUES (?, ?, 'mention', ?)`,
+		_, _ = tx.Exec(`INSERT OR IGNORE INTO entity_references (entity_id, memory_id, direction, created_at) VALUES (?, ?, 'mention', ?)`,
 			entityID, memoryID, ts)
 	}
 

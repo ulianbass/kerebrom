@@ -162,6 +162,8 @@ CREATE TABLE IF NOT EXISTS sync_chunks (
 -- === INDICES ===
 CREATE INDEX IF NOT EXISTS idx_memories_project_valid ON memories(project, invalid_at, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memories_content_hash ON memories(project, content_hash);
+CREATE INDEX IF NOT EXISTS idx_memories_kind ON memories(project, kind);
+CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(project, importance DESC);
 CREATE INDEX IF NOT EXISTS idx_entities_project_name ON entities(project, canonical_name);
 CREATE INDEX IF NOT EXISTS idx_relations_project_predicate ON relations(project, predicate, invalid_at);
 CREATE INDEX IF NOT EXISTS idx_memory_entities_entity ON memory_entities(entity_id, memory_id);
