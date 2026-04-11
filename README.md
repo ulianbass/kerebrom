@@ -7,10 +7,7 @@
 
 Kerebrom gives coding agents a shared local memory without sending your project context to a cloud service. It runs as a single Go binary, stores data in SQLite with FTS5, exposes an MCP server, and installs the strongest available memory workflow for each supported AI client.
 
-```text
-You -> AI client -> Kerebrom MCP server -> Local SQLite + FTS5 store
-                                      -> Recovered project context -> AI client
-```
+![Kerebrom memory flow](docs/assets/kerebrom-memory-flow.svg)
 
 ## Current Line
 
