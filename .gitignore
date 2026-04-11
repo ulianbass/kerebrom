@@ -1,0 +1,16 @@
+.DS_Store
+**/bin/
+dist/
+coverage.out
+**/.gocache/
+**/.gomodcache/
+**/.gopath/
+
+# Local migration material preserved outside the product tree.
+migration-source/
+
+# Future runtime artifacts.
+**/.kerebrom/
+**/*.db
+**/*.db-shm
+**/*.db-wal
