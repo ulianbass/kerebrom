@@ -7,13 +7,9 @@
 
 Kerebrom permite que los agentes de código compartan memoria local sin enviar el contexto del proyecto a un servicio en la nube. Corre como un binario único en Go, guarda datos en SQLite con FTS5, expone un servidor MCP e instala el flujo de memoria más fuerte disponible para cada cliente de IA soportado.
 
-```mermaid
-flowchart LR
-    User["Tú"] --> Agent["Cliente de IA"]
-    Agent --> MCP["Servidor MCP de Kerebrom"]
-    MCP --> Store["SQLite + FTS5 local"]
-    Store --> Context["Contexto recuperado"]
-    Context --> Agent
+```text
+Tú -> Cliente de IA -> Servidor MCP de Kerebrom -> SQLite + FTS5 local
+                                                   -> Contexto recuperado -> Cliente de IA
 ```
 
 ## Línea Actual
