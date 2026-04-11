@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v1.0.0](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.0) · [Historial de ramas](docs/BRANCHES.md)
+[English](README.md) · [Release v1.0.0](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.0) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y otros clientes compatibles con MCP.
@@ -19,8 +19,8 @@ La línea pública activa es `v1`.
 | Línea | Estado | Propósito |
 |---|---:|---|
 | `v1` | actual | Release estable v1.0.0 |
-| `archive/pre-v1-main-2026-04-10` | archivada | Historial público previo al reset v1 |
-| `archive/go-rewrite-2026-04-10` | archivada | Experimento previo de reescritura en Go |
+| `history/pre-v1-main-2026-04-10` | tag | Historial público previo al reset v1 |
+| `history/go-rewrite-2026-04-10` | tag | Experimento previo de reescritura en Go |
 
 Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evolucionar sin reescribir historial.
 
@@ -103,7 +103,7 @@ make build
 
 ## Procedencia
 
-Kerebrom v1 es la línea limpia del producto. Conserva la dirección del producto y la identidad del repositorio público mientras mantiene experimentos anteriores en ramas archivadas. Ver [docs/BRANCHES.md](docs/BRANCHES.md).
+Kerebrom v1 es la línea limpia del producto. Conserva la dirección del producto y la identidad del repositorio público mientras mantiene experimentos anteriores como tags de historial. Ver [docs/BRANCHES.md](docs/BRANCHES.md).
 
 ## Licencia
 
