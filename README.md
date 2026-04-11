@@ -9,15 +9,15 @@ Kerebrom gives coding agents a shared local memory without sending your project 
 
 ![Kerebrom memory flow](docs/assets/kerebrom-memory-flow.svg)
 
-## Current Line
+## Product Line
 
-The active public line is `v1`.
+The active public branch is `v1`. Historical implementation lines are kept as tags, ordered from oldest to newest:
 
 | Line | Status | Purpose |
 |---|---:|---|
-| `v1` | current | Stable v1.0.0 release line |
-| `history/pre-v1-main-2026-04-10` | tag | Previous public history before v1 reset |
+| `history/legacy-main-2026-04-10` | tag | Legacy default-branch history before the v1 reset |
 | `history/go-rewrite-2026-04-10` | tag | Previous Go rewrite experiment |
+| `v1` | current branch | Stable v1.0.0 release line |
 
 Kerebrom v1 lives under `versions/v1/` so future versions can evolve without rewriting history.
 

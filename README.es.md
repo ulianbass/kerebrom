@@ -9,15 +9,15 @@ Kerebrom permite que los agentes de código compartan memoria local sin enviar e
 
 ![Flujo de memoria de Kerebrom](docs/assets/kerebrom-memory-flow.svg)
 
-## Línea Actual
+## Línea Del Producto
 
-La línea pública activa es `v1`.
+La rama pública activa es `v1`. Las líneas históricas se conservan como tags, ordenadas de más antigua a más nueva:
 
 | Línea | Estado | Propósito |
 |---|---:|---|
-| `v1` | actual | Release estable v1.0.0 |
-| `history/pre-v1-main-2026-04-10` | tag | Historial público previo al reset v1 |
+| `history/legacy-main-2026-04-10` | tag | Historial legacy de la rama default antes del reset v1 |
 | `history/go-rewrite-2026-04-10` | tag | Experimento previo de reescritura en Go |
+| `v1` | rama actual | Release estable v1.0.0 |
 
 Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evolucionar sin reescribir historial.
 
