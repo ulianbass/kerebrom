@@ -54,8 +54,12 @@ func TestRunHookUserPromptSubmitEnsuresSessionAndAddsContext(t *testing.T) {
 	if specific["hookEventName"] != "UserPromptSubmit" {
 		t.Fatalf("unexpected hook event name: %#v", specific)
 	}
-	if !strings.Contains(specific["additionalContext"].(string), "Kerebrom reminder") {
+	additionalContext := specific["additionalContext"].(string)
+	if !strings.Contains(additionalContext, "FIRST ACTION REQUIRED") {
 		t.Fatalf("missing additionalContext reminder: %#v", specific)
+	}
+	if !strings.Contains(additionalContext, "Kerebrom Context") {
+		t.Fatalf("missing injected Kerebrom context: %#v", specific)
 	}
 }
 

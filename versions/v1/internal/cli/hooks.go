@@ -127,11 +127,14 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 			return 1
 		}
 	}
-	message := "Kerebrom reminder: if this prompt includes a decision, preference, constraint, bugfix, or durable project fact, save it with mem_save after you handle it. If it may relate to prior work, call mem_context or mem_search before answering."
+	contextText, err := hookContextText(ctx, store, project)
+	if err != nil {
+		fmt.Fprintf(stderr, "load prompt hook context: %v\n", err)
+	}
 	return writeHookJSON(stdout, map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     "UserPromptSubmit",
-			"additionalContext": message,
+			"additionalContext": hookUserPromptAdditionalContext(project, contextText),
 		},
 	})
 }
@@ -223,6 +226,25 @@ func hookContextText(ctx context.Context, store *sqlite.Store, project string) (
 		fmt.Fprintf(&b, "- [%d] %s: %s\n", observation.ID, observation.Title, oneLinePreview(observation.Content, 180))
 	}
 	return b.String(), nil
+}
+
+func hookUserPromptAdditionalContext(project string, contextText string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `## Kerebrom Prompt Memory Protocol
+
+Kerebrom has already stored this user prompt as prompt history for project %q.
+
+FIRST ACTION REQUIRED:
+- Use the Kerebrom context below before answering.
+- If the user references prior work, a project, a bug, a feature, a preference, or a previous decision, call mem_context or mem_search before making assumptions.
+- After handling the prompt, call mem_save for durable decisions, preferences, constraints, bugfixes, architecture notes, config changes, and non-obvious discoveries.
+- Do not save raw transcript as an observation. Distill with What / Why / Where / Learned.
+
+`, project)
+	if strings.TrimSpace(contextText) != "" {
+		b.WriteString(contextText)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func hookProject(payload map[string]any, cwd string) string {
