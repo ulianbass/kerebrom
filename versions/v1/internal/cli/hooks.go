@@ -101,11 +101,22 @@ func runHookSessionStart(ctx context.Context, store *sqlite.Store, payload map[s
 }
 
 func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload map[string]any, stdout io.Writer, stderr io.Writer) int {
-	content := hookString(payload, "prompt", "user_prompt", "message", "text")
+	content := hookString(payload, "prompt", "user_prompt", "userPrompt", "message", "text")
 	sessionID := hookString(payload, "session_id", "sessionId")
 	cwd := hookString(payload, "cwd", "workspace", "project_dir")
 	project := hookProject(payload, cwd)
 	if content != "" {
+		if sessionID != "" {
+			if err := store.StartSession(ctx, sqlite.StartSessionInput{
+				ID:        sessionID,
+				Project:   project,
+				Directory: defaultString(cwd, "."),
+				StartedAt: time.Now().UTC(),
+			}); err != nil {
+				fmt.Fprintf(stderr, "ensure hook session: %v\n", err)
+				return 1
+			}
+		}
 		if _, err := store.SavePrompt(ctx, sqlite.PromptInput{
 			SessionID: sessionID,
 			Content:   content,
@@ -117,7 +128,12 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 		}
 	}
 	message := "Kerebrom reminder: if this prompt includes a decision, preference, constraint, bugfix, or durable project fact, save it with mem_save after you handle it. If it may relate to prior work, call mem_context or mem_search before answering."
-	return writeHookJSON(stdout, map[string]any{"systemMessage": message})
+	return writeHookJSON(stdout, map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":     "UserPromptSubmit",
+			"additionalContext": message,
+		},
+	})
 }
 
 func runHookSubagentStop(ctx context.Context, store *sqlite.Store, payload map[string]any, stdout io.Writer, stderr io.Writer) int {
