@@ -89,6 +89,46 @@ func TestRunHookUserPromptSubmitSupportsCamelCasePrompt(t *testing.T) {
 	}
 }
 
+func TestRunHookUserPromptSubmitSkipsCasualPromptNoise(t *testing.T) {
+	store := newHookTestStore(t)
+	ctx := context.Background()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runHookUserPromptSubmit(ctx, store, map[string]any{
+		"session_id": "claude-session-noise",
+		"project":    "proyecto-kerebrom",
+		"prompt":     "Gracias.",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook failed: code=%d stderr=%q", code, stderr.String())
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &output); err != nil {
+		t.Fatalf("hook output is not JSON: %v output=%q", err, stdout.String())
+	}
+	if len(output) != 0 {
+		t.Fatalf("expected no context injection for casual prompt, got %#v", output)
+	}
+
+	prompts, err := store.ListPrompts(ctx, "proyecto-kerebrom", 5)
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(prompts) != 0 {
+		t.Fatalf("casual prompt should not be stored, got %#v", prompts)
+	}
+	exists, err := store.SessionExists(ctx, "claude-session-noise")
+	if err != nil {
+		t.Fatalf("check session exists: %v", err)
+	}
+	if exists {
+		t.Fatalf("casual prompt should not create a session")
+	}
+}
+
 func TestRunHookUserPromptSubmitIsSilentAfterFirstPrompt(t *testing.T) {
 	store := newHookTestStore(t)
 	ctx := context.Background()

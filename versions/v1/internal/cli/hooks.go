@@ -108,7 +108,7 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 	project := hookProject(payload, cwd)
 	session := sqlite.Session{}
 	firstPrompt := false
-	if content != "" {
+	if isSubstantivePrompt(content) {
 		if sessionID != "" {
 			exists, err := store.SessionExists(ctx, sessionID)
 			if err != nil {
@@ -163,6 +163,26 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 		return writeHookAdditionalContext(stdout, hookUserPromptSaveReminder())
 	}
 	return writeHookJSON(stdout, map[string]any{})
+}
+
+func isSubstantivePrompt(content string) bool {
+	text := strings.TrimSpace(strings.ToLower(content))
+	text = strings.Trim(text, " \t\r\n.!?¡¿,;:")
+	if len([]rune(text)) < 10 {
+		return false
+	}
+	casualOnly := map[string]bool{
+		"gracias":        true,
+		"muchas gracias": true,
+		"thanks":         true,
+		"thank you":      true,
+		"ok":             true,
+		"okay":           true,
+		"listo":          true,
+		"dale":           true,
+		"perfecto":       true,
+	}
+	return !casualOnly[text]
 }
 
 func runHookSubagentStop(ctx context.Context, store *sqlite.Store, payload map[string]any, stdout io.Writer, stderr io.Writer) int {
