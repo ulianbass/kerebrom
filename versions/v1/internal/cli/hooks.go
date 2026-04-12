@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	projectdetect "github.com/ulianbass/kerebrom/internal/project"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 	syncstore "github.com/ulianbass/kerebrom/internal/sync"
 )
@@ -105,17 +106,40 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 	sessionID := hookString(payload, "session_id", "sessionId")
 	cwd := hookString(payload, "cwd", "workspace", "project_dir")
 	project := hookProject(payload, cwd)
+	session := sqlite.Session{}
+	firstPrompt := false
 	if content != "" {
 		if sessionID != "" {
-			if err := store.StartSession(ctx, sqlite.StartSessionInput{
-				ID:        sessionID,
-				Project:   project,
-				Directory: defaultString(cwd, "."),
-				StartedAt: time.Now().UTC(),
-			}); err != nil {
-				fmt.Fprintf(stderr, "ensure hook session: %v\n", err)
+			exists, err := store.SessionExists(ctx, sessionID)
+			if err != nil {
+				fmt.Fprintf(stderr, "check hook session: %v\n", err)
 				return 1
 			}
+			if !exists {
+				if err := store.StartSession(ctx, sqlite.StartSessionInput{
+					ID:        sessionID,
+					Project:   project,
+					Directory: defaultString(cwd, "."),
+					StartedAt: time.Now().UTC(),
+				}); err != nil {
+					fmt.Fprintf(stderr, "ensure hook session: %v\n", err)
+					return 1
+				}
+				firstPrompt = true
+			} else {
+				count, err := store.CountSessionPrompts(ctx, sessionID)
+				if err != nil {
+					fmt.Fprintf(stderr, "count hook session prompts: %v\n", err)
+					return 1
+				}
+				firstPrompt = count == 0
+			}
+			currentSession, err := store.GetSession(ctx, sessionID)
+			if err != nil {
+				fmt.Fprintf(stderr, "load hook session: %v\n", err)
+				return 1
+			}
+			session = currentSession
 		}
 		if _, err := store.SavePrompt(ctx, sqlite.PromptInput{
 			SessionID: sessionID,
@@ -127,16 +151,18 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 			return 1
 		}
 	}
-	contextText, err := hookContextText(ctx, store, project)
-	if err != nil {
-		fmt.Fprintf(stderr, "load prompt hook context: %v\n", err)
+	if firstPrompt {
+		contextText, err := hookContextText(ctx, store, project)
+		if err != nil {
+			fmt.Fprintf(stderr, "load prompt hook context: %v\n", err)
+			contextText = ""
+		}
+		return writeHookAdditionalContext(stdout, hookUserPromptFirstMessageContext(project, contextText))
 	}
-	return writeHookJSON(stdout, map[string]any{
-		"hookSpecificOutput": map[string]any{
-			"hookEventName":     "UserPromptSubmit",
-			"additionalContext": hookUserPromptAdditionalContext(project, contextText),
-		},
-	})
+	if shouldInjectPromptSaveReminder(ctx, store, project, session) {
+		return writeHookAdditionalContext(stdout, hookUserPromptSaveReminder())
+	}
+	return writeHookJSON(stdout, map[string]any{})
 }
 
 func runHookSubagentStop(ctx context.Context, store *sqlite.Store, payload map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -228,11 +254,11 @@ func hookContextText(ctx context.Context, store *sqlite.Store, project string) (
 	return b.String(), nil
 }
 
-func hookUserPromptAdditionalContext(project string, contextText string) string {
+func hookUserPromptFirstMessageContext(project string, contextText string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `## Kerebrom Prompt Memory Protocol
 
-Kerebrom has already stored this user prompt as prompt history for project %q.
+Kerebrom has already stored this first user prompt as prompt history for project %q.
 
 FIRST ACTION REQUIRED:
 - Use the Kerebrom context below before answering.
@@ -247,12 +273,48 @@ FIRST ACTION REQUIRED:
 	return strings.TrimSpace(b.String())
 }
 
+func hookUserPromptSaveReminder() string {
+	return "Kerebrom memory reminder: if this session produced decisions, preferences, constraints, bugfixes, architecture notes, config changes, or non-obvious discoveries, call mem_save now. Do not save raw transcript; distill with What / Why / Where / Learned."
+}
+
+func shouldInjectPromptSaveReminder(ctx context.Context, store *sqlite.Store, project string, session sqlite.Session) bool {
+	if strings.TrimSpace(session.ID) == "" {
+		return false
+	}
+	startedAt, err := time.Parse(time.RFC3339, session.StartedAt)
+	if err != nil || time.Since(startedAt) < 5*time.Minute {
+		return false
+	}
+	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: project, Limit: 1})
+	if err != nil || len(recent) == 0 {
+		return false
+	}
+	lastSaveAt := recent[0].UpdatedAt
+	if strings.TrimSpace(lastSaveAt) == "" {
+		lastSaveAt = recent[0].CreatedAt
+	}
+	parsedLastSaveAt, err := time.Parse(time.RFC3339, lastSaveAt)
+	if err != nil {
+		return false
+	}
+	return time.Since(parsedLastSaveAt) > 15*time.Minute
+}
+
+func writeHookAdditionalContext(stdout io.Writer, additionalContext string) int {
+	return writeHookJSON(stdout, map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":     "UserPromptSubmit",
+			"additionalContext": additionalContext,
+		},
+	})
+}
+
 func hookProject(payload map[string]any, cwd string) string {
 	if project := hookString(payload, "project", "project_name"); project != "" {
 		return project
 	}
 	if cwd != "" {
-		return filepath.Base(cwd)
+		return projectdetect.Detect(cwd)
 	}
 	return "default"
 }

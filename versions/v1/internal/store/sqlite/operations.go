@@ -209,6 +209,24 @@ func (s *Store) ListPrompts(ctx context.Context, project string, limit int) ([]P
 	return prompts, nil
 }
 
+func (s *Store) CountSessionPrompts(ctx context.Context, sessionID string) (int, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return 0, fmt.Errorf("session id is required")
+	}
+
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM user_prompts
+		WHERE COALESCE(session_id, '') = ?
+	`, sessionID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count session prompts: %w", err)
+	}
+
+	return count, nil
+}
+
 func (s *Store) TimelineAroundObservation(ctx context.Context, observationID int64, before int, after int) (map[string]any, error) {
 	center, err := s.GetObservation(ctx, observationID)
 	if err != nil {

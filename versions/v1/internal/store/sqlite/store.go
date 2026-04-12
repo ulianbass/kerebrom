@@ -244,6 +244,26 @@ func (s *Store) GetSession(ctx context.Context, id string) (Session, error) {
 	return session, nil
 }
 
+func (s *Store) SessionExists(ctx context.Context, id string) (bool, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return false, fmt.Errorf("session id is required")
+	}
+
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM sessions
+			WHERE id = ?
+		)
+	`, id).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check session exists: %w", err)
+	}
+
+	return exists, nil
+}
+
 func (s *Store) EndSession(ctx context.Context, input EndSessionInput) error {
 	if strings.TrimSpace(input.ID) == "" {
 		return fmt.Errorf("session id is required")

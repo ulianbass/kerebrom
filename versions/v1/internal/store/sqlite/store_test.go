@@ -102,6 +102,14 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 		t.Fatalf("get session after start: %v", err)
 	}
 
+	exists, err := store.SessionExists(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("check session exists: %v", err)
+	}
+	if !exists {
+		t.Fatalf("expected session-1 to exist")
+	}
+
 	if session.Project != "proyecto-kerebrom" {
 		t.Fatalf("expected normalized session project, got %q", session.Project)
 	}
@@ -185,6 +193,25 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 
 	if stats.SessionCount != 1 || stats.ActiveSessionCount != 1 || stats.ObservationCount != 2 || stats.ProjectCount != 1 {
 		t.Fatalf("unexpected stats: %+v", stats)
+	}
+
+	prompt, err := store.SavePrompt(ctx, PromptInput{
+		SessionID: "session-1",
+		Content:   "Remember to keep hook lifecycle idempotent.",
+		Project:   "Proyecto Kerebrom",
+	})
+	if err != nil {
+		t.Fatalf("save prompt: %v", err)
+	}
+	if prompt.SessionID != "session-1" {
+		t.Fatalf("expected prompt to be tied to session-1, got %+v", prompt)
+	}
+	promptCount, err := store.CountSessionPrompts(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("count session prompts: %v", err)
+	}
+	if promptCount != 1 {
+		t.Fatalf("expected 1 session prompt, got %d", promptCount)
 	}
 
 	if err := store.EndSession(ctx, EndSessionInput{
