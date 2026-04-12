@@ -17,7 +17,7 @@ go run ./cmd/kerebrom mcp
 make install-user
 ```
 
-The user install builds Kerebrom, places the binary at `~/local/bin/kerebrom`, links it from `~/.local/bin/kerebrom`, and runs `kerebrom setup all`. On macOS this configures both Claude Code under `~/.claude/` and Claude Desktop under `~/Library/Application Support/Claude/claude_desktop_config.json`, preserving existing MCP servers.
+The user install builds Kerebrom from the current checkout, places the binary at `~/local/bin/kerebrom`, links it from `~/.local/bin/kerebrom`, and runs `kerebrom setup auto`. `auto` configures clients with existing local config and falls back to Claude Desktop when no client config is detected. Use `make install-user SETUP_AGENT=all` to configure every supported client, or `make install-user SETUP_AGENT=cursor` / `claude-desktop` / `codex` to force one client.
 
 Claude Code also gets lifecycle hooks under `~/.kerebrom/hooks/claude-code/` for automatic session start, user prompt ingest, post-compaction recovery, subagent passive capture, and session stop. Other AI clients receive the strongest local integration they expose: MCP plus a mandatory memory protocol prompt/resource when no hook API is available. Claude Desktop is in this MCP-only category: Kerebrom can expose tools, prompts, and resources there, but cannot install Claude Code's per-turn lifecycle hooks into Claude Desktop.
 
@@ -35,6 +35,7 @@ Kerebrom stores two different layers: `mem_save_prompt` keeps user intent histor
 - Lifecycle hook runner for hook-capable AI clients.
 - Export/import and compressed sync chunks under `.kerebrom/`.
 - Idempotent setup for Codex, Claude Code, Claude Desktop, Gemini CLI, OpenCode, Cursor, Windsurf, and VS Code.
+- Selective default installer via `setup auto`; explicit `setup all` remains available.
 
 ## Layout
 

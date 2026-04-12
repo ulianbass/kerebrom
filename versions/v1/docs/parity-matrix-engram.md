@@ -10,6 +10,7 @@
 | CLI | setup/serve/mcp/tui/search/save/context/timeline/stats/export/import/sync/projects | Match |
 | TUI | Browse/search/detail/timeline/sessions | Match via terminal dashboard + interactive search/show/timeline/sessions/prompts |
 | Agent setup | One-command setup where feasible | Match for Codex, Claude Code, Claude Desktop, Gemini CLI, OpenCode, Cursor, Windsurf, VS Code |
+| Selective install | Avoid unnecessary client config | Match: `setup auto` by default, explicit `setup all` for power users |
 | Compaction recovery | Prompt or hook-based | Match through Claude Code lifecycle hook plus installed memory protocol and recovery prompts/rules elsewhere |
 | Passive capture | Extract `## Key Learnings` | Match via Claude Code `SubagentStop` hook and `mem_capture_passive` |
 | Privacy tags | Strip `<private>...</private>` | Match at store layer |

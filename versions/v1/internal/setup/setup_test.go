@@ -185,6 +185,105 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunClaudeDesktopSetupOnlyIsMinimal(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+	desktopMCPPath := claudeDesktopConfigPath(homeDir)
+
+	mustWriteFile(t, desktopMCPPath, `{"mcpServers":{"TradingView MCP":{"command":"/path/to/node","args":["/path/to/tradingview.js"]}},"preferences":{"menuBarEnabled":false}}`)
+
+	result, err := Run("claude-desktop", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("run claude-desktop setup: %v", err)
+	}
+	if result.Agent != "claude-desktop" || len(result.Files) != 1 {
+		t.Fatalf("unexpected claude-desktop result: %+v", result)
+	}
+
+	desktopConfig := mustReadJSONMap(t, desktopMCPPath)
+	desktopServers := desktopConfig["mcpServers"].(map[string]any)
+	if _, ok := desktopServers["TradingView MCP"]; !ok {
+		t.Fatalf("claude desktop setup removed existing MCP server: %#v", desktopServers)
+	}
+	desktopKerebrom, ok := desktopServers["Kerebrom"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing Claude Desktop Kerebrom server: %#v", desktopServers)
+	}
+	if desktopKerebrom["command"] != binaryPath {
+		t.Fatalf("unexpected Claude Desktop Kerebrom command: %#v", desktopKerebrom)
+	}
+	if _, ok := desktopConfig["preferences"]; !ok {
+		t.Fatalf("claude desktop setup removed preferences: %#v", desktopConfig)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, ".claude", "settings.json")); !os.IsNotExist(err) {
+		t.Fatalf("claude-desktop setup should not create Claude Code settings, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, ".kerebrom", "hooks", "claude-code")); !os.IsNotExist(err) {
+		t.Fatalf("claude-desktop setup should not create Claude Code hooks, err=%v", err)
+	}
+}
+
+func TestRunAutoSetupFallsBackToClaudeDesktop(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+
+	result, err := Run("auto", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("run auto setup: %v", err)
+	}
+	if result.Agent != "auto" || len(result.Files) != 1 {
+		t.Fatalf("unexpected auto result: %+v", result)
+	}
+
+	desktopConfig := mustReadJSONMap(t, claudeDesktopConfigPath(homeDir))
+	desktopServers := desktopConfig["mcpServers"].(map[string]any)
+	if _, ok := desktopServers["Kerebrom"]; !ok {
+		t.Fatalf("auto fallback should configure Claude Desktop: %#v", desktopServers)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Fatalf("auto fallback should not create Codex config, err=%v", err)
+	}
+}
+
+func TestRunAutoSetupUsesExistingAgentConfigs(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+
+	codexConfigPath := filepath.Join(homeDir, ".codex", "config.toml")
+	mustWriteFile(t, codexConfigPath, `model = "gpt-5.4"`)
+
+	result, err := Run("auto", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("run auto setup: %v", err)
+	}
+	if result.Agent != "auto" || len(result.Files) != 2 {
+		t.Fatalf("unexpected auto result: %+v", result)
+	}
+
+	configContent := mustReadFile(t, codexConfigPath)
+	if !strings.Contains(configContent, "[mcp_servers.kerebrom]") {
+		t.Fatalf("auto setup did not configure detected Codex: %q", configContent)
+	}
+	if _, err := os.Stat(claudeDesktopConfigPath(homeDir)); !os.IsNotExist(err) {
+		t.Fatalf("auto setup should not fall back to Claude Desktop when another client is detected, err=%v", err)
+	}
+}
+
 func TestRunAdditionalAgentSetups(t *testing.T) {
 	t.Parallel()
 

@@ -1,7 +1,7 @@
 {
   "version_line": "v1",
-  "semver": "v1.0.1",
-  "status": "v1_desktop_mcp_hardened_release",
+  "semver": "v1.0.2",
+  "status": "v1_selective_install_release",
   "repo_root_is_product_root": false,
   "factory_version_root": "versions/v1",
   "release_contract": {

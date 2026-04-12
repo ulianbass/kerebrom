@@ -42,9 +42,12 @@ Kerebrom installs as one binary with no runtime dependency stack beyond the OS.
 - `cursor`
 - `windsurf`
 - `vscode`
+- `auto`
 - `all`
 
-On macOS, Claude setup writes both Claude Code config under `~/.claude/` and Claude Desktop config under `~/Library/Application Support/Claude/claude_desktop_config.json`, preserving existing MCP servers and desktop preferences.
+On macOS, explicit `claude` setup writes both Claude Code config under `~/.claude/` and Claude Desktop config under `~/Library/Application Support/Claude/claude_desktop_config.json`, preserving existing MCP servers and desktop preferences. Explicit `claude-code` only configures Claude Code hooks/config. Explicit `claude-desktop` only configures Claude Desktop MCP.
+
+`setup auto` is the default user-install path. It configures clients with existing local config and falls back to Claude Desktop when no client config is detected. `setup all` remains available for users who intentionally want every supported client registered.
 
 ### Automation model
 
@@ -106,5 +109,5 @@ Legacy memory is not bulk-restored into v1. It is reviewed and re-ingested from 
 
 - `go test ./...` passes.
 - `go build -o bin/kerebrom ./cmd/kerebrom` passes.
-- Smoke test covers lifecycle, save/search/context, export, sync, projects, TUI, and `setup all`.
+- Smoke test covers lifecycle, save/search/context, export, sync, projects, TUI, `setup auto`, and `setup all`.
 - No Kerebrom legacy runtime or old DB is required for a clean install.

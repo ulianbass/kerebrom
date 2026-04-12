@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v1.0.1](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.1) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v1.0.2](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.2) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y otros clientes compatibles con MCP.
@@ -44,13 +44,24 @@ make install-user
 Esto compila `kerebrom`, lo instala en `~/local/bin/kerebrom`, crea el enlace en `~/.local/bin/kerebrom` y ejecuta:
 
 ```bash
-kerebrom setup all
+kerebrom setup auto
 ```
+
+`setup auto` configura solo clientes con configuración local existente, y usa Claude Desktop como fallback si no detecta ningún cliente. Para forzar un cliente:
+
+```bash
+make install-user SETUP_AGENT=cursor
+make install-user SETUP_AGENT=claude-desktop
+make install-user SETUP_AGENT=all
+```
+
+Las instalaciones desde fuente compilan el checkout que el usuario clonó. Un clone fresco de la rama default `v1` instala la línea de release actual; un clone viejo debe actualizarse antes de correr el instalador.
 
 ## Comandos Diarios
 
 ```bash
 kerebrom version
+kerebrom setup auto
 kerebrom setup all
 kerebrom stats
 kerebrom context --project my-project "what matters here?"

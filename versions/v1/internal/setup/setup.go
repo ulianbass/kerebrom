@@ -45,6 +45,10 @@ func Run(agent string, opts Options) (Result, error) {
 		return setupCodex(opts)
 	case "claude":
 		return setupClaude(opts)
+	case "claude-code":
+		return setupClaudeCode(opts)
+	case "claude-desktop":
+		return setupClaudeDesktop(opts)
 	case "gemini-cli":
 		return setupGeminiCLI(opts)
 	case "opencode":
@@ -57,13 +61,15 @@ func Run(agent string, opts Options) (Result, error) {
 		return setupVSCode(opts)
 	case "all":
 		return setupAll(opts)
+	case "auto":
+		return setupAuto(opts)
 	default:
 		return Result{}, fmt.Errorf("unsupported agent %q", agent)
 	}
 }
 
 func SupportedAgents() []string {
-	return []string{"codex", "claude", "claude-code", "claude-desktop", "gemini-cli", "opencode", "cursor", "windsurf", "vscode", "all"}
+	return []string{"codex", "claude", "claude-code", "claude-desktop", "gemini-cli", "opencode", "cursor", "windsurf", "vscode", "auto", "all"}
 }
 
 func fillDefaults(opts Options) Options {
@@ -85,8 +91,6 @@ func fillDefaults(opts Options) Options {
 func normalizeAgent(agent string) string {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	switch agent {
-	case "claude-code", "claude-desktop":
-		return "claude"
 	case "gemini":
 		return "gemini-cli"
 	case "vs-code", "code":
@@ -94,6 +98,102 @@ func normalizeAgent(agent string) string {
 	default:
 		return agent
 	}
+}
+
+func setupAuto(opts Options) (Result, error) {
+	agents := detectedAgents(opts)
+	if len(agents) == 0 {
+		agents = []string{"claude-desktop"}
+	}
+
+	files := []string{}
+	for _, agent := range agents {
+		result, err := Run(agent, opts)
+		if err != nil {
+			return Result{}, err
+		}
+		files = append(files, result.Files...)
+	}
+	return Result{Agent: "auto", Files: files}, nil
+}
+
+func detectedAgents(opts Options) []string {
+	candidates := []struct {
+		agent string
+		paths []string
+	}{
+		{
+			agent: "codex",
+			paths: []string{
+				filepath.Join(opts.HomeDir, ".codex", "config.toml"),
+				filepath.Join(opts.HomeDir, ".codex", "AGENTS.md"),
+			},
+		},
+		{
+			agent: "claude-code",
+			paths: []string{
+				filepath.Join(opts.HomeDir, ".claude", "settings.json"),
+				filepath.Join(opts.HomeDir, ".claude", "mcp.json"),
+				filepath.Join(opts.HomeDir, ".claude", "CLAUDE.md"),
+			},
+		},
+		{
+			agent: "claude-desktop",
+			paths: []string{
+				claudeDesktopConfigPath(opts.HomeDir),
+			},
+		},
+		{
+			agent: "gemini-cli",
+			paths: []string{
+				filepath.Join(opts.HomeDir, ".gemini", "settings.json"),
+				filepath.Join(opts.HomeDir, ".gemini", "system.md"),
+			},
+		},
+		{
+			agent: "opencode",
+			paths: []string{
+				filepath.Join(opts.HomeDir, ".config", "opencode", "opencode.json"),
+			},
+		},
+		{
+			agent: "cursor",
+			paths: []string{
+				filepath.Join(opts.HomeDir, ".cursor", "mcp.json"),
+				filepath.Join(opts.HomeDir, ".cursor", "rules"),
+			},
+		},
+		{
+			agent: "windsurf",
+			paths: []string{
+				filepath.Join(opts.HomeDir, ".codeium", "windsurf", "mcp_config.json"),
+				filepath.Join(opts.HomeDir, ".windsurfrules"),
+			},
+		},
+		{
+			agent: "vscode",
+			paths: []string{
+				filepath.Join(opts.HomeDir, "Library", "Application Support", "Code", "User", "mcp.json"),
+				filepath.Join(opts.HomeDir, "Library", "Application Support", "Code", "User", "settings.json"),
+			},
+		},
+	}
+
+	agents := []string{}
+	for _, candidate := range candidates {
+		for _, path := range candidate.paths {
+			if pathExists(path) {
+				agents = append(agents, candidate.agent)
+				break
+			}
+		}
+	}
+	return agents
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func setupAll(opts Options) (Result, error) {
@@ -141,9 +241,23 @@ func setupCodex(opts Options) (Result, error) {
 }
 
 func setupClaude(opts Options) (Result, error) {
+	codeResult, err := setupClaudeCode(opts)
+	if err != nil {
+		return Result{}, err
+	}
+	desktopResult, err := setupClaudeDesktop(opts)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{
+		Agent: "claude",
+		Files: append(codeResult.Files, desktopResult.Files...),
+	}, nil
+}
+
+func setupClaudeCode(opts Options) (Result, error) {
 	settingsPath := filepath.Join(opts.HomeDir, ".claude", "settings.json")
 	mcpPath := filepath.Join(opts.HomeDir, ".claude", "mcp.json")
-	desktopMCPPath := claudeDesktopConfigPath(opts.HomeDir)
 	claudeMDPath := filepath.Join(opts.HomeDir, ".claude", "CLAUDE.md")
 	hookDir := filepath.Join(opts.HomeDir, ".kerebrom", "hooks", "claude-code")
 
@@ -188,6 +302,18 @@ func setupClaude(opts Options) (Result, error) {
 		return Result{}, err
 	}
 
+	if err := upsertTextBlockFile(claudeMDPath, memoryProtocolBlock()); err != nil {
+		return Result{}, err
+	}
+
+	return Result{
+		Agent: "claude-code",
+		Files: append([]string{settingsPath, mcpPath, claudeMDPath}, hookFiles...),
+	}, nil
+}
+
+func setupClaudeDesktop(opts Options) (Result, error) {
+	desktopMCPPath := claudeDesktopConfigPath(opts.HomeDir)
 	if err := upsertMCPServer(desktopMCPPath, "mcpServers", "Kerebrom", map[string]any{
 		"command": opts.BinaryPath,
 		"args":    []string{"mcp"},
@@ -195,13 +321,9 @@ func setupClaude(opts Options) (Result, error) {
 		return Result{}, err
 	}
 
-	if err := upsertTextBlockFile(claudeMDPath, memoryProtocolBlock()); err != nil {
-		return Result{}, err
-	}
-
 	return Result{
-		Agent: "claude",
-		Files: append([]string{settingsPath, mcpPath, desktopMCPPath, claudeMDPath}, hookFiles...),
+		Agent: "claude-desktop",
+		Files: []string{desktopMCPPath},
 	}, nil
 }
 

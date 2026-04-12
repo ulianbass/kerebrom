@@ -23,6 +23,7 @@
 
 - [x] Codex setup works.
 - [x] Claude / Claude Code / Claude Desktop setup works through MCP and memory protocol files.
+- [x] `setup auto` configures detected clients and avoids creating every client config by default.
 - [x] Claude Code lifecycle hooks are installed for session start, user prompt ingest, subagent passive capture, stop, and post-compaction recovery.
 - [x] Cursor setup works.
 - [x] Gemini CLI setup works.
@@ -39,6 +40,7 @@
 - [x] Hook smoke verifies automatic session, prompt ingest, passive capture, and session close without polluting the production DB.
 - [x] Export/import and sync are deterministic enough for v1 backup and git-chunk sharing.
 - [x] A clean install can go from binary to working memory with `kerebrom setup <agent>`.
+- [x] Default user install uses `kerebrom setup auto`; `setup all` remains explicit.
 
 ## Verification commands
 
