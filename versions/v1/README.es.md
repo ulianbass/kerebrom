@@ -19,7 +19,7 @@ make install-user
 
 La instalación de usuario compila Kerebrom, instala el binario en `~/local/bin/kerebrom`, crea el enlace en `~/.local/bin/kerebrom` y ejecuta `kerebrom setup all`. En macOS configura Claude Code bajo `~/.claude/` y Claude Desktop bajo `~/Library/Application Support/Claude/claude_desktop_config.json`, preservando servidores MCP existentes.
 
-Claude Code también recibe hooks de lifecycle bajo `~/.kerebrom/hooks/claude-code/` para inicio de sesión, ingesta de prompt, recuperación post-compaction, captura pasiva de subagentes y cierre de sesión. Otros clientes de IA reciben la integración local más fuerte que exponen: MCP más protocolo obligatorio de memoria cuando no hay API de hooks.
+Claude Code también recibe hooks de lifecycle bajo `~/.kerebrom/hooks/claude-code/` para inicio de sesión, ingesta de prompt, recuperación post-compaction, captura pasiva de subagentes y cierre de sesión. Otros clientes de IA reciben la integración local más fuerte que exponen: MCP más un protocolo obligatorio de memoria como prompt/resource cuando no hay API de hooks. Claude Desktop está en esta categoría solo-MCP: Kerebrom puede exponer herramientas, prompts y resources ahí, pero no puede instalar los hooks por turno de Claude Code dentro de Claude Desktop.
 
 Kerebrom guarda dos capas distintas: `mem_save_prompt` conserva historial de intención del usuario, mientras `mem_save` guarda observaciones destiladas por el agente usando `What / Why / Where / Learned`. Las memorias canónicas deben ser interpretaciones, no copias crudas de transcripts.
 
@@ -30,6 +30,7 @@ Kerebrom guarda dos capas distintas: `mem_save_prompt` conserva historial de int
 - Store SQLite + FTS5.
 - Superficies HTTP + MCP + CLI.
 - 15 herramientas MCP `mem_*`.
+- Protocolo MCP de memoria como prompt/resource para Claude Desktop y otros clientes solo-MCP.
 - Comandos de recuperación como `context`, `search`, `timeline` y `tui`.
 - Hook runner para clientes de IA con soporte de hooks.
 - Export/import y sync por chunks comprimidos bajo `.kerebrom/`.

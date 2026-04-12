@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Release v1.0.0](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.0) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Release v1.0.1](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.1) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > One durable memory layer for Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and other MCP-capable clients.
@@ -17,7 +17,7 @@ The active public branch is `v1`. Historical implementation lines are kept as ta
 |---|---:|---|
 | `history/legacy-main-2026-04-10` | tag | Legacy default-branch history before the v1 reset |
 | `history/go-rewrite-2026-04-10` | tag | Previous Go rewrite experiment |
-| `v1` | current branch | Stable v1.0.0 release line |
+| `v1` | current branch | Stable v1 release line |
 
 Kerebrom v1 lives under `versions/v1/` so future versions can evolve without rewriting history.
 
@@ -27,6 +27,7 @@ Kerebrom v1 lives under `versions/v1/` so future versions can evolve without rew
 - Shared local memory across supported AI agents.
 - SQLite + FTS5 storage for fast local retrieval.
 - MCP server with 15 `mem_*` tools.
+- MCP prompt/resource protocol for Claude Desktop and other MCP-only clients.
 - CLI, HTTP API, TUI, export/import, and compressed sync chunks.
 - Claude Code lifecycle hooks for session start, prompt ingest, passive capture, compaction recovery, and session close.
 - MCP and instruction setup for Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf, and VS Code.
@@ -58,7 +59,7 @@ kerebrom tui
 kerebrom export --output memory-export.json
 ```
 
-For agent integrations, most users should not call memory tools manually. Kerebrom registers MCP tools and memory instructions so the agent can save prompts, retrieve context, and persist distilled learnings during normal work.
+For agent integrations, most users should not call memory tools manually. Kerebrom registers MCP tools, a memory protocol prompt/resource, and client instructions so the agent can save prompts, retrieve context, and persist distilled learnings during normal work. Hook-capable clients such as Claude Code can run this per turn; MCP-only clients such as Claude Desktop receive the strongest behavior their MCP surface exposes.
 
 ## Memory Model
 

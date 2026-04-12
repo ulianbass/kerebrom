@@ -15,6 +15,7 @@ Deliver a serious, local-first persistent memory product that matches the user-f
 - Export/import and git-based sync.
 - Store-layer privacy redaction for `<private>...</private>`.
 - Lifecycle hooks where an AI client exposes a local hook API.
+- MCP prompt/resource protocol for MCP-only clients such as Claude Desktop.
 
 ## Non-goals
 
@@ -50,11 +51,11 @@ On macOS, Claude setup writes both Claude Code config under `~/.claude/` and Cla
 Kerebrom v1 uses the strongest integration each AI client exposes:
 
 - Hook-capable clients get active lifecycle automation: session start, prompt ingest, compaction recovery, subagent passive capture, and session stop.
-- MCP-only clients get MCP registration plus mandatory memory protocol instructions that force proactive `mem_context`, `mem_search`, `mem_save`, and `mem_session_summary` behavior.
+- MCP-only clients get MCP registration plus a mandatory memory protocol exposed as MCP prompt/resource and reinforced in tool descriptions. This instructs proactive `mem_save_prompt`, `mem_context`, `mem_search`, `mem_save`, and `mem_session_summary` behavior.
 - No client gets raw transcript scraping by default; durable memory is still stored through Kerebrom's explicit memory store and redaction pipeline.
 - Durable observations are agent-distilled, not transcript copies. `mem_save` uses the `What / Why / Where / Learned` framework so future agents recover context quickly. `mem_save_prompt` stores user prompts separately as intent history, not as canonical observation memory.
 
-Claude Code currently receives full lifecycle hooks through `~/.claude/settings.json` and scripts under `~/.kerebrom/hooks/claude-code/`. Codex Desktop, Claude Desktop, Cursor, Windsurf, VS Code, Gemini CLI, and OpenCode receive the highest local automation available through their current MCP/prompt/config surfaces.
+Claude Code currently receives full lifecycle hooks through `~/.claude/settings.json` and scripts under `~/.kerebrom/hooks/claude-code/`. Claude Desktop receives MCP server registration plus the Kerebrom memory protocol prompt/resource because Anthropic's Claude Desktop MCP surface exposes tools, prompts, and resources, not the Claude Code per-turn hook lifecycle. Codex Desktop, Cursor, Windsurf, VS Code, Gemini CLI, and OpenCode receive the highest local automation available through their current MCP/prompt/config surfaces.
 
 ### Lifecycle
 
@@ -85,6 +86,13 @@ v1 exposes the full 15-tool `mem_*` compatibility surface:
 - `mem_merge_projects`
 
 `mem_context` returns recent sessions, prompts, observations, stats, and optional search matches.
+
+The MCP server also exposes:
+
+- Prompt: `kerebrom_memory_protocol`
+- Resource: `kerebrom://memory-protocol`
+
+Both carry the same mandatory memory workflow for MCP-only clients.
 
 ### Sync and portability
 

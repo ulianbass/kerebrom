@@ -3,12 +3,73 @@ package mcptransport
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 )
+
+func TestServerExposesDesktopMemoryProtocol(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	mcpClient := newTestClient(t, ctx, store)
+
+	prompts, err := mcpClient.ListPrompts(ctx, mcp.ListPromptsRequest{})
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(prompts.Prompts) != 1 {
+		t.Fatalf("expected 1 prompt, got %d", len(prompts.Prompts))
+	}
+	if prompts.Prompts[0].Name != "kerebrom_memory_protocol" {
+		t.Fatalf("unexpected prompt: %#v", prompts.Prompts[0])
+	}
+
+	var promptReq mcp.GetPromptRequest
+	promptReq.Params.Name = "kerebrom_memory_protocol"
+	prompt, err := mcpClient.GetPrompt(ctx, promptReq)
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	if len(prompt.Messages) != 1 {
+		t.Fatalf("expected one protocol message, got %d", len(prompt.Messages))
+	}
+	content, ok := prompt.Messages[0].Content.(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected prompt text content, got %T", prompt.Messages[0].Content)
+	}
+	assertProtocolText(t, content.Text)
+
+	resources, err := mcpClient.ListResources(ctx, mcp.ListResourcesRequest{})
+	if err != nil {
+		t.Fatalf("list resources: %v", err)
+	}
+	if len(resources.Resources) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(resources.Resources))
+	}
+	if resources.Resources[0].URI != "kerebrom://memory-protocol" {
+		t.Fatalf("unexpected resource: %#v", resources.Resources[0])
+	}
+
+	var resourceReq mcp.ReadResourceRequest
+	resourceReq.Params.URI = "kerebrom://memory-protocol"
+	resource, err := mcpClient.ReadResource(ctx, resourceReq)
+	if err != nil {
+		t.Fatalf("read resource: %v", err)
+	}
+	if len(resource.Contents) != 1 {
+		t.Fatalf("expected one protocol resource, got %d", len(resource.Contents))
+	}
+	resourceContent, ok := resource.Contents[0].(mcp.TextResourceContents)
+	if !ok {
+		t.Fatalf("expected text resource content, got %T", resource.Contents[0])
+	}
+	assertProtocolText(t, resourceContent.Text)
+}
 
 func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	t.Parallel()
@@ -25,6 +86,9 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	if len(tools.Tools) != 15 {
 		t.Fatalf("expected 15 tools, got %d", len(tools.Tools))
 	}
+	assertToolDescriptionContains(t, tools.Tools, "mem_save_prompt", "Claude Desktop")
+	assertToolDescriptionContains(t, tools.Tools, "mem_context", "start of every non-trivial turn")
+	assertToolDescriptionContains(t, tools.Tools, "mem_save", "What / Why / Where / Learned")
 
 	sessionStart := callTool(t, ctx, mcpClient, "mem_session_start", map[string]any{
 		"id":        "session-1",
@@ -239,6 +303,37 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	if mergedPayload["target"] != "proyecto-kerebrom" {
 		t.Fatalf("unexpected merge payload: %#v", mergedPayload)
 	}
+}
+
+func assertProtocolText(t *testing.T, text string) {
+	t.Helper()
+
+	for _, want := range []string{
+		"Kerebrom Persistent Memory Protocol",
+		"mem_save_prompt",
+		"mem_context",
+		"What, Why, Where, Learned",
+		"Claude Desktop",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("protocol text missing %q: %s", want, text)
+		}
+	}
+}
+
+func assertToolDescriptionContains(t *testing.T, tools []mcp.Tool, name string, want string) {
+	t.Helper()
+
+	for _, tool := range tools {
+		if tool.Name != name {
+			continue
+		}
+		if !strings.Contains(tool.Description, want) {
+			t.Fatalf("tool %s description missing %q: %s", name, want, tool.Description)
+		}
+		return
+	}
+	t.Fatalf("tool %s not found", name)
 }
 
 func TestServerReturnsToolErrorForMissingRequiredArgument(t *testing.T) {

@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v1.0.0](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.0) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v1.0.1](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.1) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y otros clientes compatibles con MCP.
@@ -17,7 +17,7 @@ La rama pública activa es `v1`. Las líneas históricas se conservan como tags,
 |---|---:|---|
 | `history/legacy-main-2026-04-10` | tag | Historial legacy de la rama default antes del reset v1 |
 | `history/go-rewrite-2026-04-10` | tag | Experimento previo de reescritura en Go |
-| `v1` | rama actual | Release estable v1.0.0 |
+| `v1` | rama actual | Línea estable de release v1 |
 
 Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evolucionar sin reescribir historial.
 
@@ -27,6 +27,7 @@ Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evoluci
 - Memoria local compartida entre agentes de IA soportados.
 - SQLite + FTS5 para recuperación local rápida.
 - Servidor MCP con 15 herramientas `mem_*`.
+- Protocolo MCP como prompt/resource para Claude Desktop y otros clientes solo-MCP.
 - CLI, HTTP API, TUI, export/import y sync por chunks comprimidos.
 - Hooks de lifecycle para Claude Code: inicio de sesión, ingesta de prompt, captura pasiva, recuperación post-compaction y cierre de sesión.
 - Setup por MCP e instrucciones para Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf y VS Code.
@@ -58,7 +59,7 @@ kerebrom tui
 kerebrom export --output memory-export.json
 ```
 
-En integraciones con agentes, la mayoría de usuarios no debería llamar herramientas de memoria manualmente. Kerebrom registra MCP e instrucciones para que el agente pueda guardar prompts, recuperar contexto y persistir aprendizajes destilados durante el trabajo normal.
+En integraciones con agentes, la mayoría de usuarios no debería llamar herramientas de memoria manualmente. Kerebrom registra herramientas MCP, un protocolo de memoria como prompt/resource e instrucciones de cliente para que el agente pueda guardar prompts, recuperar contexto y persistir aprendizajes destilados durante el trabajo normal. Los clientes con hooks como Claude Code pueden ejecutarlo por turno; clientes solo-MCP como Claude Desktop reciben el comportamiento más fuerte que su superficie MCP expone.
 
 ## Modelo De Memoria
 

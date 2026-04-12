@@ -26,11 +26,15 @@ func NewServer(store *sqlite.Store) *Server {
 			config.AppName,
 			version.Version,
 			mcpserver.WithToolCapabilities(false),
+			mcpserver.WithPromptCapabilities(false),
+			mcpserver.WithResourceCapabilities(false, false),
 			mcpserver.WithRecovery(),
+			mcpserver.WithResourceRecovery(),
 		),
 	}
 
 	srv.registerTools()
+	srv.registerPromptsAndResources()
 	return srv
 }
 
@@ -45,7 +49,7 @@ func (s *Server) ServeStdio() error {
 func (s *Server) registerTools() {
 	s.server.AddTool(
 		mcp.NewTool("mem_save",
-			mcp.WithDescription("Persist an agent-distilled observation into Kerebrom's shared local memory. Do not store raw transcript; interpret first using What / Why / Where / Learned."),
+			mcp.WithDescription("Persist an agent-distilled observation into Kerebrom's shared local memory whenever a durable decision, preference, bugfix, project fact, workflow, or lesson appears. Do not store raw transcript; interpret first using What / Why / Where / Learned."),
 			mcp.WithString("title",
 				mcp.Required(),
 				mcp.Description("Short searchable title for the memory."),
@@ -78,7 +82,7 @@ func (s *Server) registerTools() {
 
 	s.server.AddTool(
 		mcp.NewTool("mem_search",
-			mcp.WithDescription("Search persisted observations from shared Kerebrom memory."),
+			mcp.WithDescription("Search persisted observations from shared Kerebrom memory before answering when prior project history, user preferences, previous decisions, or cross-agent context may affect the response."),
 			mcp.WithString("query",
 				mcp.Required(),
 				mcp.Description("Full-text query to execute against saved observations."),
@@ -134,7 +138,7 @@ func (s *Server) registerTools() {
 
 	s.server.AddTool(
 		mcp.NewTool("mem_context",
-			mcp.WithDescription("Build a context bundle with stats, recent observations, and optional search matches."),
+			mcp.WithDescription("Build a context bundle with stats, recent observations, and optional search matches. Use at the start of every non-trivial turn, before substantial coding or architecture work, and after context compaction."),
 			mcp.WithString("project",
 				mcp.Description("Optional project filter."),
 			),
@@ -202,7 +206,7 @@ func (s *Server) registerTools() {
 
 	s.server.AddTool(
 		mcp.NewTool("mem_save_prompt",
-			mcp.WithDescription("Save a user prompt for future context."),
+			mcp.WithDescription("Save a user prompt for future context. In MCP-only clients such as Claude Desktop, call this at the start of each non-trivial user turn before reasoning, then call mem_context."),
 			mcp.WithString("content", mcp.Required(), mcp.Description("User prompt content.")),
 			mcp.WithString("project", mcp.Description("Project filter.")),
 			mcp.WithString("session_id", mcp.Description("Optional session id.")),
@@ -212,7 +216,7 @@ func (s *Server) registerTools() {
 
 	s.server.AddTool(
 		mcp.NewTool("mem_session_summary",
-			mcp.WithDescription("Save or retrieve an end-of-session summary plus recent observations."),
+			mcp.WithDescription("Save or retrieve an end-of-session summary plus recent observations. Use before ending substantial work and after long context shifts so future agents can resume quickly."),
 			mcp.WithString("id",
 				mcp.Description("Session identifier to summarize."),
 			),
@@ -268,7 +272,7 @@ func (s *Server) registerTools() {
 
 	s.server.AddTool(
 		mcp.NewTool("mem_capture_passive",
-			mcp.WithDescription("Extract bullet learnings from text and save them as observations."),
+			mcp.WithDescription("Extract bullet learnings from text and save them as observations. Use for passive capture of agent output, summaries, subagent results, or long responses; save only durable learnings, not raw transcript."),
 			mcp.WithString("content", mcp.Required(), mcp.Description("Text output to inspect.")),
 			mcp.WithString("project", mcp.Description("Project name.")),
 			mcp.WithString("session_id", mcp.Description("Optional session id.")),
@@ -288,6 +292,65 @@ func (s *Server) registerTools() {
 		),
 		s.handleMemMergeProjects,
 	)
+}
+
+func (s *Server) registerPromptsAndResources() {
+	s.server.AddPrompt(
+		mcp.NewPrompt("kerebrom_memory_protocol",
+			mcp.WithPromptDescription("Load Kerebrom's mandatory memory workflow for MCP-only clients such as Claude Desktop."),
+		),
+		func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			return &mcp.GetPromptResult{
+				Description: "Kerebrom mandatory memory workflow",
+				Messages: []mcp.PromptMessage{
+					{
+						Role:    mcp.RoleUser,
+						Content: mcp.NewTextContent(memoryProtocolText()),
+					},
+				},
+			}, nil
+		},
+	)
+
+	s.server.AddResource(
+		mcp.NewResource("kerebrom://memory-protocol", "Kerebrom Memory Protocol",
+			mcp.WithResourceDescription("Always-on Kerebrom memory instructions for MCP-only clients. Read this when a client cannot install lifecycle hooks."),
+			mcp.WithMIMEType("text/markdown"),
+		),
+		func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			return []mcp.ResourceContents{
+				mcp.TextResourceContents{
+					URI:      "kerebrom://memory-protocol",
+					MIMEType: "text/markdown",
+					Text:     memoryProtocolText(),
+				},
+			}, nil
+		},
+	)
+}
+
+func memoryProtocolText() string {
+	return strings.TrimSpace(`
+# Kerebrom Persistent Memory Protocol
+
+Kerebrom is the local persistent memory layer shared by configured AI clients. Use it proactively; do not wait for the user to ask for memory unless the turn is trivial.
+
+For every non-trivial user turn:
+1. Call mem_save_prompt with the user's prompt, project/workspace when known, and session_id when available.
+2. Call mem_context with the current project and a compact query derived from the user's request.
+3. Use returned observations as working context before answering or editing files.
+
+During work:
+1. Call mem_save when a durable decision, preference, bugfix, architecture fact, workflow, or project lesson appears.
+2. Distill memories instead of copying raw transcript. Use this structure: What, Why, Where, Learned.
+3. Do not store secrets, credentials, private tokens, or unnecessary personal details.
+
+Before ending substantial work:
+1. Call mem_session_summary with a concise summary of goals, decisions, changes, risks, files, and next steps.
+2. Prefer a short durable observation over a long transcript dump.
+
+Claude Desktop note: Claude Desktop exposes Kerebrom through MCP tools, prompts, and resources. It does not provide the Claude Code per-turn hook lifecycle, so this protocol and the mem_* tool descriptions are the control surface for automatic memory behavior.
+`)
 }
 
 func (s *Server) handleMemSave(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -12,6 +12,7 @@
 - [x] SQLite schema and migrations implemented.
 - [x] FTS5 retrieval implemented.
 - [x] MCP contract implemented with 15 `mem_*` tools.
+- [x] MCP prompt/resource memory protocol implemented for Claude Desktop and other MCP-only clients.
 - [x] HTTP API implemented for sessions, observations, prompts, context, timeline, stats, export/import, and projects.
 - [x] CLI contract implemented for setup, serve, mcp, tui, search, save, context, timeline, stats, export, import, sync, and projects.
 - [x] TUI functional for dashboard, recent observations, search, observation detail, timeline, sessions, and prompts.
@@ -32,6 +33,7 @@
 ## Quality gates
 
 - [x] Contract tests for `mem_*` tools pass.
+- [x] Contract tests for MCP prompt/resource memory protocol pass.
 - [x] End-to-end lifecycle tests pass.
 - [x] Cross-agent recall works for the same normalized project against the same local store.
 - [x] Hook smoke verifies automatic session, prompt ingest, passive capture, and session close without polluting the production DB.
