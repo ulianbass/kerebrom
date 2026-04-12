@@ -10,6 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/ulianbass/kerebrom/internal/config"
+	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 	"github.com/ulianbass/kerebrom/internal/version"
 )
@@ -524,6 +525,9 @@ func (s *Server) handleMemSavePrompt(ctx context.Context, request mcp.CallToolRe
 	content, err := request.RequireString("content")
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if !promptfilter.IsSubstantive(content) {
+		return newJSONResult(map[string]any{"saved": false, "reason": "casual_prompt_noise"})
 	}
 
 	prompt, err := s.store.SavePrompt(ctx, sqlite.PromptInput{

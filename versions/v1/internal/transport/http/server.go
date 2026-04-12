@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 	"github.com/ulianbass/kerebrom/internal/version"
 )
@@ -337,6 +338,10 @@ func (s *Server) handleCreatePrompt(w http.ResponseWriter, r *http.Request) {
 	var payload promptRequest
 	if err := decodeJSON(r, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if !promptfilter.IsSubstantive(payload.Content) {
+		writeJSON(w, http.StatusOK, map[string]any{"saved": false, "reason": "casual_prompt_noise"})
 		return
 	}
 

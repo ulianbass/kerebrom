@@ -136,6 +136,27 @@ func TestServerLifecycleAndSearch(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/prompts", bytes.NewBufferString(`{
+		"session_id":"session-1",
+		"content":"Gracias.",
+		"project":"Proyecto Kerebrom"
+	}`))
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("casual prompt status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var skippedPromptPayload struct {
+		Saved  bool   `json:"saved"`
+		Reason string `json:"reason"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &skippedPromptPayload); err != nil {
+		t.Fatalf("decode skipped prompt payload: %v", err)
+	}
+	if skippedPromptPayload.Saved || skippedPromptPayload.Reason != "casual_prompt_noise" {
+		t.Fatalf("expected casual prompt skip, got %+v", skippedPromptPayload)
+	}
+
+	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/prompts/search?q=HTTP+parity&project=Proyecto+Kerebrom", nil)
 	server.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

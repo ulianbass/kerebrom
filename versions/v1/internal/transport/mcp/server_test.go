@@ -262,6 +262,16 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 		t.Fatalf("expected prompt saved=true, got %#v", promptPayload)
 	}
 
+	casualPrompt := callTool(t, ctx, mcpClient, "mem_save_prompt", map[string]any{
+		"session_id": "session-1",
+		"project":    "Proyecto Kerebrom",
+		"content":    "Gracias.",
+	})
+	casualPromptPayload := mustStructuredMap(t, casualPrompt)
+	if casualPromptPayload["saved"] != false || casualPromptPayload["reason"] != "casual_prompt_noise" {
+		t.Fatalf("expected casual prompt to be skipped, got %#v", casualPromptPayload)
+	}
+
 	passive := callTool(t, ctx, mcpClient, "mem_capture_passive", map[string]any{
 		"session_id": "session-1",
 		"project":    "Proyecto Kerebrom",
