@@ -16,6 +16,7 @@
 | Privacy tags | Strip `<private>...</private>` | Match at store layer |
 | Sync | Git chunks + manifest | Match with `.kerebrom/manifest.json` and gzipped JSONL chunks |
 | Cross-agent memory | Same store, same project | Match |
+| Session idempotency | Repeated hooks should not inflate session counts | Match: repeated `session_id` starts do not duplicate or reactivate completed sessions |
 | Remote-only desktop clients | Not core | Out of scope for v1 |
 
 ## Contract notes

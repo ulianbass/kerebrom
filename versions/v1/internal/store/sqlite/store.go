@@ -187,8 +187,8 @@ func (s *Store) StartSession(ctx context.Context, input StartSessionInput) error
 		VALUES (?, ?, ?, ?, 'active')
 		ON CONFLICT(id) DO UPDATE SET
 			project = excluded.project,
-			directory = excluded.directory,
-			status = 'active'
+			directory = excluded.directory
+		WHERE sessions.status = 'active'
 	`, input.ID, project, directory, startedAt.Format(time.RFC3339))
 	if err != nil {
 		return fmt.Errorf("start session: %w", err)

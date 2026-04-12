@@ -64,6 +64,8 @@ Claude Code currently receives full lifecycle hooks through `~/.claude/settings.
 
 Sessions must be startable, summarizable, recoverable after compaction, and closable without losing learnings.
 
+Session start is idempotent: repeated lifecycle hooks for the same `session_id` must not create duplicate sessions or reactivate a session that has already been completed.
+
 ### Retrieval
 
 Recall must work across agents when they share the same normalized project identity and local store.

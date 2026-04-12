@@ -18,6 +18,7 @@
 - [x] TUI functional for dashboard, recent observations, search, observation detail, timeline, sessions, and prompts.
 - [x] Store-layer private tag redaction implemented.
 - [x] Hook runner implemented for lifecycle-capable clients.
+- [x] Repeated lifecycle hooks are idempotent and do not reactivate completed sessions.
 
 ## Integrations
 

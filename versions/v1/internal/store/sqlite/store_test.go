@@ -176,6 +176,30 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 	if stats.ActiveSessionCount != 0 {
 		t.Fatalf("expected no active sessions after end, got %+v", stats)
 	}
+
+	if err := store.StartSession(ctx, StartSessionInput{
+		ID:        "session-1",
+		Project:   "Updated Project",
+		Directory: "/tmp/updated",
+	}); err != nil {
+		t.Fatalf("restart completed session: %v", err)
+	}
+
+	session, err = store.GetSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("get session after idempotent restart: %v", err)
+	}
+	if session.Status != "completed" {
+		t.Fatalf("restart should not reactivate completed session, got %+v", session)
+	}
+
+	stats, err = store.Stats(ctx, "Proyecto Kerebrom")
+	if err != nil {
+		t.Fatalf("stats after idempotent restart: %v", err)
+	}
+	if stats.ActiveSessionCount != 0 {
+		t.Fatalf("expected no active sessions after idempotent restart, got %+v", stats)
+	}
 }
 
 func assertTableExists(t *testing.T, db *sql.DB, name string) {
