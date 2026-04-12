@@ -19,6 +19,7 @@
 - [x] Store-layer private tag redaction implemented.
 - [x] Hook runner implemented for lifecycle-capable clients.
 - [x] Repeated lifecycle hooks are idempotent and do not reactivate completed sessions.
+- [x] Store init repairs legacy sessions where `ended_at` is populated but status is still active.
 
 ## Integrations
 

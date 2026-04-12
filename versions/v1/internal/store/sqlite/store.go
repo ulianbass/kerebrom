@@ -143,6 +143,24 @@ func (s *Store) Init(ctx context.Context) error {
 		}
 	}
 
+	if err := s.repairSessionLifecycle(ctx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Store) repairSessionLifecycle(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET status = 'completed'
+		WHERE status = 'active'
+		  AND ended_at IS NOT NULL
+		  AND trim(ended_at) != ''
+	`)
+	if err != nil {
+		return fmt.Errorf("repair session lifecycle: %w", err)
+	}
 	return nil
 }
 

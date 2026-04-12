@@ -32,6 +32,45 @@ func TestOpenAndInitCreatesSchema(t *testing.T) {
 	assertTableExists(t, store.DB(), "sync_chunks")
 }
 
+func TestInitRepairsEndedActiveSessions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	_, err = store.DB().ExecContext(ctx, `
+		INSERT INTO sessions (id, project, directory, started_at, ended_at, status)
+		VALUES ('session-1', 'project', '.', '2026-04-12T00:00:00Z', '2026-04-12T01:00:00Z', 'active')
+	`)
+	if err != nil {
+		t.Fatalf("insert inconsistent session: %v", err)
+	}
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("repair init: %v", err)
+	}
+
+	session, err := store.GetSession(ctx, "session-1")
+	if err != nil {
+		t.Fatalf("get repaired session: %v", err)
+	}
+	if session.Status != "completed" {
+		t.Fatalf("expected completed status after repair, got %+v", session)
+	}
+}
+
 func TestSessionObservationSearchAndStats(t *testing.T) {
 	t.Parallel()
 

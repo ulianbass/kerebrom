@@ -66,6 +66,8 @@ Sessions must be startable, summarizable, recoverable after compaction, and clos
 
 Session start is idempotent: repeated lifecycle hooks for the same `session_id` must not create duplicate sessions or reactivate a session that has already been completed.
 
+Store init repairs legacy lifecycle inconsistencies by marking sessions with a populated `ended_at` as completed.
+
 ### Retrieval
 
 Recall must work across agents when they share the same normalized project identity and local store.
