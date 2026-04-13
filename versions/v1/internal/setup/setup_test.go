@@ -43,8 +43,11 @@ args = ["/path/to/tradingview.js"]
 	if strings.Count(configContent, "[mcp_servers.kerebrom]") != 1 {
 		t.Fatalf("expected one kerebrom config block, got %q", configContent)
 	}
-	if strings.Count(configContent, "approval_mode = \"auto\"") != 15 {
-		t.Fatalf("expected auto approval for 15 Kerebrom tools, got %q", configContent)
+	if strings.Count(configContent, "approval_mode = \"auto\"") != 11 {
+		t.Fatalf("expected auto approval for 11 Kerebrom agent tools, got %q", configContent)
+	}
+	if !strings.Contains(configContent, `args = ["mcp", "--tools=agent"]`) {
+		t.Fatalf("expected agent MCP profile args, got %q", configContent)
 	}
 	if !strings.Contains(configContent, `command = "`+binaryPath+`"`) {
 		t.Fatalf("config missing binary path: %q", configContent)
@@ -69,7 +72,7 @@ args = ["/path/to/tradingview.js"]
 	if strings.Count(configContent, "[mcp_servers.kerebrom]") != 1 {
 		t.Fatalf("codex config duplicated kerebrom block: %q", configContent)
 	}
-	if strings.Count(configContent, "approval_mode = \"auto\"") != 15 {
+	if strings.Count(configContent, "approval_mode = \"auto\"") != 11 {
 		t.Fatalf("codex config duplicated Kerebrom tool approvals: %q", configContent)
 	}
 
@@ -105,9 +108,6 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	}
 
 	settings := mustReadJSONMap(t, settingsPath)
-	if settings["enableAllProjectMcpServers"] != true {
-		t.Fatalf("expected enableAllProjectMcpServers=true, got %#v", settings["enableAllProjectMcpServers"])
-	}
 	if _, ok := settings["extraKnownMarketplaces"]; !ok {
 		t.Fatalf("claude setup removed existing settings content: %#v", settings)
 	}
@@ -138,6 +138,7 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if kerebrom["command"] != binaryPath {
 		t.Fatalf("unexpected Kerebrom command: %#v", kerebrom)
 	}
+	assertArgs(t, kerebrom, []string{"mcp", "--tools=agent"})
 
 	desktopConfig := mustReadJSONMap(t, desktopMCPPath)
 	desktopServers := desktopConfig["mcpServers"].(map[string]any)
@@ -151,6 +152,7 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if desktopKerebrom["command"] != binaryPath {
 		t.Fatalf("unexpected Claude Desktop Kerebrom command: %#v", desktopKerebrom)
 	}
+	assertArgs(t, desktopKerebrom, []string{"mcp", "--tools=agent"})
 	if _, ok := desktopConfig["preferences"]; !ok {
 		t.Fatalf("claude desktop setup removed preferences: %#v", desktopConfig)
 	}
@@ -326,8 +328,8 @@ func TestRunAdditionalAgentSetups(t *testing.T) {
 		{
 			agent: "vscode",
 			files: []string{
-				filepath.Join(homeDir, "Library", "Application Support", "Code", "User", "mcp.json"),
-				filepath.Join(homeDir, "Library", "Application Support", "Code", "User", "prompts", "kerebrom-memory.instructions.md"),
+				filepath.Join(vscodeUserConfigDir(homeDir), "mcp.json"),
+				filepath.Join(vscodeUserConfigDir(homeDir), "prompts", "kerebrom-memory.instructions.md"),
 			},
 		},
 	}
@@ -400,4 +402,21 @@ func mustReadJSONMap(t *testing.T, path string) map[string]any {
 		t.Fatalf("decode %s: %v", path, err)
 	}
 	return payload
+}
+
+func assertArgs(t *testing.T, server map[string]any, want []string) {
+	t.Helper()
+
+	raw, ok := server["args"].([]any)
+	if !ok {
+		t.Fatalf("missing args in server config: %#v", server)
+	}
+	if len(raw) != len(want) {
+		t.Fatalf("args length = %d, want %d: %#v", len(raw), len(want), raw)
+	}
+	for i, wantArg := range want {
+		if raw[i] != wantArg {
+			t.Fatalf("args[%d] = %#v, want %q in %#v", i, raw[i], wantArg, raw)
+		}
+	}
 }

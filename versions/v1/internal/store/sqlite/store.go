@@ -146,6 +146,12 @@ func (s *Store) Init(ctx context.Context) error {
 	if err := s.repairSessionLifecycle(ctx); err != nil {
 		return err
 	}
+	if err := s.repairObservationDuplicates(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureObservationUniqueIndexes(ctx); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -160,6 +166,91 @@ func (s *Store) repairSessionLifecycle(ctx context.Context) error {
 	`)
 	if err != nil {
 		return fmt.Errorf("repair session lifecycle: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) repairObservationDuplicates(ctx context.Context) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin duplicate repair: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	if _, err := tx.ExecContext(ctx, `
+		WITH ranked AS (
+			SELECT
+				id,
+				normalized_hash,
+				ROW_NUMBER() OVER (
+					PARTITION BY normalized_hash
+					ORDER BY updated_at DESC, id DESC
+				) AS row_number,
+				COUNT(*) OVER (PARTITION BY normalized_hash) AS duplicate_total
+			FROM observations
+			WHERE deleted_at IS NULL
+			  AND normalized_hash != ''
+		)
+		UPDATE observations
+		SET duplicate_count = duplicate_count + (
+				SELECT duplicate_total - 1
+				FROM ranked
+				WHERE ranked.id = observations.id
+			),
+			last_seen_at = ?,
+			updated_at = ?
+		WHERE id IN (
+			SELECT id
+			FROM ranked
+			WHERE row_number = 1
+			  AND duplicate_total > 1
+		)
+	`, now, now); err != nil {
+		return fmt.Errorf("repair duplicate keeper observations: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		WITH ranked AS (
+			SELECT
+				id,
+				ROW_NUMBER() OVER (
+					PARTITION BY normalized_hash
+					ORDER BY updated_at DESC, id DESC
+				) AS row_number
+			FROM observations
+			WHERE deleted_at IS NULL
+			  AND normalized_hash != ''
+		)
+		UPDATE observations
+		SET deleted_at = ?,
+			updated_at = ?
+		WHERE id IN (
+			SELECT id
+			FROM ranked
+			WHERE row_number > 1
+		)
+	`, now, now); err != nil {
+		return fmt.Errorf("repair duplicate inactive observations: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit duplicate repair: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) ensureObservationUniqueIndexes(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_observations_normalized_hash_unique_active
+		ON observations(normalized_hash)
+		WHERE deleted_at IS NULL
+		  AND normalized_hash != ''
+	`); err != nil {
+		return fmt.Errorf("create observation hash unique index: %w", err)
 	}
 	return nil
 }
@@ -289,7 +380,7 @@ func (s *Store) EndSession(ctx context.Context, input EndSessionInput) error {
 	}
 
 	if rows == 0 {
-		return fmt.Errorf("session %q not found", input.ID)
+		return nil
 	}
 
 	return nil
@@ -355,15 +446,7 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 		LIMIT 1
 	`, hash).Scan(&duplicateID)
 	if err == nil {
-		now := time.Now().UTC().Format(time.RFC3339)
-		if _, err := s.db.ExecContext(ctx, `
-			UPDATE observations
-			SET duplicate_count = duplicate_count + 1, last_seen_at = ?, updated_at = ?
-			WHERE id = ?
-		`, now, now, duplicateID); err != nil {
-			return Observation{}, fmt.Errorf("update duplicate observation: %w", err)
-		}
-		return s.GetObservation(ctx, duplicateID)
+		return s.bumpDuplicateObservation(ctx, duplicateID)
 	}
 	if err != sql.ErrNoRows {
 		return Observation{}, fmt.Errorf("find duplicate observation: %w", err)
@@ -389,6 +472,16 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 		timestampText,
 	)
 	if err != nil {
+		var duplicateID int64
+		if findErr := s.db.QueryRowContext(ctx, `
+			SELECT id
+			FROM observations
+			WHERE normalized_hash = ? AND deleted_at IS NULL
+			ORDER BY updated_at DESC, id DESC
+			LIMIT 1
+		`, hash).Scan(&duplicateID); findErr == nil {
+			return s.bumpDuplicateObservation(ctx, duplicateID)
+		}
 		return Observation{}, fmt.Errorf("save observation: %w", err)
 	}
 
@@ -403,6 +496,18 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 	}
 
 	return observation, nil
+}
+
+func (s *Store) bumpDuplicateObservation(ctx context.Context, id int64) (Observation, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE observations
+		SET duplicate_count = duplicate_count + 1, last_seen_at = ?, updated_at = ?
+		WHERE id = ?
+	`, now, now, id); err != nil {
+		return Observation{}, fmt.Errorf("update duplicate observation: %w", err)
+	}
+	return s.GetObservation(ctx, id)
 }
 
 func (s *Store) GetObservation(ctx context.Context, id int64) (Observation, error) {
@@ -442,6 +547,7 @@ func (s *Store) GetObservation(ctx context.Context, id int64) (Observation, erro
 }
 
 func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]Observation, error) {
+	rawQuery := strings.TrimSpace(opts.Query)
 	query := sanitizeFTSQuery(opts.Query)
 	if query == "" {
 		return nil, fmt.Errorf("search query is required")
@@ -458,6 +564,35 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 	project := normalizeProject(opts.Project)
 	observationType := optionalNormalizedValue(opts.Type)
 	scope := optionalNormalizedValue(opts.Scope)
+
+	if strings.Contains(rawQuery, "/") {
+		topicRows, err := s.db.QueryContext(ctx, `
+			SELECT
+				id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
+				project, scope, COALESCE(topic_key, ''), normalized_hash,
+				revision_count, duplicate_count, COALESCE(last_seen_at, ''),
+				created_at, updated_at, COALESCE(deleted_at, '')
+			FROM observations
+			WHERE deleted_at IS NULL
+			  AND topic_key = ?
+			  AND (? = '' OR project = ?)
+			  AND (? = '' OR type = ?)
+			  AND (? = '' OR scope = ?)
+			ORDER BY updated_at DESC, id DESC
+			LIMIT ?
+		`, rawQuery, project, project, observationType, observationType, scope, scope, limit)
+		if err != nil {
+			return nil, fmt.Errorf("search topic key: %w", err)
+		}
+		defer topicRows.Close()
+		topicResults, err := scanObservations(topicRows)
+		if err != nil {
+			return nil, err
+		}
+		if len(topicResults) > 0 {
+			return topicResults, nil
+		}
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT
@@ -767,6 +902,10 @@ func normalizeProject(value string) string {
 	value = strings.ReplaceAll(value, "_", "-")
 	value = strings.Join(strings.Fields(value), "-")
 	return value
+}
+
+func NormalizeProject(value string) string {
+	return normalizeProject(value)
 }
 
 func normalizeObservationType(value string) string {

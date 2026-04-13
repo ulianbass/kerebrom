@@ -297,6 +297,14 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 		return nil, fmt.Errorf("target project is required")
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin merge projects: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
 	updated := map[string]int64{}
 	for _, source := range sources {
 		source = normalizeProject(source)
@@ -304,15 +312,15 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 			continue
 		}
 
-		sessionResult, err := s.db.ExecContext(ctx, `UPDATE sessions SET project = ? WHERE project = ?`, target, source)
+		sessionResult, err := tx.ExecContext(ctx, `UPDATE sessions SET project = ? WHERE project = ?`, target, source)
 		if err != nil {
 			return nil, fmt.Errorf("merge sessions for %s: %w", source, err)
 		}
-		observationResult, err := s.db.ExecContext(ctx, `UPDATE observations SET project = ?, updated_at = ? WHERE project = ?`, target, time.Now().UTC().Format(time.RFC3339), source)
+		observationResult, err := tx.ExecContext(ctx, `UPDATE observations SET project = ?, updated_at = ? WHERE project = ?`, target, time.Now().UTC().Format(time.RFC3339), source)
 		if err != nil {
 			return nil, fmt.Errorf("merge observations for %s: %w", source, err)
 		}
-		promptResult, err := s.db.ExecContext(ctx, `UPDATE user_prompts SET project = ? WHERE project = ?`, target, source)
+		promptResult, err := tx.ExecContext(ctx, `UPDATE user_prompts SET project = ? WHERE project = ?`, target, source)
 		if err != nil {
 			return nil, fmt.Errorf("merge prompts for %s: %w", source, err)
 		}
@@ -328,6 +336,10 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 			count += rows
 		}
 		updated[source] = count
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit merge projects: %w", err)
 	}
 
 	return map[string]any{"target": target, "updated": updated}, nil

@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Release v1.0.4](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.4) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Release v1.0.7](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.7) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > One durable memory layer for Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and other MCP-capable clients.
@@ -26,9 +26,9 @@ Kerebrom v1 lives under `versions/v1/` so future versions can evolve without rew
 - Single Go binary with no service stack to maintain.
 - Shared local memory across supported AI agents.
 - SQLite + FTS5 storage for fast local retrieval.
-- MCP server with 15 `mem_*` tools.
+- MCP server with 15 `mem_*` tools and an agent profile that exposes only the tools agents need by default.
 - MCP prompt/resource protocol for Claude Desktop and other MCP-only clients.
-- CLI, HTTP API, TUI, export/import, and compressed sync chunks.
+- CLI, HTTP API, terminal dashboard, export/import, and compressed sync chunks.
 - Claude Code lifecycle hooks for session start, prompt ingest, passive capture, compaction recovery, and session close.
 - MCP and instruction setup for Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf, and VS Code.
 - Distilled memory framework: prompts are intent history; canonical observations are agent-interpreted `What / Why / Where / Learned` memories.
@@ -68,6 +68,7 @@ kerebrom context --project my-project "what matters here?"
 kerebrom search "release decision"
 kerebrom tui
 kerebrom export --output memory-export.json
+kerebrom sync --status
 ```
 
 For agent integrations, most users should not call memory tools manually. Kerebrom registers MCP tools, a memory protocol prompt/resource, and client instructions so the agent can save prompts, retrieve context, and persist distilled learnings during normal work. Hook-capable clients such as Claude Code can run this per turn; MCP-only clients such as Claude Desktop receive the strongest behavior their MCP surface exposes.

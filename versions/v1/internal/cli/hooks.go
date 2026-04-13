@@ -286,7 +286,7 @@ func shouldInjectPromptSaveReminder(ctx context.Context, store *sqlite.Store, pr
 	if err != nil || time.Since(startedAt) < 5*time.Minute {
 		return false
 	}
-	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: project, Limit: 1})
+	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: project, SessionID: session.ID, Limit: 1})
 	if err != nil || len(recent) == 0 {
 		return false
 	}

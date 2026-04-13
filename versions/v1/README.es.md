@@ -29,9 +29,9 @@ Kerebrom guarda dos capas distintas: `mem_save_prompt` conserva historial de int
 - Memoria local compartida entre agentes soportados.
 - Store SQLite + FTS5.
 - Superficies HTTP + MCP + CLI.
-- 15 herramientas MCP `mem_*`.
+- 15 herramientas MCP `mem_*` totales, con `--tools=agent` usado por setup para reducir el contexto de agentes.
 - Protocolo MCP de memoria como prompt/resource para Claude Desktop y otros clientes solo-MCP.
-- Comandos de recuperación como `context`, `search`, `timeline` y `tui`.
+- Comandos de recuperación como `context`, `search`, `timeline` y el dashboard terminal.
 - Hook runner para clientes de IA con soporte de hooks.
 - Export/import y sync por chunks comprimidos bajo `.kerebrom/`.
 - Setup idempotente para Codex, Claude Code, Claude Desktop, Gemini CLI, OpenCode, Cursor, Windsurf y VS Code.

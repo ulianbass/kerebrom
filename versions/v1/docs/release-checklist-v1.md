@@ -32,7 +32,7 @@
 - [x] OpenCode setup works through MCP plus instruction registration.
 - [ ] OpenCode event-plugin parity with Engram is implemented. Not required for the maintainer's Codex/Claude workflow, but required before claiming full cross-client Engram parity.
 - [x] Windsurf setup works.
-- [x] VS Code setup works.
+- [x] VS Code setup works with OS-aware user config paths.
 
 ## Quality gates
 
@@ -44,8 +44,11 @@
 - [x] Export/import and sync are deterministic enough for v1 backup and git-chunk sharing.
 - [x] A clean install can go from binary to working memory with `kerebrom setup <agent>`.
 - [x] Default user install uses `kerebrom setup auto`; `setup all` remains explicit.
-- [ ] MCP `--tools` profile allowlisting is implemented for Engram-style context footprint reduction.
-- [ ] MCP default-project detection fills empty project inputs consistently.
+- [x] MCP `--tools` profile allowlisting is implemented for Engram-style context footprint reduction.
+- [x] MCP default-project detection fills empty project inputs consistently.
+- [x] MCP prompt/session fallback avoids orphan prompts when MCP-only clients omit `session_id`.
+- [x] Store search supports exact `topic_key` retrieval before FTS fallback.
+- [x] Project merge updates sessions, observations, and prompts transactionally.
 
 ## Verification commands
 

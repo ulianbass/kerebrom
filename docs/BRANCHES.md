@@ -8,7 +8,7 @@ Kerebrom keeps previous implementation lines available for audit while making `v
 |---:|---|---|---|
 | 1 | `history/legacy-main-2026-04-10` | tag | Legacy default-branch history before the v1 reset. Preserved for audit and continuity. |
 | 2 | `history/go-rewrite-2026-04-10` | tag | Previous Go rewrite experiment. Preserved for reference, not mixed into v1. |
-| 3 | `v1` | branch | Current default branch. Stable v1.0.0 product line under `versions/v1/`. |
+| 3 | `v1` | branch | Current default branch. Stable v1 product line under `versions/v1/`. |
 
 ## Policy
 
@@ -17,3 +17,4 @@ Kerebrom keeps previous implementation lines available for audit while making `v
 - Historical implementations should be tags, not branches, so GitHub does not present them as active PR candidates.
 - Technical publishing branches should not be kept after their commits are reachable from a semantic branch or tag.
 - The `v1.0.0` tag points to the first clean v1 release commit.
+- The latest public release tag remains the release anchor; branch `v1` may include verified post-release fixes while changes are batched for the next release.

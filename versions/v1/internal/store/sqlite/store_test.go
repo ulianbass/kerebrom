@@ -160,6 +160,18 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 		t.Fatalf("expected observation id %d, got %d", observation.ID, results[0].ID)
 	}
 
+	topicResults, err := store.SearchObservations(ctx, SearchOptions{
+		Query:   "architecture/shared-memory",
+		Project: "Proyecto Kerebrom",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("search observations by topic key: %v", err)
+	}
+	if len(topicResults) != 1 || topicResults[0].ID != observation.ID {
+		t.Fatalf("expected topic key search to return observation %d, got %+v", observation.ID, topicResults)
+	}
+
 	listed, err := store.ListObservations(ctx, ListObservationOptions{
 		Project:   "Proyecto Kerebrom",
 		SessionID: "session-1",
@@ -219,6 +231,12 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 		Summary: "Initial memory workflow complete.",
 	}); err != nil {
 		t.Fatalf("end session: %v", err)
+	}
+	if err := store.EndSession(ctx, EndSessionInput{
+		ID:      "session-that-never-existed",
+		Summary: "retry-safe no-op",
+	}); err != nil {
+		t.Fatalf("end missing session should be idempotent: %v", err)
 	}
 
 	session, err = store.GetSession(ctx, "session-1")

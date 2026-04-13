@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ulianbass/kerebrom/internal/config"
+	projectdetect "github.com/ulianbass/kerebrom/internal/project"
 	"github.com/ulianbass/kerebrom/internal/setup"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 	syncstore "github.com/ulianbass/kerebrom/internal/sync"
@@ -805,6 +806,8 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 
 func runMCP(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("mcp", stderr)
+	tools := fs.String("tools", "", "Tool profile or comma-separated tool allowlist: agent, admin, all, or tool names")
+	project := fs.String("project", "", "Default project name for MCP clients that omit project")
 	if err := fs.Parse(reorderFlagArgs(args, nil)); err != nil {
 		return 2
 	}
@@ -816,7 +819,17 @@ func runMCP(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
-	server := mcptransport.NewServer(store)
+	defaultProject := strings.TrimSpace(*project)
+	if defaultProject == "" {
+		defaultProject = os.Getenv(config.ProjectEnv)
+	}
+	if defaultProject == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			defaultProject = projectdetect.Detect(cwd)
+		}
+	}
+
+	server := mcptransport.NewServerWithConfig(store, mcptransport.Config{DefaultProject: defaultProject}, mcptransport.ResolveTools(*tools))
 	if err := server.ServeStdio(); err != nil {
 		fmt.Fprintf(stderr, "mcp serve error: %v\n", err)
 		return 1
@@ -854,6 +867,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprintf(w, "Default data dir: %s\n", defaults.DataDir)
 	fmt.Fprintf(w, "Default db path: %s\n", defaults.DBPath())
 	fmt.Fprintf(w, "Default listen addr: %s\n", config.DefaultListenAddr())
+	fmt.Fprintf(w, "\nMCP profiles: kerebrom mcp --tools=agent|admin|all [--project NAME]\n")
 }
 
 func openStore(ctx context.Context) (*sqlite.Store, func(), error) {

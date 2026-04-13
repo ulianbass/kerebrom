@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v1.0.4](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.4) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v1.0.7](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.7) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y otros clientes compatibles con MCP.
@@ -26,9 +26,9 @@ Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evoluci
 - Binario único en Go, sin stack de servicios que mantener.
 - Memoria local compartida entre agentes de IA soportados.
 - SQLite + FTS5 para recuperación local rápida.
-- Servidor MCP con 15 herramientas `mem_*`.
+- Servidor MCP con 15 herramientas `mem_*` y un perfil de agente que expone por defecto solo las herramientas que los agentes necesitan.
 - Protocolo MCP como prompt/resource para Claude Desktop y otros clientes solo-MCP.
-- CLI, HTTP API, TUI, export/import y sync por chunks comprimidos.
+- CLI, HTTP API, dashboard terminal, export/import y sync por chunks comprimidos.
 - Hooks de lifecycle para Claude Code: inicio de sesión, ingesta de prompt, captura pasiva, recuperación post-compaction y cierre de sesión.
 - Setup por MCP e instrucciones para Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf y VS Code.
 - Framework de memoria destilada: los prompts son historial de intención; las observaciones canónicas son memorias interpretadas con `What / Why / Where / Learned`.
@@ -68,6 +68,7 @@ kerebrom context --project my-project "what matters here?"
 kerebrom search "release decision"
 kerebrom tui
 kerebrom export --output memory-export.json
+kerebrom sync --status
 ```
 
 En integraciones con agentes, la mayoría de usuarios no debería llamar herramientas de memoria manualmente. Kerebrom registra herramientas MCP, un protocolo de memoria como prompt/resource e instrucciones de cliente para que el agente pueda guardar prompts, recuperar contexto y persistir aprendizajes destilados durante el trabajo normal. Los clientes con hooks como Claude Code pueden ejecutarlo por turno; clientes solo-MCP como Claude Desktop reciben el comportamiento más fuerte que su superficie MCP expone.

@@ -173,8 +173,9 @@ func detectedAgents(opts Options) []string {
 		{
 			agent: "vscode",
 			paths: []string{
-				filepath.Join(opts.HomeDir, "Library", "Application Support", "Code", "User", "mcp.json"),
-				filepath.Join(opts.HomeDir, "Library", "Application Support", "Code", "User", "settings.json"),
+				filepath.Join(vscodeUserConfigDir(opts.HomeDir), "mcp.json"),
+				filepath.Join(vscodeUserConfigDir(opts.HomeDir), "settings.json"),
+				filepath.Join(opts.ProjectDir, ".vscode", "mcp.json"),
 			},
 		},
 	}
@@ -265,7 +266,6 @@ func setupClaudeCode(opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	settings["enableAllProjectMcpServers"] = true
 	if err := upsertClaudeHooks(settings, hookDir); err != nil {
 		return Result{}, err
 	}
@@ -294,7 +294,7 @@ func setupClaudeCode(opts Options) (Result, error) {
 
 	servers["Kerebrom"] = map[string]any{
 		"command": opts.BinaryPath,
-		"args":    []string{"mcp"},
+		"args":    mcpAgentArgs(),
 	}
 	mcpConfig["mcpServers"] = servers
 
@@ -316,7 +316,7 @@ func setupClaudeDesktop(opts Options) (Result, error) {
 	desktopMCPPath := claudeDesktopConfigPath(opts.HomeDir)
 	if err := upsertMCPServer(desktopMCPPath, "mcpServers", "Kerebrom", map[string]any{
 		"command": opts.BinaryPath,
-		"args":    []string{"mcp"},
+		"args":    mcpAgentArgs(),
 	}); err != nil {
 		return Result{}, err
 	}
@@ -345,7 +345,7 @@ func setupGeminiCLI(opts Options) (Result, error) {
 
 	if err := upsertMCPServer(settingsPath, "mcpServers", "kerebrom", map[string]any{
 		"command": opts.BinaryPath,
-		"args":    []string{"mcp"},
+		"args":    mcpAgentArgs(),
 	}); err != nil {
 		return Result{}, err
 	}
@@ -368,7 +368,7 @@ func setupOpenCode(opts Options) (Result, error) {
 
 	if err := upsertMCPServer(configPath, "mcp", "kerebrom", map[string]any{
 		"type":    "local",
-		"command": []string{opts.BinaryPath, "mcp"},
+		"command": mcpAgentCommand(opts.BinaryPath),
 		"enabled": true,
 	}); err != nil {
 		return Result{}, err
@@ -392,7 +392,7 @@ func setupCursor(opts Options) (Result, error) {
 
 	if err := upsertMCPServer(mcpPath, "mcpServers", "kerebrom", map[string]any{
 		"command": opts.BinaryPath,
-		"args":    []string{"mcp"},
+		"args":    mcpAgentArgs(),
 	}); err != nil {
 		return Result{}, err
 	}
@@ -412,7 +412,7 @@ func setupWindsurf(opts Options) (Result, error) {
 
 	if err := upsertMCPServer(mcpPath, "mcpServers", "kerebrom", map[string]any{
 		"command": opts.BinaryPath,
-		"args":    []string{"mcp"},
+		"args":    mcpAgentArgs(),
 	}); err != nil {
 		return Result{}, err
 	}
@@ -427,12 +427,13 @@ func setupWindsurf(opts Options) (Result, error) {
 }
 
 func setupVSCode(opts Options) (Result, error) {
-	mcpPath := filepath.Join(opts.HomeDir, "Library", "Application Support", "Code", "User", "mcp.json")
-	promptPath := filepath.Join(opts.HomeDir, "Library", "Application Support", "Code", "User", "prompts", "kerebrom-memory.instructions.md")
+	configDir := vscodeUserConfigDir(opts.HomeDir)
+	mcpPath := filepath.Join(configDir, "mcp.json")
+	promptPath := filepath.Join(configDir, "prompts", "kerebrom-memory.instructions.md")
 
 	if err := upsertMCPServer(mcpPath, "servers", "kerebrom", map[string]any{
 		"command": opts.BinaryPath,
-		"args":    []string{"mcp"},
+		"args":    mcpAgentArgs(),
 	}); err != nil {
 		return Result{}, err
 	}
@@ -450,24 +451,20 @@ func codexConfigBlock(binaryPath string) string {
 	tools := []string{
 		"mem_capture_passive",
 		"mem_context",
-		"mem_delete",
 		"mem_get_observation",
-		"mem_merge_projects",
 		"mem_save",
 		"mem_save_prompt",
 		"mem_search",
 		"mem_session_end",
 		"mem_session_start",
 		"mem_session_summary",
-		"mem_stats",
 		"mem_suggest_topic_key",
-		"mem_timeline",
 		"mem_update",
 	}
 	var builder strings.Builder
 	fmt.Fprintf(&builder, `[mcp_servers.kerebrom]
 command = %q
-args = ["mcp"]
+args = ["mcp", "--tools=agent"]
 `, binaryPath)
 	for _, tool := range tools {
 		fmt.Fprintf(&builder, `
@@ -476,6 +473,25 @@ approval_mode = "auto"
 `, tool)
 	}
 	return builder.String()
+}
+
+func mcpAgentArgs() []string {
+	return []string{"mcp", "--tools=agent"}
+}
+
+func mcpAgentCommand(binaryPath string) []string {
+	return []string{binaryPath, "mcp", "--tools=agent"}
+}
+
+func vscodeUserConfigDir(homeDir string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support", "Code", "User")
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Roaming", "Code", "User")
+	default:
+		return filepath.Join(homeDir, ".config", "Code", "User")
+	}
 }
 
 func codexAGENTSBlock() string {

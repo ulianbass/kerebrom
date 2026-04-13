@@ -7,7 +7,7 @@ import (
 func IsSubstantive(content string) bool {
 	text := strings.TrimSpace(strings.ToLower(content))
 	text = strings.Trim(text, " \t\r\n.!?¡¿,;:")
-	if len([]rune(text)) < 10 {
+	if text == "" {
 		return false
 	}
 	casualOnly := map[string]bool{
@@ -17,6 +17,11 @@ func IsSubstantive(content string) bool {
 		"thank you":      true,
 		"ok":             true,
 		"okay":           true,
+		"si":             true,
+		"sí":             true,
+		"no":             true,
+		"bueno":          true,
+		"vale":           true,
 		"listo":          true,
 		"dale":           true,
 		"perfecto":       true,

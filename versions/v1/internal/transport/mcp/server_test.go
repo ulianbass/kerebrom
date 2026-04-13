@@ -8,6 +8,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 )
 
@@ -210,6 +211,14 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 		t.Fatalf("unexpected session summary: %#v", endedSession["summary"])
 	}
 
+	missingEnd := callTool(t, ctx, mcpClient, "mem_session_end", map[string]any{
+		"id": "missing-session",
+	})
+	missingEndPayload := mustStructuredMap(t, missingEnd)
+	if missingEndPayload["ended"] != true || missingEndPayload["missing"] != true {
+		t.Fatalf("expected missing session end to be idempotent, got %#v", missingEndPayload)
+	}
+
 	sessionSummary := callTool(t, ctx, mcpClient, "mem_session_summary", map[string]any{
 		"id":    "session-1",
 		"limit": 5,
@@ -315,6 +324,73 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	}
 }
 
+func TestResolveToolsProfiles(t *testing.T) {
+	t.Parallel()
+
+	agent := ResolveTools("agent")
+	if len(agent) != 11 {
+		t.Fatalf("expected 11 agent tools, got %d: %#v", len(agent), agent)
+	}
+	for _, name := range []string{"mem_save", "mem_search", "mem_context", "mem_save_prompt", "mem_update"} {
+		if !agent[name] {
+			t.Fatalf("agent profile missing %s: %#v", name, agent)
+		}
+	}
+	for _, name := range []string{"mem_delete", "mem_stats", "mem_timeline", "mem_merge_projects"} {
+		if agent[name] {
+			t.Fatalf("agent profile should not include admin tool %s: %#v", name, agent)
+		}
+	}
+	if ResolveTools("all") != nil {
+		t.Fatalf("all profile should return nil allowlist")
+	}
+}
+
+func TestServerUsesDefaultProjectAndSessionFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	server := NewServerWithConfig(store, Config{DefaultProject: "Proyecto Kerebrom"}, ResolveTools("agent"))
+	mcpClient := newTestClientForServer(t, ctx, server.MCPServer())
+
+	tools, err := mcpClient.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	if len(tools.Tools) != 11 {
+		t.Fatalf("expected agent profile to expose 11 tools, got %d", len(tools.Tools))
+	}
+
+	prompt := callTool(t, ctx, mcpClient, "mem_save_prompt", map[string]any{
+		"content": "Close the MCP default project gap.",
+	})
+	promptPayload := mustStructuredMap(t, prompt)
+	savedPrompt := mustNestedMap(t, promptPayload, "prompt")
+	if savedPrompt["project"] != "proyecto-kerebrom" {
+		t.Fatalf("expected default project fallback, got %#v", savedPrompt)
+	}
+	if savedPrompt["session_id"] != "mcp:proyecto-kerebrom" {
+		t.Fatalf("expected default MCP session fallback, got %#v", savedPrompt)
+	}
+
+	session, err := store.GetSession(ctx, "mcp:proyecto-kerebrom")
+	if err != nil {
+		t.Fatalf("default MCP session was not created: %v", err)
+	}
+	if session.Project != "proyecto-kerebrom" {
+		t.Fatalf("unexpected default session project: %+v", session)
+	}
+
+	summary := callTool(t, ctx, mcpClient, "mem_session_summary", map[string]any{
+		"summary": "Closed MCP project/session fallback.",
+	})
+	summaryPayload := mustStructuredMap(t, summary)
+	if _, ok := summaryPayload["activity_score"].(string); !ok {
+		t.Fatalf("expected activity score in summary payload, got %#v", summaryPayload)
+	}
+}
+
 func assertProtocolText(t *testing.T, text string) {
 	t.Helper()
 
@@ -383,7 +459,13 @@ func openTestStore(t *testing.T, ctx context.Context) *sqlite.Store {
 func newTestClient(t *testing.T, ctx context.Context, store *sqlite.Store) *client.Client {
 	t.Helper()
 
-	mcpClient, err := client.NewInProcessClient(NewServer(store).MCPServer())
+	return newTestClientForServer(t, ctx, NewServer(store).MCPServer())
+}
+
+func newTestClientForServer(t *testing.T, ctx context.Context, server *mcpserver.MCPServer) *client.Client {
+	t.Helper()
+
+	mcpClient, err := client.NewInProcessClient(server)
 	if err != nil {
 		t.Fatalf("new in-process client: %v", err)
 	}

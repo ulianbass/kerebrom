@@ -9,7 +9,7 @@ Deliver a serious, local-first persistent memory product that matches the user-f
 - Single Go binary.
 - Shared local memory store.
 - SQLite + FTS5 retrieval.
-- CLI, MCP, HTTP, and TUI surfaces.
+- CLI, MCP, HTTP, and terminal dashboard surfaces.
 - Setup flows for supported local agents.
 - Session lifecycle, proactive save, passive capture, and compaction recovery.
 - Export/import and git-based sync.
@@ -58,7 +58,7 @@ Kerebrom v1 uses the strongest integration each AI client exposes:
 - No client gets raw transcript scraping by default; durable memory is still stored through Kerebrom's explicit memory store and redaction pipeline.
 - Durable observations are agent-distilled, not transcript copies. `mem_save` uses the `What / Why / Where / Learned` framework so future agents recover context quickly. `mem_save_prompt` stores user prompts separately as intent history, not as canonical observation memory.
 
-Claude Code currently receives full lifecycle hooks through `~/.claude/settings.json` and scripts under `~/.kerebrom/hooks/claude-code/`. Claude Desktop receives MCP server registration plus the Kerebrom memory protocol prompt/resource because Anthropic's Claude Desktop MCP surface exposes tools, prompts, and resources, not the Claude Code per-turn hook lifecycle. Codex Desktop, Cursor, Windsurf, VS Code, Gemini CLI, and OpenCode receive the highest local automation available through their current MCP/prompt/config surfaces.
+Claude Code currently receives full lifecycle hooks through `~/.claude/settings.json` and scripts under `~/.kerebrom/hooks/claude-code/`. Claude Desktop receives MCP server registration plus the Kerebrom memory protocol prompt/resource because Anthropic's Claude Desktop MCP surface exposes tools, prompts, and resources, not the Claude Code per-turn hook lifecycle. Codex Desktop, Cursor, Windsurf, VS Code, Gemini CLI, and OpenCode receive the highest local automation available through their current MCP/prompt/config surfaces. OpenCode is MCP/instruction-based in v1; event-plugin parity remains a separate product decision.
 
 ### Lifecycle
 
@@ -100,6 +100,8 @@ The MCP server also exposes:
 - Resource: `kerebrom://memory-protocol`
 
 Both carry the same mandatory memory workflow for MCP-only clients.
+
+For agent setup, Kerebrom uses `kerebrom mcp --tools=agent` to expose the 11 tools agents need during normal work. `--tools=admin`, `--tools=all`, and explicit comma-separated tool names remain available for curation and advanced workflows.
 
 ### Sync and portability
 
