@@ -565,7 +565,7 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 	observationType := optionalNormalizedValue(opts.Type)
 	scope := optionalNormalizedValue(opts.Scope)
 
-	if strings.Contains(rawQuery, "/") {
+	if rawQuery != "" {
 		topicRows, err := s.db.QueryContext(ctx, `
 			SELECT
 				id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
@@ -575,7 +575,7 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 			FROM observations
 			WHERE deleted_at IS NULL
 			  AND topic_key = ?
-			  AND (? = '' OR project = ?)
+			  AND (? = '' OR project = ? OR scope = 'global')
 			  AND (? = '' OR type = ?)
 			  AND (? = '' OR scope = ?)
 			ORDER BY updated_at DESC, id DESC
@@ -594,6 +594,23 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 		}
 	}
 
+	observations, err := s.searchObservationsFTS(ctx, query, project, observationType, scope, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(observations) > 0 {
+		return observations, nil
+	}
+
+	relaxedQuery := sanitizeFTSAnyQuery(rawQuery)
+	if relaxedQuery == "" || relaxedQuery == query {
+		return observations, nil
+	}
+
+	return s.searchObservationsFTS(ctx, relaxedQuery, project, observationType, scope, limit)
+}
+
+func (s *Store) searchObservationsFTS(ctx context.Context, query string, project string, observationType string, scope string, limit int) ([]Observation, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT
 			o.id, COALESCE(o.session_id, ''), o.type, o.title, o.content, COALESCE(o.tool_name, ''),
@@ -604,7 +621,7 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 		JOIN observations_fts ON observations_fts.rowid = o.id
 		WHERE observations_fts MATCH ?
 		  AND o.deleted_at IS NULL
-		  AND (? = '' OR o.project = ?)
+		  AND (? = '' OR o.project = ? OR o.scope = 'global')
 		  AND (? = '' OR o.type = ?)
 		  AND (? = '' OR o.scope = ?)
 		ORDER BY bm25(observations_fts), o.created_at DESC
@@ -670,7 +687,7 @@ func (s *Store) ListObservations(ctx context.Context, opts ListObservationOption
 			created_at, updated_at, COALESCE(deleted_at, '')
 		FROM observations
 		WHERE deleted_at IS NULL
-		  AND (? = '' OR project = ?)
+		  AND (? = '' OR project = ? OR scope = 'global')
 		  AND (? = '' OR scope = ?)
 		  AND (? = '' OR COALESCE(session_id, '') = ?)
 		ORDER BY created_at DESC, id DESC
@@ -929,9 +946,20 @@ func optionalNormalizedValue(value string) string {
 }
 
 func sanitizeFTSQuery(value string) string {
+	return sanitizeFTSQueryWithOperator(value, "AND")
+}
+
+func sanitizeFTSAnyQuery(value string) string {
+	return sanitizeFTSQueryWithOperator(value, "OR")
+}
+
+func sanitizeFTSQueryWithOperator(value string, operator string) string {
 	parts := strings.Fields(strings.TrimSpace(value))
 	if len(parts) == 0 {
 		return ""
+	}
+	if operator != "AND" && operator != "OR" {
+		operator = "AND"
 	}
 
 	quoted := make([]string, 0, len(parts))
@@ -940,7 +968,7 @@ func sanitizeFTSQuery(value string) string {
 		quoted = append(quoted, fmt.Sprintf(`"%s"`, part))
 	}
 
-	return strings.Join(quoted, " AND ")
+	return strings.Join(quoted, " "+operator+" ")
 }
 
 func stripPrivateTags(value string) string {

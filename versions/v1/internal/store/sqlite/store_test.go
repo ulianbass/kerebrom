@@ -172,6 +172,66 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 		t.Fatalf("expected topic key search to return observation %d, got %+v", observation.ID, topicResults)
 	}
 
+	globalObservation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:     "preference",
+		Title:    "Preferencia OBLIGATORIA: todos los outputs en español",
+		Content:  "El usuario exige que toda comunicación y respuestas sean en ESPAÑOL.",
+		Project:  "Proyecto Falage",
+		Scope:    "global",
+		TopicKey: "user-language-preference",
+	})
+	if err != nil {
+		t.Fatalf("save global observation: %v", err)
+	}
+
+	globalResults, err := store.SearchObservations(ctx, SearchOptions{
+		Query:   "idioma español",
+		Project: "Proyecto Kerebrom",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("search global observations from another project: %v", err)
+	}
+	if len(globalResults) == 0 || globalResults[0].ID != globalObservation.ID {
+		t.Fatalf("expected cross-project global observation %d, got %+v", globalObservation.ID, globalResults)
+	}
+
+	globalTopicResults, err := store.SearchObservations(ctx, SearchOptions{
+		Query:   "user-language-preference",
+		Project: "Proyecto Kerebrom",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("search global topic key without slash: %v", err)
+	}
+	if len(globalTopicResults) != 1 || globalTopicResults[0].ID != globalObservation.ID {
+		t.Fatalf("expected global topic key search to return observation %d, got %+v", globalObservation.ID, globalTopicResults)
+	}
+
+	projectOnlyResults, err := store.SearchObservations(ctx, SearchOptions{
+		Query:   "español",
+		Project: "Proyecto Kerebrom",
+		Scope:   "project",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("search project-only observations: %v", err)
+	}
+	if len(projectOnlyResults) != 0 {
+		t.Fatalf("expected project-only search to exclude global observations, got %+v", projectOnlyResults)
+	}
+
+	recentWithGlobal, err := store.ListObservations(ctx, ListObservationOptions{
+		Project: "Proyecto Kerebrom",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("list observations with global visibility: %v", err)
+	}
+	if len(recentWithGlobal) == 0 || recentWithGlobal[0].ID != globalObservation.ID {
+		t.Fatalf("expected recent list to include cross-project global observation %d, got %+v", globalObservation.ID, recentWithGlobal)
+	}
+
 	listed, err := store.ListObservations(ctx, ListObservationOptions{
 		Project:   "Proyecto Kerebrom",
 		SessionID: "session-1",
