@@ -1,54 +1,54 @@
 # Kerebrom
 
-[English](README.md) · [Release v1.1.0](https://github.com/ulianbass/kerebrom/releases/tag/v1.1.0) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v2.0.0](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.0) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
-> Una capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y otros clientes compatibles con MCP.
+> Una sola capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier otro cliente compatible con MCP.
 
-Kerebrom permite que los agentes de código compartan memoria local sin enviar el contexto del proyecto a un servicio en la nube. Corre como un binario único en Go, guarda datos en SQLite con FTS5, expone un servidor MCP e instala el flujo de memoria más fuerte disponible para cada cliente de IA soportado.
+Kerebrom da a los agentes de codificación una memoria local compartida sin enviar el contexto de tu proyecto a servicios en la nube. Funciona como un único binario Go, almacena datos en SQLite con FTS5, expone un servidor MCP con superficie semántica limpia, e instala el flujo de memoria más fuerte disponible para cada cliente IA soportado.
 
 ![Flujo de memoria de Kerebrom](docs/assets/kerebrom-memory-flow.svg)
 
-## Línea Del Producto
-
-La rama pública activa es `v1`. Las líneas históricas se conservan como tags, ordenadas de más antigua a más nueva:
+## Líneas del producto
 
 | Línea | Estado | Propósito |
 |---|---:|---|
-| `history/legacy-main-2026-04-10` | tag | Historial legacy de la rama default antes del reset v1 |
-| `history/go-rewrite-2026-04-10` | tag | Experimento previo de reescritura en Go |
-| `v1` | rama actual | Línea estable de release v1 |
+| `v2` | **rama actual** | Superficie semántica limpia (7 tools con nombres de verbo), comando de auto-actualización, plug-and-play en Claude Desktop |
+| `v1` | mantenida | Superficie `mem_*` previa; aún recibe correcciones críticas |
+| `history/legacy-main-2026-04-10` | tag | Historia de la rama por defecto antes del reset v1 |
+| `history/go-rewrite-2026-04-10` | tag | Experimento de reescritura Go anterior |
 
-Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evolucionar sin reescribir historial.
+Cada línea vive en su propio directorio `versions/vN/` para que las versiones futuras evolucionen sin reescribir historia. Ver [docs/BRANCHES.md](docs/BRANCHES.md) para el mapa completo del repositorio.
 
-## Qué Incluye v1
+## Lo que provee v2
 
-- Binario único en Go, sin stack de servicios que mantener.
-- Memoria local compartida entre agentes de IA soportados.
-- SQLite + FTS5 para recuperación local rápida.
-- Servidor MCP con 16 herramientas `mem_*`, alias natural `recall`, anotaciones seguras de lectura/escritura y un perfil de agente que expone por defecto solo las herramientas que los agentes necesitan.
-- Protocolo MCP como prompt/resource para Claude Desktop y otros clientes solo-MCP.
-- Transporte MCP por Streamable HTTP para conectores remotos como Claude Chat/Cowork y ChatGPT cuando el cliente no puede ejecutar MCP local por `stdio`.
-- CLI, HTTP API, dashboard terminal, export/import y sync por chunks comprimidos.
-- Hooks de lifecycle para Claude Code: inicio de sesión, ingesta de prompt, captura pasiva, recuperación post-compaction y cierre de sesión.
-- Setup por MCP e instrucciones para Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf y VS Code.
-- Framework de memoria destilada: los prompts son historial de intención; las observaciones canónicas son memorias interpretadas con `What / Why / Where / Learned`.
+- **Único binario Go** sin pila de servicios que mantener.
+- **Siete tools MCP semánticos** (`context`, `recall`, `remember`, `summary`, `forget`, `timeline`, `projects`) — nombres de verbo que el modelo entiende por intuición, sin prefijos `mem_*` que aprender.
+- **Auto-actualización** con `kerebrom update` — descarga el último release de GitHub, baja el código fuente y reinstala en el lugar.
+- **Auto-aprobación en Claude Code** para los seis tools del día a día, así el agente nunca pide permiso para usar memoria.
+- **Limpieza de restos de v1** durante setup: cualquier entrada vieja `mcp__Kerebrom__mem_*` en `permissions.allow` se elimina.
+- **Mismo almacén SQLite + FTS5 que v1** — actualizar no toca tus datos.
+- **Transporte MCP Streamable HTTP** para conectores remotos como Claude Chat/Cowork y ChatGPT cuando el cliente no puede lanzar un servidor MCP stdio local.
+- **CLI, API HTTP, dashboard de terminal, export/import, chunks de sync comprimidos** — todo lo de v1, con el vocabulario v2.
+- **Hooks de ciclo de vida de Claude Code** para inicio de sesión, ingesta de prompt, captura pasiva, recuperación post-compactación y cierre de sesión.
+- **Setup para Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf y VS Code** con el nuevo texto de protocolo.
+- **Marco de memoria distilada**: los prompts son historia de intención; las observaciones son memorias interpretadas con el formato `What / Why / Where / Learned`.
 
-## Instalación Desde Fuente
+## Instalación
 
 ```bash
 git clone https://github.com/ulianbass/kerebrom.git
-cd kerebrom/versions/v1
+cd kerebrom/versions/v2
 make install-user
 ```
 
-Esto compila `kerebrom`, lo instala en `~/local/bin/kerebrom`, crea el enlace en `~/.local/bin/kerebrom` y ejecuta:
+Esto compila `kerebrom`, lo instala en `~/local/bin/kerebrom`, lo enlaza desde `~/.local/bin/kerebrom`, y ejecuta:
 
 ```bash
 kerebrom setup auto
 ```
 
-`setup auto` configura solo clientes con configuración local existente, y usa Claude Desktop como fallback si no detecta ningún cliente. Para forzar un cliente:
+`setup auto` configura solo los clientes con configuración local existente y cae en Claude Desktop cuando no detecta ninguna. Para forzar un cliente específico:
 
 ```bash
 make install-user SETUP_AGENT=cursor
@@ -56,58 +56,82 @@ make install-user SETUP_AGENT=claude-desktop
 make install-user SETUP_AGENT=all
 ```
 
-Las instalaciones desde fuente compilan el checkout que el usuario clonó. Un clone fresco de la rama default `v1` instala la línea de release actual; un clone viejo debe actualizarse antes de correr el instalador.
+Reinicia cualquier cliente IA abierto para que recoja el nuevo servidor MCP.
 
-## Comandos Diarios
+## Actualizar
+
+```bash
+kerebrom update
+```
+
+Descarga el último release de GitHub, extrae el tarball de fuentes para ese tag y ejecuta `make install-user` contra `versions/v2`. Usa `--check` para ver si hay actualización sin instalar, `--yes` para saltar la confirmación, o `--pre-release` para considerar tags pre-release.
+
+## El ciclo
+
+Los siete tools componen un único ritmo que Claude sigue automáticamente:
+
+| Cuándo | Tool |
+|---|---|
+| Inicio de cualquier conversación no trivial | `context` |
+| Necesitas buscar un tema específico | `recall` |
+| Aparece un hecho durable, decisión, preferencia, bugfix o aprendizaje | `remember` |
+| Cerrando trabajo sustancial o tras compactación | `summary` |
+| Inspeccionar historia cronológica | `timeline` |
+| El usuario dice que algo está mal o es obsoleto | `forget` |
+| Consolidar variantes de nombres de proyecto | `projects` |
+
+El usuario nunca tiene que decir "usa Kerebrom" o "guarda esto en memoria". El agente usa los tools por iniciativa propia cuando los nombres coinciden con la intención.
+
+## Comandos cotidianos
 
 ```bash
 kerebrom version
+kerebrom update
 kerebrom setup auto
 kerebrom setup all
 kerebrom stats
-kerebrom context --project my-project "what matters here?"
-kerebrom search "release decision"
+kerebrom context --project my-project "qué importa aquí?"
+kerebrom search "decisión release"
 KEREBROM_REMOTE_TOKEN="change-me" kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
 kerebrom tui
 kerebrom export --output memory-export.json
 kerebrom sync --status
 ```
 
-En integraciones con agentes, la mayoría de usuarios no debería llamar herramientas de memoria manualmente. Kerebrom registra herramientas MCP, un protocolo de memoria como prompt/resource e instrucciones de cliente para que el agente pueda guardar prompts, recuperar contexto y persistir aprendizajes destilados durante el trabajo normal. Los clientes con hooks como Claude Code pueden ejecutarlo por turno; clientes solo-MCP como Claude Desktop reciben el comportamiento más fuerte que su superficie MCP expone. Clientes cloud como Claude Chat/Cowork y ChatGPT no pueden ejecutar el binario local directamente: deben conectarse a un endpoint remoto de Kerebrom por Streamable HTTP expuesto por el usuario o por una capa cloud.
-
-## Modelo De Memoria
+## Modelo de memoria
 
 Kerebrom separa cuatro conceptos:
 
 | Objeto | Propósito |
 |---|---|
-| Proyecto | Límite normalizado del workspace o dominio |
-| Sesión | Lifecycle de una conversación o ejecución de agente |
-| Prompt | Historial de intención del usuario |
-| Observación | Memoria durable canónica, destilada por un agente de IA |
+| Project | Frontera normalizada de workspace o dominio |
+| Session | Ciclo de vida de una conversación o ejecución de agente |
+| Prompt | Historia de intención del usuario |
+| Observation | Memoria durable canónica, interpretada por un agente IA |
 
-Las observaciones no deben ser transcripts crudos. Deben ser concisas, interpretadas y útiles para trabajo futuro.
+Las observaciones no deben ser transcripciones crudas. Deben ser concisas, interpretadas y útiles para trabajo futuro — destiladas con el marco **What / Why / Where / Learned**.
 
 ## Arquitectura
 
 ```text
-versions/v1/
-  cmd/kerebrom/             Entrada CLI
-  internal/cli/             Comandos, hooks, TUI
-  internal/setup/           Setup local de clientes de IA
-  internal/store/sqlite/    Store SQLite + FTS5
-  internal/transport/mcp/   Servidor MCP
-  internal/transport/http/  HTTP API local
-  internal/sync/            Sync por chunks comprimidos
-  docs/                     ADRs, spec, checklist de release
+versions/v2/
+  cmd/kerebrom/             entrada CLI
+  internal/cli/             comandos, hooks, TUI
+  internal/setup/           configuración de clientes IA + limpieza v1
+  internal/store/sqlite/    almacén SQLite + FTS5 (esquema sin cambios)
+  internal/transport/mcp/   servidor MCP con los 7 tools semánticos
+  internal/transport/http/  API HTTP local
+  internal/sync/            chunks de sync comprimidos
+  internal/updater/         auto-actualización vía GitHub Releases
+  docs/                     ADRs, arquitectura, migración, checklist de release
 ```
 
-Los datos runtime se guardan en el directorio local de datos de Kerebrom del usuario. El repositorio no contiene memorias de usuario, backups, configuración específica de máquina ni material de staging de migración.
+Los datos de runtime viven en `~/.kerebrom/`. El repositorio no contiene memoria del usuario, respaldos, configuración específica de máquina ni material de migración.
 
-## Build Y Tests
+## Compilar y probar
 
 ```bash
-cd versions/v1
+cd versions/v2
 make test
 make build
 ./bin/kerebrom version
@@ -115,8 +139,8 @@ make build
 
 ## Procedencia
 
-Kerebrom v1 es la línea limpia del producto. Conserva la dirección del producto y la identidad del repositorio público mientras mantiene experimentos anteriores como tags de historial. Ver [docs/BRANCHES.md](docs/BRANCHES.md).
+Kerebrom v2 es la evolución limpia de la línea v1. Preserva la dirección del producto, la identidad pública del repositorio y el esquema SQLite, mientras reemplaza la superficie técnica `mem_*` por nombres de verbo semánticos que el modelo invoca automáticamente. v1 permanece en `versions/v1/` para usuarios que no quieran migrar aún. Ver [docs/BRANCHES.md](docs/BRANCHES.md) para el mapa del repositorio y [versions/v2/docs/migration-v1-to-v2.md](versions/v2/docs/migration-v1-to-v2.md) para la guía de actualización.
 
 ## Licencia
 
-Software propietario con código disponible para revisión. Ver [LICENSE](LICENSE).
+Software propietario con código disponible. Ver [LICENSE](LICENSE).
