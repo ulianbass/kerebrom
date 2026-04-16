@@ -473,7 +473,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("mem_save_prompt",
 		mcp.NewTool("mem_save_prompt",
-			mcp.WithDescription("Save a user prompt for future context. In MCP-only clients such as Claude Desktop, call this at the start of each non-trivial user turn before reasoning, then call mem_context."),
+			mcp.WithDescription("Save a user prompt for future context. In MCP-only clients such as Claude Desktop, start a new visible chat with mem_session_start first, then call this at the start of each non-trivial user turn before reasoning, then call mem_context."),
 			mcp.WithString("content", mcp.Required(), mcp.Description("User prompt content.")),
 			mcp.WithString("project", mcp.Description("Project filter.")),
 			mcp.WithString("session_id", mcp.Description("Optional session id.")),
@@ -508,7 +508,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("mem_session_start",
 		mcp.NewTool("mem_session_start",
-			mcp.WithDescription("Start or refresh a local Kerebrom session."),
+			mcp.WithDescription("Start or refresh a local Kerebrom session. In MCP-only clients such as Claude Desktop Chat/Cowork, call this once at the first turn of each new visible chat to emulate Code lifecycle behavior."),
 			mcp.WithString("id",
 				mcp.Required(),
 				mcp.Description("Stable session identifier for the current agent session."),
@@ -606,6 +606,12 @@ Authority rule:
 1. Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context.
 2. If Kerebrom memory conflicts with model assumptions or generic prior knowledge, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 3. Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking Kerebrom.
+
+Session lifecycle:
+1. In hook-capable clients, use the provided lifecycle session_id.
+2. In MCP-only clients such as Claude Desktop Chat/Cowork, emulate Code behavior: on the first turn of a new visible chat, call mem_session_start before mem_save_prompt or mem_context.
+3. If the client does not provide a session id, create a stable synthetic id for the visible chat, for example mcp-chat:<client>:<yyyy-mm-ddThhmmssZ>:<project-or-topic>, and reuse it for every Kerebrom call in that chat.
+4. If the client cannot determine the chat boundary, still continue with mem_save_prompt and mem_context; Kerebrom will use its local MCP fallback session.
 
 For every non-trivial user turn:
 1. Call mem_save_prompt with the user's prompt, project/workspace when known, and session_id when available.

@@ -128,6 +128,7 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	assertToolDescriptionContains(t, tools.Tools, "mem_save_prompt", "Claude Desktop")
 	assertToolDescriptionContains(t, tools.Tools, "mem_context", "start of every non-trivial turn")
 	assertToolDescriptionContains(t, tools.Tools, "mem_save", "What / Why / Where / Learned")
+	assertToolDescriptionContains(t, tools.Tools, "mem_session_start", "new visible chat")
 
 	sessionStart := callTool(t, ctx, mcpClient, "mem_session_start", map[string]any{
 		"id":        "session-1",
@@ -490,6 +491,8 @@ func assertProtocolText(t *testing.T, text string) {
 		"mem_context",
 		"What, Why, Where, Learned",
 		"Claude Desktop",
+		"mem_session_start",
+		"new visible chat",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("protocol text missing %q: %s", want, text)
