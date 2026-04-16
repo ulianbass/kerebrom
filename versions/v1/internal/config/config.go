@@ -14,6 +14,7 @@ const (
 	DataDirEnv         = "KEREBROM_DATA_DIR"
 	PortEnv            = "KEREBROM_PORT"
 	ProjectEnv         = "KEREBROM_PROJECT"
+	RemoteTokenEnv     = "KEREBROM_REMOTE_TOKEN"
 	DefaultDataDirName = ".kerebrom"
 )
 

@@ -9,6 +9,7 @@ make build
 make test
 go run ./cmd/kerebrom version
 go run ./cmd/kerebrom mcp
+go run ./cmd/kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
 ```
 
 ## User Install
@@ -31,6 +32,7 @@ Kerebrom stores two different layers: `mem_save_prompt` keeps user intent histor
 - HTTP + MCP + CLI surfaces.
 - 15 total `mem_*` MCP tools, with `--tools=agent` used by setup to keep agent context smaller.
 - MCP prompt/resource memory protocol for Claude Desktop and other MCP-only clients.
+- Remote MCP transport over Streamable HTTP for cloud clients such as Claude Chat/Cowork and ChatGPT.
 - Retrieval commands like `context`, `search`, `timeline`, and the terminal dashboard.
 - Lifecycle hook runner for hook-capable AI clients.
 - Export/import and compressed sync chunks under `.kerebrom/`.

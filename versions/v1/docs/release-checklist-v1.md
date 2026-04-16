@@ -13,8 +13,9 @@
 - [x] FTS5 retrieval implemented.
 - [x] MCP contract implemented with 15 `mem_*` tools.
 - [x] MCP prompt/resource memory protocol implemented for Claude Desktop and other MCP-only clients.
+- [x] Streamable HTTP MCP transport implemented for remote connector surfaces.
 - [x] HTTP API implemented for sessions, observations, prompts, context, timeline, stats, export/import, and projects.
-- [x] CLI contract implemented for setup, serve, mcp, tui, search, save, context, timeline, stats, export, import, sync, and projects.
+- [x] CLI contract implemented for setup, serve, mcp, mcp-http, tui, search, save, context, timeline, stats, export, import, sync, and projects.
 - [x] TUI functional for dashboard, recent observations, search, observation detail, timeline, sessions, and prompts.
 - [x] Store-layer private tag redaction implemented.
 - [x] Hook runner implemented for lifecycle-capable clients.
@@ -25,6 +26,7 @@
 
 - [x] Codex setup works.
 - [x] Claude / Claude Code / Claude Desktop setup works through MCP and memory protocol files.
+- [x] Claude Chat/Cowork and ChatGPT have a remote MCP transport path through `mcp-http`; packaged hosted deployment/OAuth remains a follow-up.
 - [x] `setup auto` configures detected clients and avoids creating every client config by default.
 - [x] Claude Code lifecycle hooks are installed for session start, user prompt ingest, subagent passive capture, stop, and post-compaction recovery.
 - [x] Cursor setup works.
@@ -38,6 +40,7 @@
 
 - [x] Contract tests for `mem_*` tools pass.
 - [x] Contract tests for MCP prompt/resource memory protocol pass.
+- [x] Contract tests for Streamable HTTP MCP with bearer-token auth pass.
 - [x] End-to-end lifecycle tests pass.
 - [x] Cross-agent recall works for the same normalized project against the same local store.
 - [x] Hook smoke verifies automatic session, prompt ingest, passive capture, and session close without polluting the production DB.

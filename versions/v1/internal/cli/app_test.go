@@ -26,6 +26,9 @@ func TestRunHelp(t *testing.T) {
 	if !strings.Contains(stdout.String(), "mcp") {
 		t.Fatalf("help output missing mcp command: %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "mcp-http") {
+		t.Fatalf("help output missing mcp-http command: %q", stdout.String())
+	}
 }
 
 func TestRunVersion(t *testing.T) {
@@ -152,5 +155,23 @@ func TestRunSaveSearchAndStats(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), "Shared local memory") {
 		t.Fatalf("timeline output missing saved observation: %q", stdout.String())
+	}
+}
+
+func TestRunMCPHTTPRequiresTokenForPublicAddress(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{
+		"mcp-http",
+		"--addr", "0.0.0.0:7437",
+	}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected config error exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), config.RemoteTokenEnv) {
+		t.Fatalf("expected token guidance in stderr, got %q", stderr.String())
 	}
 }

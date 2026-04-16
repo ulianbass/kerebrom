@@ -28,6 +28,7 @@ Kerebrom v1 lives under `versions/v1/` so future versions can evolve without rew
 - SQLite + FTS5 storage for fast local retrieval.
 - MCP server with 15 `mem_*` tools and an agent profile that exposes only the tools agents need by default.
 - MCP prompt/resource protocol for Claude Desktop and other MCP-only clients.
+- Streamable HTTP MCP transport for remote connectors such as Claude Chat/Cowork and ChatGPT when the client cannot launch a local `stdio` MCP server.
 - CLI, HTTP API, terminal dashboard, export/import, and compressed sync chunks.
 - Claude Code lifecycle hooks for session start, prompt ingest, passive capture, compaction recovery, and session close.
 - MCP and instruction setup for Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf, and VS Code.
@@ -66,12 +67,13 @@ kerebrom setup all
 kerebrom stats
 kerebrom context --project my-project "what matters here?"
 kerebrom search "release decision"
+KEREBROM_REMOTE_TOKEN="change-me" kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
 kerebrom tui
 kerebrom export --output memory-export.json
 kerebrom sync --status
 ```
 
-For agent integrations, most users should not call memory tools manually. Kerebrom registers MCP tools, a memory protocol prompt/resource, and client instructions so the agent can save prompts, retrieve context, and persist distilled learnings during normal work. Hook-capable clients such as Claude Code can run this per turn; MCP-only clients such as Claude Desktop receive the strongest behavior their MCP surface exposes.
+For agent integrations, most users should not call memory tools manually. Kerebrom registers MCP tools, a memory protocol prompt/resource, and client instructions so the agent can save prompts, retrieve context, and persist distilled learnings during normal work. Hook-capable clients such as Claude Code can run this per turn; MCP-only clients such as Claude Desktop receive the strongest behavior their MCP surface exposes. Cloud clients such as Claude Chat/Cowork and ChatGPT cannot launch the local binary directly: they need a user-hosted or cloud-hosted Kerebrom Streamable HTTP endpoint.
 
 ## Memory Model
 

@@ -2,11 +2,14 @@ package mcptransport
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
@@ -391,6 +394,58 @@ func TestServerUsesDefaultProjectAndSessionFallback(t *testing.T) {
 	}
 }
 
+func TestServerStreamableHTTPWithBearerAuth(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	server := NewServerWithConfig(store, Config{DefaultProject: "Proyecto Kerebrom"}, ResolveTools("agent"))
+	httpServer := httptest.NewServer(server.StreamableHTTPMux("/memory", "secret-token"))
+	t.Cleanup(httpServer.Close)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, httpServer.URL+"/memory", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("new unauthorized request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("send unauthorized request: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthorized status, got %d", resp.StatusCode)
+	}
+
+	mcpClient, err := client.NewStreamableHttpClient(httpServer.URL+"/memory", transport.WithHTTPHeaders(map[string]string{
+		"Authorization": "Bearer secret-token",
+	}))
+	if err != nil {
+		t.Fatalf("new streamable http client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = mcpClient.Close()
+	})
+	if err := mcpClient.Start(ctx); err != nil {
+		t.Fatalf("start streamable http client: %v", err)
+	}
+
+	var initReq mcp.InitializeRequest
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "kerebrom-http-test", Version: "1.0.0"}
+	if _, err := mcpClient.Initialize(ctx, initReq); err != nil {
+		t.Fatalf("initialize streamable http client: %v", err)
+	}
+
+	tools, err := mcpClient.ListTools(ctx, mcp.ListToolsRequest{})
+	if err != nil {
+		t.Fatalf("list tools over streamable http: %v", err)
+	}
+	if !toolExists(tools.Tools, "mem_context") {
+		t.Fatalf("expected mem_context over streamable http, got %+v", tools.Tools)
+	}
+}
+
 func assertProtocolText(t *testing.T, text string) {
 	t.Helper()
 
@@ -420,6 +475,15 @@ func assertToolDescriptionContains(t *testing.T, tools []mcp.Tool, name string, 
 		return
 	}
 	t.Fatalf("tool %s not found", name)
+}
+
+func toolExists(tools []mcp.Tool, name string) bool {
+	for _, tool := range tools {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestServerReturnsToolErrorForMissingRequiredArgument(t *testing.T) {

@@ -9,6 +9,7 @@ make build
 make test
 go run ./cmd/kerebrom version
 go run ./cmd/kerebrom mcp
+go run ./cmd/kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
 ```
 
 ## Instalación De Usuario
@@ -31,6 +32,7 @@ Kerebrom guarda dos capas distintas: `mem_save_prompt` conserva historial de int
 - Superficies HTTP + MCP + CLI.
 - 15 herramientas MCP `mem_*` totales, con `--tools=agent` usado por setup para reducir el contexto de agentes.
 - Protocolo MCP de memoria como prompt/resource para Claude Desktop y otros clientes solo-MCP.
+- Transporte MCP remoto por Streamable HTTP para clientes cloud como Claude Chat/Cowork y ChatGPT.
 - Comandos de recuperación como `context`, `search`, `timeline` y el dashboard terminal.
 - Hook runner para clientes de IA con soporte de hooks.
 - Export/import y sync por chunks comprimidos bajo `.kerebrom/`.

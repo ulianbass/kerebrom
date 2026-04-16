@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,12 @@ import (
 
 type Config struct {
 	DefaultProject string
+}
+
+type HTTPConfig struct {
+	Addr      string
+	Path      string
+	AuthToken string
 }
 
 type Server struct {
@@ -236,6 +243,63 @@ func (s *Server) MCPServer() *mcpserver.MCPServer {
 
 func (s *Server) ServeStdio() error {
 	return mcpserver.ServeStdio(s.server)
+}
+
+func (s *Server) ServeStreamableHTTP(cfg HTTPConfig) error {
+	addr := strings.TrimSpace(cfg.Addr)
+	if addr == "" {
+		addr = "127.0.0.1:7437"
+	}
+
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           s.StreamableHTTPMux(cfg.Path, cfg.AuthToken),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	return httpServer.ListenAndServe()
+}
+
+func (s *Server) StreamableHTTPMux(path string, authToken string) http.Handler {
+	endpoint := normalizeEndpointPath(path)
+	streamable := mcpserver.NewStreamableHTTPServer(s.server)
+
+	mux := http.NewServeMux()
+	mux.Handle(endpoint, bearerAuthMiddleware(authToken, streamable))
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":  "ok",
+			"service": "kerebrom-mcp",
+			"path":    endpoint,
+		})
+	})
+	return mux
+}
+
+func normalizeEndpointPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "/mcp"
+	}
+	path = "/" + strings.Trim(path, "/")
+	if path == "/" {
+		return "/mcp"
+	}
+	return path
+}
+
+func bearerAuthMiddleware(authToken string, next http.Handler) http.Handler {
+	authToken = strings.TrimSpace(authToken)
+	if authToken == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+authToken && r.Header.Get("X-Kerebrom-Token") != authToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandlerFunc) {

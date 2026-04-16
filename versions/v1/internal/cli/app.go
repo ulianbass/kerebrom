@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -68,6 +69,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runServe(args[1:], stdout, stderr)
 	case "mcp":
 		return runMCP(args[1:], stdout, stderr)
+	case "mcp-http":
+		return runMCPHTTP(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", args[0])
 		writeHelp(stderr)
@@ -819,15 +822,7 @@ func runMCP(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
-	defaultProject := strings.TrimSpace(*project)
-	if defaultProject == "" {
-		defaultProject = os.Getenv(config.ProjectEnv)
-	}
-	if defaultProject == "" {
-		if cwd, err := os.Getwd(); err == nil {
-			defaultProject = projectdetect.Detect(cwd)
-		}
-	}
+	defaultProject := detectMCPDefaultProject(*project)
 
 	server := mcptransport.NewServerWithConfig(store, mcptransport.Config{DefaultProject: defaultProject}, mcptransport.ResolveTools(*tools))
 	if err := server.ServeStdio(); err != nil {
@@ -836,6 +831,101 @@ func runMCP(args []string, stdout, stderr io.Writer) int {
 	}
 
 	return 0
+}
+
+func runMCPHTTP(args []string, stdout, stderr io.Writer) int {
+	fs := newFlagSet("mcp-http", stderr)
+	addr := fs.String("addr", config.DefaultListenAddr(), "Listen address for Streamable HTTP MCP")
+	path := fs.String("path", "/mcp", "MCP endpoint path")
+	tools := fs.String("tools", "agent", "Tool profile or comma-separated tool allowlist: agent, admin, all, or tool names")
+	project := fs.String("project", "", "Default project name for MCP clients that omit project")
+	authToken := fs.String("auth-token", "", "Bearer token required by remote clients; defaults to KEREBROM_REMOTE_TOKEN")
+	allowPublicUnauthenticated := fs.Bool("allow-public-unauthenticated", false, "Allow non-loopback HTTP without an auth token")
+	if err := fs.Parse(reorderFlagArgs(args, nil)); err != nil {
+		return 2
+	}
+	if len(fs.Args()) > 0 {
+		candidate := fs.Args()[0]
+		if _, err := strconv.Atoi(candidate); err == nil {
+			*addr = "127.0.0.1:" + candidate
+		} else {
+			*addr = candidate
+		}
+	}
+
+	token := strings.TrimSpace(*authToken)
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv(config.RemoteTokenEnv))
+	}
+	if token == "" && !*allowPublicUnauthenticated && !isLoopbackListenAddr(*addr) {
+		fmt.Fprintf(stderr, "mcp-http auth token required for non-loopback address %q; set --auth-token, %s, or --allow-public-unauthenticated\n", *addr, config.RemoteTokenEnv)
+		return 2
+	}
+
+	store, closeFn, err := openStore(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "open store: %v\n", err)
+		return 1
+	}
+	defer closeFn()
+
+	defaultProject := detectMCPDefaultProject(*project)
+	server := mcptransport.NewServerWithConfig(store, mcptransport.Config{DefaultProject: defaultProject}, mcptransport.ResolveTools(*tools))
+
+	fmt.Fprintf(stdout, "kerebrom MCP Streamable HTTP listening on %s%s\n", *addr, normalizeCLIEndpointPath(*path))
+	if token != "" {
+		fmt.Fprintln(stdout, "auth: bearer token enabled")
+	} else {
+		fmt.Fprintln(stdout, "auth: disabled")
+	}
+	if err := server.ServeStreamableHTTP(mcptransport.HTTPConfig{
+		Addr:      *addr,
+		Path:      *path,
+		AuthToken: token,
+	}); err != nil {
+		fmt.Fprintf(stderr, "mcp-http serve error: %v\n", err)
+		return 1
+	}
+
+	return 0
+}
+
+func detectMCPDefaultProject(project string) string {
+	defaultProject := strings.TrimSpace(project)
+	if defaultProject == "" {
+		defaultProject = os.Getenv(config.ProjectEnv)
+	}
+	if defaultProject == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			defaultProject = projectdetect.Detect(cwd)
+		}
+	}
+	return defaultProject
+}
+
+func isLoopbackListenAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return false
+	}
+	host = strings.Trim(host, "[]")
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func normalizeCLIEndpointPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "/mcp"
+	}
+	path = "/" + strings.Trim(path, "/")
+	if path == "/" {
+		return "/mcp"
+	}
+	return path
 }
 
 func writeHelp(w io.Writer) {
@@ -851,6 +941,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprintln(w, "  hook            Run installed lifecycle hooks")
 	fmt.Fprintln(w, "  serve           Start the local HTTP API")
 	fmt.Fprintln(w, "  mcp             Start the local MCP server over stdio")
+	fmt.Fprintln(w, "  mcp-http        Start the MCP server over Streamable HTTP")
 	fmt.Fprintln(w, "  session-start   Create or refresh a local session")
 	fmt.Fprintln(w, "  session-end     Mark a session as completed")
 	fmt.Fprintln(w, "  save            Persist an observation")

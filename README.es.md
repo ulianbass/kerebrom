@@ -28,6 +28,7 @@ Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evoluci
 - SQLite + FTS5 para recuperación local rápida.
 - Servidor MCP con 15 herramientas `mem_*` y un perfil de agente que expone por defecto solo las herramientas que los agentes necesitan.
 - Protocolo MCP como prompt/resource para Claude Desktop y otros clientes solo-MCP.
+- Transporte MCP por Streamable HTTP para conectores remotos como Claude Chat/Cowork y ChatGPT cuando el cliente no puede ejecutar MCP local por `stdio`.
 - CLI, HTTP API, dashboard terminal, export/import y sync por chunks comprimidos.
 - Hooks de lifecycle para Claude Code: inicio de sesión, ingesta de prompt, captura pasiva, recuperación post-compaction y cierre de sesión.
 - Setup por MCP e instrucciones para Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf y VS Code.
@@ -66,12 +67,13 @@ kerebrom setup all
 kerebrom stats
 kerebrom context --project my-project "what matters here?"
 kerebrom search "release decision"
+KEREBROM_REMOTE_TOKEN="change-me" kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
 kerebrom tui
 kerebrom export --output memory-export.json
 kerebrom sync --status
 ```
 
-En integraciones con agentes, la mayoría de usuarios no debería llamar herramientas de memoria manualmente. Kerebrom registra herramientas MCP, un protocolo de memoria como prompt/resource e instrucciones de cliente para que el agente pueda guardar prompts, recuperar contexto y persistir aprendizajes destilados durante el trabajo normal. Los clientes con hooks como Claude Code pueden ejecutarlo por turno; clientes solo-MCP como Claude Desktop reciben el comportamiento más fuerte que su superficie MCP expone.
+En integraciones con agentes, la mayoría de usuarios no debería llamar herramientas de memoria manualmente. Kerebrom registra herramientas MCP, un protocolo de memoria como prompt/resource e instrucciones de cliente para que el agente pueda guardar prompts, recuperar contexto y persistir aprendizajes destilados durante el trabajo normal. Los clientes con hooks como Claude Code pueden ejecutarlo por turno; clientes solo-MCP como Claude Desktop reciben el comportamiento más fuerte que su superficie MCP expone. Clientes cloud como Claude Chat/Cowork y ChatGPT no pueden ejecutar el binario local directamente: deben conectarse a un endpoint remoto de Kerebrom por Streamable HTTP expuesto por el usuario o por una capa cloud.
 
 ## Modelo De Memoria
 
