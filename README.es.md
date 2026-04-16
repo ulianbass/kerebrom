@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v1.0.8](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.8) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v1.0.9](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.9) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y otros clientes compatibles con MCP.
@@ -26,7 +26,7 @@ Kerebrom v1 vive en `versions/v1/` para que las versiones futuras puedan evoluci
 - Binario único en Go, sin stack de servicios que mantener.
 - Memoria local compartida entre agentes de IA soportados.
 - SQLite + FTS5 para recuperación local rápida.
-- Servidor MCP con 15 herramientas `mem_*` y un perfil de agente que expone por defecto solo las herramientas que los agentes necesitan.
+- Servidor MCP con 16 herramientas `mem_*`, alias natural `recall`, anotaciones seguras de lectura/escritura y un perfil de agente que expone por defecto solo las herramientas que los agentes necesitan.
 - Protocolo MCP como prompt/resource para Claude Desktop y otros clientes solo-MCP.
 - Transporte MCP por Streamable HTTP para conectores remotos como Claude Chat/Cowork y ChatGPT cuando el cliente no puede ejecutar MCP local por `stdio`.
 - CLI, HTTP API, dashboard terminal, export/import y sync por chunks comprimidos.

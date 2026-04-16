@@ -71,6 +71,7 @@ var profileAgentTools = map[string]bool{
 	"mem_search":            true,
 	"mem_update":            true,
 	"mem_context":           true,
+	"mem_bootstrap":         true,
 	"mem_get_observation":   true,
 	"mem_save_prompt":       true,
 	"mem_session_summary":   true,
@@ -78,6 +79,7 @@ var profileAgentTools = map[string]bool{
 	"mem_session_end":       true,
 	"mem_suggest_topic_key": true,
 	"mem_capture_passive":   true,
+	"recall":                true,
 }
 
 var profileAdminTools = map[string]bool{
@@ -85,6 +87,31 @@ var profileAdminTools = map[string]bool{
 	"mem_stats":          true,
 	"mem_timeline":       true,
 	"mem_merge_projects": true,
+}
+
+var (
+	readOnlyTool = mcp.ToolAnnotation{
+		ReadOnlyHint:    boolPtr(true),
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  boolPtr(true),
+		OpenWorldHint:   boolPtr(false),
+	}
+	writeTool = mcp.ToolAnnotation{
+		ReadOnlyHint:    boolPtr(false),
+		DestructiveHint: boolPtr(false),
+		IdempotentHint:  boolPtr(false),
+		OpenWorldHint:   boolPtr(false),
+	}
+	destructiveTool = mcp.ToolAnnotation{
+		ReadOnlyHint:    boolPtr(false),
+		DestructiveHint: boolPtr(true),
+		IdempotentHint:  boolPtr(false),
+		OpenWorldHint:   boolPtr(false),
+	}
+)
+
+func boolPtr(value bool) *bool {
+	return &value
 }
 
 func ResolveTools(input string) map[string]bool {
@@ -311,9 +338,60 @@ func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandl
 }
 
 func (s *Server) registerTools() {
+	s.addTool("mem_bootstrap",
+		mcp.NewTool("mem_bootstrap",
+			mcp.WithDescription("FIRST Kerebrom tool to call at the start of every non-trivial user turn in MCP-only clients such as Claude Desktop Chat/Cowork. One call starts or refreshes the session, saves the prompt when substantive, retrieves memory context, and returns cross-project matches when the client cannot identify the right project."),
+			mcp.WithToolAnnotation(writeTool),
+			mcp.WithString("prompt",
+				mcp.Description("Current user prompt. Kerebrom saves it as prompt history when substantive."),
+			),
+			mcp.WithString("query",
+				mcp.Description("Compact search query derived from the user's prompt. Defaults to prompt when omitted."),
+			),
+			mcp.WithString("project",
+				mcp.Description("Project name or workspace identifier. Leave empty if unknown; Kerebrom can fall back and search across projects."),
+			),
+			mcp.WithString("session_id",
+				mcp.Description("Stable session id for this visible chat or agent session."),
+			),
+			mcp.WithString("directory",
+				mcp.Description("Current working directory if known."),
+			),
+			mcp.WithNumber("limit",
+				mcp.Description("Maximum memories to return. Defaults to 10."),
+			),
+		),
+		s.handleMemBootstrap,
+	)
+
+	s.addTool("recall",
+		mcp.NewTool("recall",
+			mcp.WithDescription("Recall Kerebrom memory before answering questions about the user, their projects, preferences, previous decisions, or history. Use this natural alias when you need prior context quickly; it searches across projects if the current project is wrong or empty."),
+			mcp.WithToolAnnotation(readOnlyTool),
+			mcp.WithString("query",
+				mcp.Required(),
+				mcp.Description("Natural-language memory query."),
+			),
+			mcp.WithString("project",
+				mcp.Description("Optional project filter."),
+			),
+			mcp.WithString("scope",
+				mcp.Description("Optional scope filter."),
+			),
+			mcp.WithString("session_id",
+				mcp.Description("Optional session id for activity tracking."),
+			),
+			mcp.WithNumber("limit",
+				mcp.Description("Maximum memories to return. Defaults to 10."),
+			),
+		),
+		s.handleRecall,
+	)
+
 	s.addTool("mem_save",
 		mcp.NewTool("mem_save",
 			mcp.WithDescription("Persist an agent-distilled observation into Kerebrom's shared local memory whenever a durable decision, preference, bugfix, project fact, workflow, or lesson appears. Do not store raw transcript; interpret first using What / Why / Where / Learned."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("title",
 				mcp.Required(),
 				mcp.Description("Short searchable title for the memory."),
@@ -347,6 +425,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_search",
 		mcp.NewTool("mem_search",
 			mcp.WithDescription("Search persisted observations from shared Kerebrom memory before answering when prior project history, user preferences, previous decisions, or cross-agent context may affect the response."),
+			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("query",
 				mcp.Required(),
 				mcp.Description("Full-text query to execute against saved observations."),
@@ -370,6 +449,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_update",
 		mcp.NewTool("mem_update",
 			mcp.WithDescription("Update an existing observation by id."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithNumber("id", mcp.Required(), mcp.Description("Observation identifier.")),
 			mcp.WithString("title", mcp.Description("Replacement title.")),
 			mcp.WithString("content", mcp.Description("Replacement content.")),
@@ -384,6 +464,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_delete",
 		mcp.NewTool("mem_delete",
 			mcp.WithDescription("Delete an observation by id. Soft delete is the default."),
+			mcp.WithToolAnnotation(destructiveTool),
 			mcp.WithNumber("id", mcp.Required(), mcp.Description("Observation identifier.")),
 			mcp.WithBoolean("hard", mcp.Description("Permanently delete instead of soft delete.")),
 		),
@@ -393,6 +474,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_suggest_topic_key",
 		mcp.NewTool("mem_suggest_topic_key",
 			mcp.WithDescription("Suggest a stable topic key from type, title, or content."),
+			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("type", mcp.Description("Observation type or family.")),
 			mcp.WithString("title", mcp.Description("Observation title.")),
 			mcp.WithString("content", mcp.Description("Fallback content.")),
@@ -403,6 +485,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_context",
 		mcp.NewTool("mem_context",
 			mcp.WithDescription("Build a context bundle with stats, recent observations, and optional search matches. Use at the start of every non-trivial turn, before substantial coding or architecture work, and after context compaction."),
+			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("project",
 				mcp.Description("Optional project filter."),
 			),
@@ -425,6 +508,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_timeline",
 		mcp.NewTool("mem_timeline",
 			mcp.WithDescription("Show chronological context around an observation, or recent observations as a fallback."),
+			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithNumber("observation_id",
 				mcp.Description("Observation id to center the timeline around."),
 			),
@@ -453,6 +537,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_get_observation",
 		mcp.NewTool("mem_get_observation",
 			mcp.WithDescription("Fetch a single observation by its numeric id."),
+			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithNumber("id",
 				mcp.Required(),
 				mcp.Description("Observation identifier."),
@@ -464,6 +549,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_stats",
 		mcp.NewTool("mem_stats",
 			mcp.WithDescription("Return current memory counts for Kerebrom."),
+			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("project",
 				mcp.Description("Optional project filter."),
 			),
@@ -473,10 +559,13 @@ func (s *Server) registerTools() {
 
 	s.addTool("mem_save_prompt",
 		mcp.NewTool("mem_save_prompt",
-			mcp.WithDescription("Save a user prompt for future context. In MCP-only clients such as Claude Desktop, start a new visible chat with mem_session_start first, then call this at the start of each non-trivial user turn before reasoning, then call mem_context."),
+			mcp.WithDescription("Save a user prompt for future context and immediately return relevant Kerebrom context. In MCP-only clients such as Claude Desktop, prefer mem_bootstrap; if using this tool directly, call it before reasoning and use the returned context before answering."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("content", mcp.Required(), mcp.Description("User prompt content.")),
 			mcp.WithString("project", mcp.Description("Project filter.")),
 			mcp.WithString("session_id", mcp.Description("Optional session id.")),
+			mcp.WithString("query", mcp.Description("Optional context query. Defaults to content.")),
+			mcp.WithNumber("limit", mcp.Description("Maximum memories to return with the attached context. Defaults to 10.")),
 		),
 		s.handleMemSavePrompt,
 	)
@@ -484,6 +573,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_session_summary",
 		mcp.NewTool("mem_session_summary",
 			mcp.WithDescription("Save or retrieve an end-of-session summary plus recent observations. Use before ending substantial work and after long context shifts so future agents can resume quickly."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("id",
 				mcp.Description("Session identifier to summarize."),
 			),
@@ -508,7 +598,8 @@ func (s *Server) registerTools() {
 
 	s.addTool("mem_session_start",
 		mcp.NewTool("mem_session_start",
-			mcp.WithDescription("Start or refresh a local Kerebrom session. In MCP-only clients such as Claude Desktop Chat/Cowork, call this once at the first turn of each new visible chat to emulate Code lifecycle behavior."),
+			mcp.WithDescription("Start or refresh a local Kerebrom session. In MCP-only clients such as Claude Desktop Chat/Cowork, call this once at the first turn of each new visible chat to emulate Code lifecycle behavior; pass query/prompt context when available so Kerebrom can return bootstrap memory immediately."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("id",
 				mcp.Required(),
 				mcp.Description("Stable session identifier for the current agent session."),
@@ -519,6 +610,12 @@ func (s *Server) registerTools() {
 			mcp.WithString("directory",
 				mcp.Description("Current working directory for the session."),
 			),
+			mcp.WithString("query",
+				mcp.Description("Optional query or user prompt for immediate bootstrap context."),
+			),
+			mcp.WithNumber("limit",
+				mcp.Description("Maximum memories to return if query is provided. Defaults to 10."),
+			),
 		),
 		s.handleMemSessionStart,
 	)
@@ -526,6 +623,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_session_end",
 		mcp.NewTool("mem_session_end",
 			mcp.WithDescription("Mark a Kerebrom session as completed and persist its summary."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("id",
 				mcp.Required(),
 				mcp.Description("Session identifier to close."),
@@ -540,6 +638,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_capture_passive",
 		mcp.NewTool("mem_capture_passive",
 			mcp.WithDescription("Extract bullet learnings from text and save them as observations. Use for passive capture of agent output, summaries, subagent results, or long responses; save only durable learnings, not raw transcript."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("content", mcp.Required(), mcp.Description("Text output to inspect.")),
 			mcp.WithString("project", mcp.Description("Project name.")),
 			mcp.WithString("session_id", mcp.Description("Optional session id.")),
@@ -550,6 +649,7 @@ func (s *Server) registerTools() {
 	s.addTool("mem_merge_projects",
 		mcp.NewTool("mem_merge_projects",
 			mcp.WithDescription("Merge source project variants into a canonical target project."),
+			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("target", mcp.Required(), mcp.Description("Canonical target project.")),
 			mcp.WithArray("sources",
 				mcp.Required(),
@@ -609,14 +709,15 @@ Authority rule:
 
 Session lifecycle:
 1. In hook-capable clients, use the provided lifecycle session_id.
-2. In MCP-only clients such as Claude Desktop Chat/Cowork, emulate Code behavior: on the first turn of a new visible chat, call mem_session_start before mem_save_prompt or mem_context.
+2. In MCP-only clients such as Claude Desktop Chat/Cowork, emulate Code behavior: on the first turn of a new visible chat, call mem_bootstrap before reasoning. If mem_bootstrap is unavailable, call mem_session_start before mem_save_prompt or mem_context.
 3. If the client does not provide a session id, create a stable synthetic id for the visible chat, for example mcp-chat:<client>:<yyyy-mm-ddThhmmssZ>:<project-or-topic>, and reuse it for every Kerebrom call in that chat.
-4. If the client cannot determine the chat boundary, still continue with mem_save_prompt and mem_context; Kerebrom will use its local MCP fallback session.
+4. If the client cannot determine the chat boundary, still continue with mem_bootstrap or mem_save_prompt and mem_context; Kerebrom will use its local MCP fallback session.
 
 For every non-trivial user turn:
-1. Call mem_save_prompt with the user's prompt, project/workspace when known, and session_id when available.
-2. Call mem_context with the current project and a compact query derived from the user's request.
+1. Preferred: call mem_bootstrap with the user's prompt, project/workspace when known, session_id when available, and a compact query derived from the request.
+2. If using lower-level tools instead, call mem_save_prompt with the user's prompt and then mem_context with the compact query.
 3. Use returned observations as working context before answering or editing files.
+4. If the current project is unclear or returns no matches, use the cross-project matches returned by Kerebrom before assuming no memory exists.
 
 During work:
 1. Call mem_save when a durable decision, preference, bugfix, architecture fact, workflow, or project lesson appears.
@@ -668,6 +769,71 @@ func (s *Server) handleMemSave(ctx context.Context, request mcp.CallToolRequest)
 		"saved":       true,
 		"observation": observation,
 	})
+}
+
+func (s *Server) handleMemBootstrap(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	project := s.projectOrDefault(request.GetString("project", ""))
+	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
+	directory := strings.TrimSpace(request.GetString("directory", ""))
+	if directory == "" {
+		directory = "."
+	}
+	if err := s.ensureSession(ctx, sessionID, project, directory); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	s.activity.RecordToolCall(sessionID)
+
+	prompt := request.GetString("prompt", "")
+	promptPayload, err := s.savePromptIfSubstantive(ctx, sessionID, project, prompt)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	query := strings.TrimSpace(request.GetString("query", ""))
+	if query == "" {
+		query = strings.TrimSpace(prompt)
+	}
+	payload, err := s.contextPayload(ctx, project, "", query, request.GetInt("limit", 10))
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	payload["memory_first"] = true
+	payload["session_id"] = sessionID
+	payload["prompt"] = promptPayload
+	payload["next_instruction"] = "Use recent_observations, matches, and project_filter_relaxed/cross-project matches before answering. If the turn creates durable knowledge, call mem_save after reasoning."
+	if reminder := s.activity.NudgeIfNeeded(sessionID); reminder != "" {
+		payload["save_reminder"] = reminder
+	}
+	return newJSONResult(payload)
+}
+
+func (s *Server) handleRecall(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	query, err := request.RequireString("query")
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	project := s.projectOrDefault(request.GetString("project", ""))
+	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
+	s.activity.RecordToolCall(sessionID)
+
+	payload, err := s.contextPayload(
+		ctx,
+		project,
+		request.GetString("scope", ""),
+		query,
+		request.GetInt("limit", 10),
+	)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	payload["memory_first"] = true
+	payload["tool_alias"] = "recall"
+	payload["next_instruction"] = "Use matches before answering. If matches are empty, say Kerebrom did not return relevant memory instead of inventing from model assumptions."
+	if reminder := s.activity.NudgeIfNeeded(sessionID); reminder != "" {
+		payload["save_reminder"] = reminder
+	}
+	return newJSONResult(payload)
 }
 
 func (s *Server) handleMemSearch(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -839,17 +1005,28 @@ func (s *Server) handleMemSavePrompt(ctx context.Context, request mcp.CallToolRe
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	prompt, err := s.store.SavePrompt(ctx, sqlite.PromptInput{
-		SessionID: sessionID,
-		Content:   content,
-		Project:   project,
-		CreatedAt: time.Now().UTC(),
-	})
+	prompt, err := s.savePrompt(ctx, sessionID, project, content)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	s.activity.RecordToolCall(sessionID)
+
+	query := strings.TrimSpace(request.GetString("query", ""))
+	if query == "" {
+		query = content
+	}
+	contextPayload, err := s.contextPayload(ctx, project, "", query, request.GetInt("limit", 10))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	return newJSONResult(map[string]any{"saved": true, "prompt": prompt})
+	return newJSONResult(map[string]any{
+		"saved":            true,
+		"prompt":           prompt,
+		"context":          contextPayload,
+		"memory_first":     true,
+		"next_instruction": "Use context.matches and context.recent_observations before answering. If the turn creates durable knowledge, call mem_save after reasoning.",
+	})
 }
 
 func (s *Server) handleMemSessionSummary(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -924,11 +1101,25 @@ func (s *Server) handleMemSessionStart(ctx context.Context, request mcp.CallTool
 			"missing":    true,
 		})
 	}
+	s.activity.RecordToolCall(id)
 
-	return newJSONResult(map[string]any{
-		"started": true,
-		"session": session,
-	})
+	payload := map[string]any{
+		"started":          true,
+		"session":          session,
+		"next_instruction": "Immediately call mem_bootstrap or mem_save_prompt+mem_context before answering this chat turn.",
+	}
+	query := strings.TrimSpace(request.GetString("query", ""))
+	if query != "" {
+		contextPayload, err := s.contextPayload(ctx, project, "", query, request.GetInt("limit", 10))
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		payload["bootstrap_context"] = contextPayload
+		payload["memory_first"] = true
+		payload["next_instruction"] = "Use bootstrap_context before answering. If durable knowledge appears, call mem_save after reasoning."
+	}
+
+	return newJSONResult(payload)
 }
 
 func (s *Server) handleMemSessionEnd(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1060,6 +1251,30 @@ func (s *Server) ensureSession(ctx context.Context, sessionID string, project st
 	})
 }
 
+func (s *Server) savePrompt(ctx context.Context, sessionID string, project string, content string) (sqlite.Prompt, error) {
+	return s.store.SavePrompt(ctx, sqlite.PromptInput{
+		SessionID: sessionID,
+		Content:   content,
+		Project:   project,
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func (s *Server) savePromptIfSubstantive(ctx context.Context, sessionID string, project string, content string) (map[string]any, error) {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return map[string]any{"saved": false, "reason": "empty_prompt"}, nil
+	}
+	if !promptfilter.IsSubstantive(content) {
+		return map[string]any{"saved": false, "reason": "casual_prompt_noise"}, nil
+	}
+	prompt, err := s.savePrompt(ctx, sessionID, project, content)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"saved": true, "prompt": prompt}, nil
+}
+
 func (s *Server) contextPayload(ctx context.Context, project string, scope string, query string, limit int) (map[string]any, error) {
 	stats, err := s.store.Stats(ctx, project)
 	if err != nil {
@@ -1085,6 +1300,7 @@ func (s *Server) contextPayload(ctx context.Context, project string, scope strin
 
 	query = strings.TrimSpace(query)
 	var matches []sqlite.Observation
+	projectFilterRelaxed := false
 	if query != "" {
 		matches, err = s.store.SearchObservations(ctx, sqlite.SearchOptions{
 			Query:   query,
@@ -1095,17 +1311,95 @@ func (s *Server) contextPayload(ctx context.Context, project string, scope strin
 		if err != nil {
 			return nil, err
 		}
+		if strings.TrimSpace(project) != "" && shouldRelaxProjectFilter(matches, project) {
+			relaxedMatches, err := s.store.SearchObservations(ctx, sqlite.SearchOptions{
+				Query: query,
+				Scope: scope,
+				Limit: limit,
+			})
+			if err != nil {
+				return nil, err
+			}
+			matches, projectFilterRelaxed = mergeRelaxedMatches(matches, relaxedMatches, project, limit)
+		}
 	}
 
 	return map[string]any{
-		"project":             strings.TrimSpace(project),
-		"query":               query,
-		"stats":               stats,
-		"recent_sessions":     sessions,
-		"recent_prompts":      prompts,
-		"recent_observations": recent,
-		"matches":             matches,
+		"project":                strings.TrimSpace(project),
+		"query":                  query,
+		"project_filter_relaxed": projectFilterRelaxed,
+		"stats":                  stats,
+		"recent_sessions":        sessions,
+		"recent_prompts":         prompts,
+		"recent_observations":    recent,
+		"matches":                matches,
 	}, nil
+}
+
+func shouldRelaxProjectFilter(matches []sqlite.Observation, project string) bool {
+	project = sqlite.NormalizeProject(project)
+	if project == "" {
+		return false
+	}
+	if len(matches) == 0 {
+		return true
+	}
+	for _, match := range matches {
+		if sqlite.NormalizeProject(match.Project) == project && match.Scope != "global" {
+			return false
+		}
+	}
+	return true
+}
+
+func mergeRelaxedMatches(current []sqlite.Observation, relaxed []sqlite.Observation, project string, limit int) ([]sqlite.Observation, bool) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	seen := map[int64]bool{}
+	merged := make([]sqlite.Observation, 0, limit)
+	relaxedAdded := false
+	project = sqlite.NormalizeProject(project)
+
+	for _, observation := range relaxed {
+		if len(merged) >= limit {
+			break
+		}
+		if sqlite.NormalizeProject(observation.Project) == project || observation.Scope == "global" {
+			continue
+		}
+		seen[observation.ID] = true
+		merged = append(merged, observation)
+		relaxedAdded = true
+	}
+
+	for _, observation := range current {
+		if len(merged) >= limit {
+			break
+		}
+		if seen[observation.ID] {
+			continue
+		}
+		seen[observation.ID] = true
+		merged = append(merged, observation)
+	}
+
+	for _, observation := range relaxed {
+		if len(merged) >= limit {
+			break
+		}
+		if seen[observation.ID] {
+			continue
+		}
+		seen[observation.ID] = true
+		merged = append(merged, observation)
+	}
+
+	return merged, relaxedAdded
 }
 
 func (s *Server) sessionSummaryPayload(ctx context.Context, sessionID string, limit int) (map[string]any, error) {

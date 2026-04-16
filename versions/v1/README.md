@@ -30,7 +30,7 @@ Kerebrom stores two different layers: `mem_save_prompt` keeps user intent histor
 - Shared local memory across supported agents.
 - SQLite + FTS5 store.
 - HTTP + MCP + CLI surfaces.
-- 15 total `mem_*` MCP tools, with `--tools=agent` used by setup to keep agent context smaller.
+- 16 total `mem_*` MCP tools plus a natural `recall` alias, with `--tools=agent` used by setup to keep agent context smaller.
 - MCP prompt/resource memory protocol for Claude Desktop and other MCP-only clients.
 - Remote MCP transport over Streamable HTTP for cloud clients such as Claude Chat/Cowork and ChatGPT.
 - Retrieval commands like `context`, `search`, `timeline`, and the terminal dashboard.

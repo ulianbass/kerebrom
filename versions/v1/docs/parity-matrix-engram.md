@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | Binary install | Single binary | Match |
 | Local storage | SQLite + FTS5 | Match |
-| MCP tools | 15 `mem_*` tools plus optional `--tools` profiles | Match: all 15 tools exist; `--tools=agent`, `--tools=admin`, `--tools=all`, and explicit tool allowlists are supported |
+| MCP tools | Memory-first tools plus optional `--tools` profiles | Match: 16 `mem_*` tools plus natural `recall` alias exist; `--tools=agent`, `--tools=admin`, `--tools=all`, and explicit tool allowlists are supported |
 | MCP prompts/resources | Memory protocol surfaced to compatible clients | Match: `kerebrom_memory_protocol` prompt and `kerebrom://memory-protocol` resource |
 | HTTP API | Local loopback service | Match: sessions, observations, prompts, context, timeline, stats, export/import, projects |
 | CLI | setup/serve/mcp/mcp-http/tui/search/save/context/timeline/stats/export/import/sync/projects | Match |
@@ -26,4 +26,4 @@
 - Kerebrom v1 does not copy Engram plugin code. Agent setup is clean-room and config/protocol based.
 - Automation depth is client-dependent: lifecycle hooks where supported, MCP plus strict protocol where the native app exposes no hook surface. Claude Desktop local chat is MCP-only; Claude Code gets per-turn hooks; cloud surfaces need remote MCP.
 - Any future Kerebrom-only enhancements must not compromise the v1 compatibility surface.
-- As of `v1.0.8`, MCP profile allowlisting, default-project fallback, and MCP initialize-time memory authority instructions are implemented. Full cross-client parity is still not closed until OpenCode event-plugin parity and richer visual TUI parity are either implemented or explicitly declared out of scope.
+- As of `v1.0.9`, MCP profile allowlisting, default-project fallback, MCP initialize-time memory authority instructions, safe tool annotations, one-call `mem_bootstrap`, and cross-project fallback for MCP-only chat surfaces are implemented. Full cross-client parity is still not closed until OpenCode event-plugin parity and richer visual TUI parity are either implemented or explicitly declared out of scope.

@@ -122,13 +122,19 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if len(tools.Tools) != 15 {
-		t.Fatalf("expected 15 tools, got %d", len(tools.Tools))
+	if len(tools.Tools) != 17 {
+		t.Fatalf("expected 17 tools, got %d", len(tools.Tools))
 	}
+	assertToolDescriptionContains(t, tools.Tools, "mem_bootstrap", "FIRST Kerebrom tool")
+	assertToolDescriptionContains(t, tools.Tools, "recall", "before answering")
 	assertToolDescriptionContains(t, tools.Tools, "mem_save_prompt", "Claude Desktop")
 	assertToolDescriptionContains(t, tools.Tools, "mem_context", "start of every non-trivial turn")
 	assertToolDescriptionContains(t, tools.Tools, "mem_save", "What / Why / Where / Learned")
 	assertToolDescriptionContains(t, tools.Tools, "mem_session_start", "new visible chat")
+	assertToolAnnotation(t, tools.Tools, "recall", true, false)
+	assertToolAnnotation(t, tools.Tools, "mem_context", true, false)
+	assertToolAnnotation(t, tools.Tools, "mem_bootstrap", false, false)
+	assertToolAnnotation(t, tools.Tools, "mem_delete", false, true)
 
 	sessionStart := callTool(t, ctx, mcpClient, "mem_session_start", map[string]any{
 		"id":        "session-1",
@@ -309,6 +315,9 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	if promptPayload["saved"] != true {
 		t.Fatalf("expected prompt saved=true, got %#v", promptPayload)
 	}
+	if _, ok := promptPayload["context"].(map[string]any); !ok {
+		t.Fatalf("expected prompt save to return context, got %#v", promptPayload)
+	}
 
 	casualPrompt := callTool(t, ctx, mcpClient, "mem_save_prompt", map[string]any{
 		"session_id": "session-1",
@@ -323,7 +332,7 @@ func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	passive := callTool(t, ctx, mcpClient, "mem_capture_passive", map[string]any{
 		"session_id": "session-1",
 		"project":    "Proyecto Kerebrom",
-		"content":    "## Key Learnings:\n\n1. MCP parity needs 15 tools\n2. Sync chunks should be content-addressed",
+		"content":    "## Key Learnings:\n\n1. MCP parity needs memory-first tools\n2. Sync chunks should be content-addressed",
 	})
 	passivePayload := mustStructuredMap(t, passive)
 	if got := int(passivePayload["count"].(float64)); got != 2 {
@@ -367,10 +376,10 @@ func TestResolveToolsProfiles(t *testing.T) {
 	t.Parallel()
 
 	agent := ResolveTools("agent")
-	if len(agent) != 11 {
-		t.Fatalf("expected 11 agent tools, got %d: %#v", len(agent), agent)
+	if len(agent) != 13 {
+		t.Fatalf("expected 13 agent tools, got %d: %#v", len(agent), agent)
 	}
-	for _, name := range []string{"mem_save", "mem_search", "mem_context", "mem_save_prompt", "mem_update"} {
+	for _, name := range []string{"mem_save", "mem_search", "mem_context", "mem_bootstrap", "recall", "mem_save_prompt", "mem_update"} {
 		if !agent[name] {
 			t.Fatalf("agent profile missing %s: %#v", name, agent)
 		}
@@ -397,8 +406,8 @@ func TestServerUsesDefaultProjectAndSessionFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
 	}
-	if len(tools.Tools) != 11 {
-		t.Fatalf("expected agent profile to expose 11 tools, got %d", len(tools.Tools))
+	if len(tools.Tools) != 13 {
+		t.Fatalf("expected agent profile to expose 13 tools, got %d", len(tools.Tools))
 	}
 
 	prompt := callTool(t, ctx, mcpClient, "mem_save_prompt", map[string]any{
@@ -427,6 +436,73 @@ func TestServerUsesDefaultProjectAndSessionFallback(t *testing.T) {
 	summaryPayload := mustStructuredMap(t, summary)
 	if _, ok := summaryPayload["activity_score"].(string); !ok {
 		t.Fatalf("expected activity score in summary payload, got %#v", summaryPayload)
+	}
+}
+
+func TestBootstrapRelaxesWrongDesktopProject(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	server := NewServerWithConfig(store, Config{DefaultProject: "ulianbass"}, ResolveTools("agent"))
+	mcpClient := newTestClientForServer(t, ctx, server.MCPServer())
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:        "seed-session",
+		Project:   "Proyecto Kerebrom",
+		Directory: "/tmp/kerebrom",
+	}); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	_, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		SessionID: "seed-session",
+		Type:      "decision",
+		Title:     "Kerebrom authority",
+		Content:   "Claude Chat must treat Kerebrom as the local source of truth before answering.",
+		Project:   "Proyecto Kerebrom",
+		Scope:     "project",
+		TopicKey:  "kerebrom/authority",
+	})
+	if err != nil {
+		t.Fatalf("seed observation: %v", err)
+	}
+
+	bootstrap := callTool(t, ctx, mcpClient, "mem_bootstrap", map[string]any{
+		"session_id": "desktop-chat-1",
+		"project":    "ulianbass",
+		"prompt":     "Claude Chat no está respetando la memoria de Kerebrom.",
+		"query":      "Kerebrom Claude Chat memoria autoridad",
+	})
+	payload := mustStructuredMap(t, bootstrap)
+	if payload["project"] != "ulianbass" {
+		t.Fatalf("expected original project to remain visible, got %#v", payload["project"])
+	}
+	if payload["project_filter_relaxed"] != true {
+		t.Fatalf("expected project_filter_relaxed=true, got %#v", payload)
+	}
+	matches, ok := payload["matches"].([]any)
+	if !ok || len(matches) != 1 {
+		t.Fatalf("expected cross-project match, got %#v", payload["matches"])
+	}
+	match, ok := matches[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected match map, got %T", matches[0])
+	}
+	if match["project"] != "proyecto-kerebrom" {
+		t.Fatalf("expected match from proyecto-kerebrom, got %#v", match)
+	}
+	promptPayload := mustNestedMap(t, payload, "prompt")
+	if promptPayload["saved"] != true {
+		t.Fatalf("expected bootstrap to save substantive prompt, got %#v", promptPayload)
+	}
+
+	recall := callTool(t, ctx, mcpClient, "recall", map[string]any{
+		"project": "ulianbass",
+		"query":   "Kerebrom local source truth",
+	})
+	recallPayload := mustStructuredMap(t, recall)
+	if recallPayload["project_filter_relaxed"] != true {
+		t.Fatalf("expected recall to relax wrong project, got %#v", recallPayload)
 	}
 }
 
@@ -509,6 +585,27 @@ func assertToolDescriptionContains(t *testing.T, tools []mcp.Tool, name string, 
 		}
 		if !strings.Contains(tool.Description, want) {
 			t.Fatalf("tool %s description missing %q: %s", name, want, tool.Description)
+		}
+		return
+	}
+	t.Fatalf("tool %s not found", name)
+}
+
+func assertToolAnnotation(t *testing.T, tools []mcp.Tool, name string, readOnly bool, destructive bool) {
+	t.Helper()
+
+	for _, tool := range tools {
+		if tool.Name != name {
+			continue
+		}
+		if tool.Annotations.ReadOnlyHint == nil || *tool.Annotations.ReadOnlyHint != readOnly {
+			t.Fatalf("tool %s readOnlyHint mismatch: %#v", name, tool.Annotations)
+		}
+		if tool.Annotations.DestructiveHint == nil || *tool.Annotations.DestructiveHint != destructive {
+			t.Fatalf("tool %s destructiveHint mismatch: %#v", name, tool.Annotations)
+		}
+		if tool.Annotations.OpenWorldHint == nil || *tool.Annotations.OpenWorldHint {
+			t.Fatalf("tool %s should be closed-world/local: %#v", name, tool.Annotations)
 		}
 		return
 	}

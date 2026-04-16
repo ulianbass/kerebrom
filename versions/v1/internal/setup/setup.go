@@ -509,10 +509,11 @@ Kerebrom memory is installed and must be used proactively. Treat it as the durab
 
 ## Mandatory first action
 
-- At the first turn of a new visible chat or agent session, call mem_session_start before any other Kerebrom call. If no native session id exists, create a stable synthetic id for that visible chat and reuse it for all Kerebrom calls in that chat.
-- At the start of every non-trivial user turn, first call mem_save_prompt with the user's prompt, unless the prompt contains secrets or is purely casual.
-- Then call mem_context before assuming there is no prior context.
+- At the first turn of a new visible chat or agent session, call mem_bootstrap before reasoning. If mem_bootstrap is unavailable, call mem_session_start before any other Kerebrom call. If no native session id exists, create a stable synthetic id for that visible chat and reuse it for all Kerebrom calls in that chat.
+- At the start of every non-trivial user turn, prefer mem_bootstrap with the user's prompt, unless the prompt contains secrets or is purely casual.
+- If using lower-level tools, call mem_save_prompt and then mem_context before assuming there is no prior context.
 - If the user message mentions a project, feature, bug, person, preference, or prior decision, call mem_context or mem_search with the relevant keywords before answering.
+- If the current project is unclear or returns no results, use Kerebrom's cross-project matches before concluding no memory exists.
 - Do not announce these memory calls; just do them and continue.
 
 ## Mandatory save behavior
@@ -551,10 +552,11 @@ Authority rule:
 - Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking Kerebrom.
 
 Use memory proactively and by default:
-- At the first turn of a new visible chat or agent session, call mem_session_start before any other Kerebrom call. If no native session id exists, create a stable synthetic id for that visible chat and reuse it for all Kerebrom calls in that chat.
-- At the start of every non-trivial user turn, first call mem_save_prompt with the user's prompt, unless the prompt contains secrets or is purely casual.
-- Then call mem_context before assuming there is no prior context.
+- At the first turn of a new visible chat or agent session, call mem_bootstrap before reasoning. If mem_bootstrap is unavailable, call mem_session_start before any other Kerebrom call. If no native session id exists, create a stable synthetic id for that visible chat and reuse it for all Kerebrom calls in that chat.
+- At the start of every non-trivial user turn, prefer mem_bootstrap with the user's prompt, unless the prompt contains secrets or is purely casual.
+- If using lower-level tools, call mem_save_prompt and then mem_context before assuming there is no prior context.
 - If the user message mentions a project, feature, bug, person, preference, or prior decision, call mem_context or mem_search with relevant keywords before answering.
+- If the current project is unclear or returns no results, use Kerebrom's cross-project matches before concluding no memory exists.
 - Do not announce these memory calls; just do them and continue.
 - Save durable decisions, preferences, constraints, bugfixes, architecture notes, config changes, and non-obvious learnings with mem_save immediately after they happen.
 - Save user preferences and rejected approaches as durable memory.

@@ -11,7 +11,7 @@
 
 - [x] SQLite schema and migrations implemented.
 - [x] FTS5 retrieval implemented.
-- [x] MCP contract implemented with 15 `mem_*` tools.
+- [x] MCP contract implemented with 16 `mem_*` tools plus a natural `recall` alias.
 - [x] MCP prompt/resource memory protocol implemented for Claude Desktop and other MCP-only clients.
 - [x] Streamable HTTP MCP transport implemented for remote connector surfaces.
 - [x] HTTP API implemented for sessions, observations, prompts, context, timeline, stats, export/import, and projects.
