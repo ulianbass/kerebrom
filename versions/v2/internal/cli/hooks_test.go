@@ -239,6 +239,55 @@ func TestRunHookUserPromptSubmitNudgesAfterQuietSaveWindow(t *testing.T) {
 	}
 }
 
+func TestRunHookUserPromptSubmitNudgesLongSessionWithNoSavedObservation(t *testing.T) {
+	store := newHookTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:        "claude-session-unsaved",
+		Project:   "proyecto-kerebrom",
+		Directory: ".",
+		StartedAt: now.Add(-20 * time.Minute),
+	}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	for _, content := range []string{"Prompt uno.", "Prompt dos."} {
+		if _, err := store.SavePrompt(ctx, sqlite.PromptInput{
+			SessionID: "claude-session-unsaved",
+			Content:   content,
+			Project:   "proyecto-kerebrom",
+			CreatedAt: now.Add(-18 * time.Minute),
+		}); err != nil {
+			t.Fatalf("save previous prompt: %v", err)
+		}
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runHookUserPromptSubmit(ctx, store, map[string]any{
+		"session_id": "claude-session-unsaved",
+		"project":    "proyecto-kerebrom",
+		"prompt":     "Tercer prompt con decisiones posibles.",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook failed: code=%d stderr=%q", code, stderr.String())
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &output); err != nil {
+		t.Fatalf("hook output is not JSON: %v output=%q", err, stdout.String())
+	}
+	specific, ok := output["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing reminder hookSpecificOutput: %#v", output)
+	}
+	additionalContext := specific["additionalContext"].(string)
+	if !strings.Contains(additionalContext, "memory reminder") {
+		t.Fatalf("missing save reminder for unsaved long session: %#v", specific)
+	}
+}
+
 func newHookTestStore(t *testing.T) *sqlite.Store {
 	t.Helper()
 

@@ -141,6 +141,25 @@ func TestAgentProfileExposesSixTools(t *testing.T) {
 	}
 }
 
+func TestAgentProfileInstructionsMatchVisibleTools(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	server := NewServerWithTools(store, ResolveTools("agent")).MCPServer()
+	instructions := initializeInstructions(t, ctx, server)
+
+	if strings.Contains(instructions, "projects — administrative consolidation") {
+		t.Fatalf("agent instructions advertise hidden projects tool as core: %s", instructions)
+	}
+	if !strings.Contains(instructions, "projects is an admin-only tool") {
+		t.Fatalf("agent instructions should explain projects is admin-only: %s", instructions)
+	}
+	if !strings.Contains(instructions, "tool_search") {
+		t.Fatalf("agent instructions must preserve deferred tool loading guidance: %s", instructions)
+	}
+}
+
 // ----- The cycle: context → remember → recall → summary -----
 
 func TestCycleContextRememberRecallSummary(t *testing.T) {
@@ -395,6 +414,8 @@ func assertProtocolText(t *testing.T, text string) {
 		"What / Why / Where / Learned",
 		"MANDATORY BEHAVIORS",
 		"visible chat",
+		"DEFERRED TOOL CLIENTS",
+		"tool_search",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("protocol text missing %q: %s", want, text)
@@ -497,6 +518,29 @@ func newTestClientForServer(t *testing.T, ctx context.Context, server *mcpserver
 		t.Fatalf("initialize client: %v", err)
 	}
 	return mcpClient
+}
+
+func initializeInstructions(t *testing.T, ctx context.Context, server *mcpserver.MCPServer) string {
+	t.Helper()
+
+	mcpClient, err := client.NewInProcessClient(server)
+	if err != nil {
+		t.Fatalf("new in-process client: %v", err)
+	}
+	t.Cleanup(func() { _ = mcpClient.Close() })
+
+	if err := mcpClient.Start(ctx); err != nil {
+		t.Fatalf("start in-process client: %v", err)
+	}
+
+	var initReq mcp.InitializeRequest
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{Name: "kerebrom-test", Version: "1.0.0"}
+	initResult, err := mcpClient.Initialize(ctx, initReq)
+	if err != nil {
+		t.Fatalf("initialize client: %v", err)
+	}
+	return initResult.Instructions
 }
 
 func callTool(t *testing.T, ctx context.Context, c toolCaller, name string, args map[string]any) *mcp.CallToolResult {

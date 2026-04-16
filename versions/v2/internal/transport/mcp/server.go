@@ -52,7 +52,7 @@ func NewServerWithConfig(store *sqlite.Store, cfg Config, allowlist map[string]b
 		server: mcpserver.NewMCPServer(
 			config.AppName,
 			version.Version,
-			mcpserver.WithInstructions(memoryProtocolText()),
+			mcpserver.WithInstructions(memoryProtocolText(allowlist)),
 			mcpserver.WithToolCapabilities(false),
 			mcpserver.WithPromptCapabilities(false),
 			mcpserver.WithResourceCapabilities(false, false),
@@ -523,19 +523,15 @@ func (s *Server) registerTools() {
 	)
 }
 
-
-func memoryProtocolText() string {
-	return strings.TrimSpace(`
+func memoryProtocolText(allowlist map[string]bool) string {
+	return strings.TrimSpace(fmt.Sprintf(`
 Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
 CORE TOOLS (always available — use without asking):
-  context  — load prior observations relevant to this turn
-  recall   — search memory by natural-language query
-  remember — save a new durable fact
-  summary  — close substantial work with a structured wrap-up
-  forget   — invalidate an obsolete observation
-  timeline — inspect chronological history
-  projects — administrative consolidation of project names
+%s
+
+SPECIALIZED TOOLS:
+%s
 
 MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
@@ -573,10 +569,38 @@ AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences
 
 SESSION HANDLE: If the client provides a lifecycle session id, use it. Otherwise create a stable synthetic id for this visible chat and reuse it for every Kerebrom call in that chat.
 
+DEFERRED TOOL CLIENTS: Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
+
 NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens, or unnecessary personal details. Kerebrom redacts text wrapped in <private>...</private> automatically.
 
 NEVER announce these calls to the user. Just do them and continue.
-`)
+`, coreToolInstructions(allowlist), specializedToolInstructions(allowlist)))
+}
+
+func coreToolInstructions(allowlist map[string]bool) string {
+	lines := []string{
+		"  context  — load prior observations relevant to this turn",
+		"  recall   — search memory by natural-language query",
+		"  remember — save a new durable fact",
+		"  summary  — close substantial work with a structured wrap-up",
+		"  forget   — invalidate an obsolete observation",
+		"  timeline — inspect chronological history",
+	}
+	if toolAllowed(allowlist, "projects") {
+		lines = append(lines, "  projects — administrative consolidation of project names")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func specializedToolInstructions(allowlist map[string]bool) string {
+	if toolAllowed(allowlist, "projects") {
+		return "  projects is visible only for explicit project consolidation. Use it only when the user asks to merge or rename project variants."
+	}
+	return "  projects is an admin-only tool and is not exposed in the default agent profile. Do not try to call it unless it appears in your available tool list."
+}
+
+func toolAllowed(allowlist map[string]bool, name string) bool {
+	return allowlist == nil || allowlist[name]
 }
 
 func (s *Server) handleRemember(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1035,4 +1059,3 @@ func newJSONResult(payload any) (*mcp.CallToolResult, error) {
 		StructuredContent: structured,
 	}, nil
 }
-

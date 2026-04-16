@@ -654,7 +654,7 @@ func runProjects(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout, "dry-run only; use project consolidation before destructive cleanup")
 			return 0
 		}
-		fmt.Fprintln(stderr, "destructive project prune is intentionally not automatic in v1")
+		fmt.Fprintln(stderr, "destructive project prune is intentionally not automatic in v2")
 		return 1
 	default:
 		fmt.Fprintf(stderr, "unknown projects command %q\n", args[0])
@@ -1115,7 +1115,7 @@ func printDashboard(ctx context.Context, store *sqlite.Store, stdout io.Writer, 
 		return err
 	}
 
-	fmt.Fprintln(stdout, "Kerebrom v1")
+	fmt.Fprintln(stdout, "Kerebrom v2")
 	fmt.Fprintf(stdout, "sessions=%d active=%d observations=%d prompts=%d projects=%d\n",
 		stats.SessionCount, stats.ActiveSessionCount, stats.ObservationCount, stats.PromptCount, stats.ProjectCount)
 	fmt.Fprintln(stdout)

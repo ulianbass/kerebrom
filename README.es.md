@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v2.0.0](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.0) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v2.0.1](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.1) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una sola capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier otro cliente compatible con MCP.
@@ -68,7 +68,7 @@ Descarga el último release de GitHub, extrae el tarball de fuentes para ese tag
 
 ## El ciclo
 
-Los siete tools componen un único ritmo que Claude sigue automáticamente:
+Los seis tools cotidianos y un tool admin explícito componen el ritmo de memoria:
 
 | Cuándo | Tool |
 |---|---|
@@ -78,7 +78,7 @@ Los siete tools componen un único ritmo que Claude sigue automáticamente:
 | Cerrando trabajo sustancial o tras compactación | `summary` |
 | Inspeccionar historia cronológica | `timeline` |
 | El usuario dice que algo está mal o es obsoleto | `forget` |
-| Consolidar variantes de nombres de proyecto | `projects` |
+| Consolidar variantes de nombres de proyecto cuando el usuario lo pide explícitamente | `projects` (perfil admin) |
 
 El usuario nunca tiene que decir "usa Kerebrom" o "guarda esto en memoria". El agente usa los tools por iniciativa propia cuando los nombres coinciden con la intención.
 

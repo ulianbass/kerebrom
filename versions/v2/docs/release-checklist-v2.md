@@ -34,7 +34,7 @@ If possible, on a fresh user account or VM:
 - [ ] Clone the repo, run `make install-user` from `versions/v2/`.
 - [ ] Restart Claude Desktop. Open a fresh chat. Ask "what do you know about my projects?".
 - [ ] Verify in `~/Library/Logs/Claude/mcp-server-Kerebrom.log` (macOS) that a `tools/call` for `context` fires immediately after the user message.
-- [ ] Verify `~/.claude/settings.json` contains the seven `mcp__Kerebrom__*` entries in `permissions.allow` and **no** `mcp__Kerebrom__mem_*` entries.
+- [ ] Verify `~/.claude/settings.json` contains the six default agent-profile `mcp__Kerebrom__*` entries in `permissions.allow` and **no** stale `mcp__Kerebrom__mem_*` or admin-profile entries.
 
 ## 5. Self-update works
 

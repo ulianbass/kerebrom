@@ -107,7 +107,7 @@ Requirements: Git is **not** required. `make` and `go` are required (same requir
 
 `kerebrom setup auto` detects each client's local config and writes:
 
-- **Claude Code** (`~/.claude/`): MCP server entry in `mcp.json`, hooks in `settings.json`, the seven `mcp__Kerebrom__*` entries in `permissions.allow` (and removes any legacy `mcp__Kerebrom__mem_*` left from v1.x), the protocol block in `CLAUDE.md`, and five hook scripts in `~/.kerebrom/hooks/claude-code/`.
+- **Claude Code** (`~/.claude/`): MCP server entry in `mcp.json`, hooks in `settings.json`, the six agent-profile `mcp__Kerebrom__*` entries in `permissions.allow` (and removes any stale Kerebrom permissions outside the active agent surface), the protocol block in `CLAUDE.md`, and five hook scripts in `~/.kerebrom/hooks/claude-code/`.
 - **Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS): MCP server entry only. Personal Preferences cannot be modified programmatically.
 - **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, plus the protocol block in `AGENTS.md`.
 - **Cursor** (`~/.cursor/`): MCP entry in `mcp.json`, protocol rule in `rules/kerebrom.mdc`.

@@ -22,20 +22,13 @@ const (
 // strings are built as <prefix><toolName>.
 const kerebromMCPToolPrefix = "mcp__Kerebrom__"
 
-// kerebromLegacyToolPrefix matches the v1 mem_* tool entries that may
-// linger in user settings.json after upgrading from v1.x. Setup removes
-// these so the surface is clean — only the v2 semantic tools remain.
-const kerebromLegacyToolPrefix = kerebromMCPToolPrefix + "mem_"
-
-// kerebromClaudeAutoApproveTools is the Kerebrom v2 MCP surface added to
+// kerebromClaudeAutoApproveTools is the Kerebrom v2 agent MCP surface added to
 // Claude Code's permissions.allow so the agent never has to ask for
-// confirmation before invoking memory. Derived from the canonical tool
-// lists exported by the MCP transport package.
+// confirmation before invoking everyday memory. Admin tools stay out of
+// auto-approval unless the user explicitly runs an admin MCP profile.
 var kerebromClaudeAutoApproveTools = func() []string {
-	all := append([]string{}, mcptransport.SemanticAgentTools...)
-	all = append(all, mcptransport.SemanticAdminTools...)
-	out := make([]string, 0, len(all))
-	for _, name := range all {
+	out := make([]string, 0, len(mcptransport.SemanticAgentTools))
+	for _, name := range mcptransport.SemanticAgentTools {
 		out = append(out, kerebromMCPToolPrefix+name)
 	}
 	return out
@@ -521,7 +514,10 @@ func codexAGENTSBlock() string {
 Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
 CORE TOOLS:
-  context, recall, remember, summary, forget, timeline, projects.
+  context, recall, remember, summary, forget, timeline.
+
+ADMIN TOOL:
+  projects is not part of the default agent profile. Use it only if it appears in the available tool list and the user explicitly asks to merge or rename project variants.
 
 MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
@@ -535,6 +531,8 @@ HOW TO SAVE — the What / Why / Where / Learned framework:
 - **Why**: why it matters or what motivated it.
 - **Where**: project, files, workflow, or context where it applies.
 - **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
+
+DEFERRED TOOL CLIENTS: Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
 
 AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 
@@ -553,7 +551,10 @@ func memoryProtocolBlock() string {
 Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
 CORE TOOLS:
-  context, recall, remember, summary, forget, timeline, projects.
+  context, recall, remember, summary, forget, timeline.
+
+ADMIN TOOL:
+  projects is not part of the default agent profile. Use it only if it appears in the available tool list and the user explicitly asks to merge or rename project variants.
 
 MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
@@ -567,6 +568,8 @@ HOW TO SAVE — the What / Why / Where / Learned framework:
 - **Why**: why it matters or what motivated it.
 - **Where**: project, files, workflow, or context where it applies.
 - **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
+
+DEFERRED TOOL CLIENTS: Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
 
 AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 
@@ -657,10 +660,10 @@ func upsertClaudeHooks(settings map[string]any, hookDir string) error {
 	return nil
 }
 
-// upsertClaudePermissionsAllow merges the provided tool identifiers into
-// settings.permissions.allow and removes any v1-era mcp__Kerebrom__mem_*
-// entries left over from a previous installation. Non-Kerebrom entries
-// the user may have added are preserved untouched. Idempotent.
+// upsertClaudePermissionsAllow merges the provided agent tool identifiers into
+// settings.permissions.allow and removes Kerebrom entries outside that current
+// agent surface. Non-Kerebrom entries the user may have added are preserved
+// untouched. Idempotent.
 func upsertClaudePermissionsAllow(settings map[string]any, tools []string) error {
 	rawPerms, ok := settings["permissions"]
 	if !ok || rawPerms == nil {
@@ -680,7 +683,13 @@ func upsertClaudePermissionsAllow(settings map[string]any, tools []string) error
 		return fmt.Errorf("unexpected permissions.allow shape in Claude settings")
 	}
 
-	// Drop legacy v1 mem_* entries — v2 has a clean semantic surface.
+	desired := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		desired[tool] = true
+	}
+
+	// Drop legacy v1 mem_* entries and stale Kerebrom admin permissions
+	// that are not exposed by the default --tools=agent profile.
 	cleaned := make([]any, 0, len(allow))
 	existing := make(map[string]bool, len(allow))
 	for _, item := range allow {
@@ -689,7 +698,7 @@ func upsertClaudePermissionsAllow(settings map[string]any, tools []string) error
 			cleaned = append(cleaned, item)
 			continue
 		}
-		if strings.HasPrefix(s, kerebromLegacyToolPrefix) {
+		if strings.HasPrefix(s, kerebromMCPToolPrefix) && !desired[s] {
 			continue
 		}
 		cleaned = append(cleaned, item)

@@ -92,7 +92,7 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	mcpPath := filepath.Join(homeDir, ".claude", "mcp.json")
 	desktopMCPPath := claudeDesktopConfigPath(homeDir)
 
-	mustWriteFile(t, settingsPath, `{"extraKnownMarketplaces":{"test":{"source":{"repo":"example/repo","source":"github"}}}}`)
+	mustWriteFile(t, settingsPath, `{"extraKnownMarketplaces":{"test":{"source":{"repo":"example/repo","source":"github"}}},"permissions":{"allow":["mcp__Kerebrom__mem_context","mcp__Kerebrom__projects","mcp__TradingView__chart_get_state"]}}`)
 	mustWriteFile(t, mcpPath, `{"mcpServers":{"TradingView MCP":{"command":"/path/to/node","args":["/path/to/tradingview.js"]}}}`)
 	mustWriteFile(t, desktopMCPPath, `{"mcpServers":{"TradingView MCP":{"command":"/path/to/node","args":["/path/to/tradingview.js"]}},"preferences":{"menuBarEnabled":false}}`)
 
@@ -110,6 +110,25 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	settings := mustReadJSONMap(t, settingsPath)
 	if _, ok := settings["extraKnownMarketplaces"]; !ok {
 		t.Fatalf("claude setup removed existing settings content: %#v", settings)
+	}
+	permissions := settings["permissions"].(map[string]any)
+	allow := permissions["allow"].([]any)
+	if len(allow) != 7 {
+		t.Fatalf("expected 6 Kerebrom agent tools plus existing TradingView permission, got %#v", allow)
+	}
+	if containsString(allow, "mcp__Kerebrom__mem_context") {
+		t.Fatalf("legacy mem_* permission was not removed: %#v", allow)
+	}
+	if containsString(allow, "mcp__Kerebrom__projects") {
+		t.Fatalf("admin projects permission should not be auto-approved in the agent profile: %#v", allow)
+	}
+	for _, tool := range []string{"context", "recall", "remember", "summary", "forget", "timeline"} {
+		if !containsString(allow, "mcp__Kerebrom__"+tool) {
+			t.Fatalf("missing auto-approved Kerebrom agent tool %s in %#v", tool, allow)
+		}
+	}
+	if !containsString(allow, "mcp__TradingView__chart_get_state") {
+		t.Fatalf("non-Kerebrom permission was not preserved: %#v", allow)
 	}
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
@@ -419,4 +438,13 @@ func assertArgs(t *testing.T, server map[string]any, want []string) {
 			t.Fatalf("args[%d] = %#v, want %q in %#v", i, raw[i], wantArg, raw)
 		}
 	}
+}
+
+func containsString(items []any, want string) bool {
+	for _, item := range items {
+		if got, ok := item.(string); ok && got == want {
+			return true
+		}
+	}
+	return false
 }

@@ -283,8 +283,12 @@ func shouldInjectPromptSaveReminder(ctx context.Context, store *sqlite.Store, pr
 		return false
 	}
 	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: project, SessionID: session.ID, Limit: 1})
-	if err != nil || len(recent) == 0 {
+	if err != nil {
 		return false
+	}
+	if len(recent) == 0 {
+		promptCount, promptErr := store.CountSessionPrompts(ctx, session.ID)
+		return promptErr == nil && promptCount >= 3 && time.Since(startedAt) > 15*time.Minute
 	}
 	lastSaveAt := recent[0].UpdatedAt
 	if strings.TrimSpace(lastSaveAt) == "" {

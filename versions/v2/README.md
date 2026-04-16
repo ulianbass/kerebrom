@@ -47,7 +47,7 @@ The DB lives at `~/.kerebrom/kerebrom.db`. v2 reads and writes the same schema a
 
 ## The cycle
 
-The seven tools compose a single rhythm Claude follows automatically:
+The six day-to-day tools plus one explicit admin tool compose the memory rhythm:
 
 | When | Tool |
 |---|---|
@@ -57,7 +57,7 @@ The seven tools compose a single rhythm Claude follows automatically:
 | Closing substantial work | `summary` |
 | Inspect history | `timeline` |
 | User says something is wrong | `forget` |
-| Consolidate project name variants | `projects` |
+| Consolidate project name variants after the user explicitly asks | `projects` (admin profile) |
 
 Detail in [docs/architecture-v2.md](docs/architecture-v2.md). Migration notes in [docs/migration-v1-to-v2.md](docs/migration-v1-to-v2.md).
 

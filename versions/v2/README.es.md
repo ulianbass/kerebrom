@@ -47,7 +47,7 @@ La DB vive en `~/.kerebrom/kerebrom.db`. v2 lee y escribe el mismo esquema que v
 
 ## El ciclo
 
-Los siete tools componen un único ritmo que Claude sigue automáticamente:
+Los seis tools cotidianos y un tool admin explícito componen el ritmo de memoria:
 
 | Cuándo | Tool |
 |---|---|
@@ -57,7 +57,7 @@ Los siete tools componen un único ritmo que Claude sigue automáticamente:
 | Cerrando trabajo sustancial | `summary` |
 | Inspeccionar historia | `timeline` |
 | El usuario dice que algo está mal | `forget` |
-| Consolidar variantes de nombres de proyecto | `projects` |
+| Consolidar variantes de nombres de proyecto cuando el usuario lo pide explícitamente | `projects` (perfil admin) |
 
 Detalles en [docs/architecture-v2.md](docs/architecture-v2.md). Notas de migración en [docs/migration-v1-to-v2.md](docs/migration-v1-to-v2.md).
 
