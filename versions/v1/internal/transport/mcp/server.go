@@ -52,6 +52,7 @@ func NewServerWithConfig(store *sqlite.Store, cfg Config, allowlist map[string]b
 		server: mcpserver.NewMCPServer(
 			config.AppName,
 			version.Version,
+			mcpserver.WithInstructions(memoryProtocolText()),
 			mcpserver.WithToolCapabilities(false),
 			mcpserver.WithPromptCapabilities(false),
 			mcpserver.WithResourceCapabilities(false, false),
@@ -600,6 +601,11 @@ func memoryProtocolText() string {
 # Kerebrom Persistent Memory Protocol
 
 Kerebrom is the local persistent memory layer shared by configured AI clients. Use it proactively; do not wait for the user to ask for memory unless the turn is trivial.
+
+Authority rule:
+1. Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context.
+2. If Kerebrom memory conflicts with model assumptions or generic prior knowledge, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
+3. Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking Kerebrom.
 
 For every non-trivial user turn:
 1. Call mem_save_prompt with the user's prompt, project/workspace when known, and session_id when available.

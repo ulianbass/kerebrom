@@ -501,6 +501,12 @@ func codexAGENTSBlock() string {
 
 Kerebrom memory is installed and must be used proactively. Treat it as the durable shared memory layer across Codex, Claude, Cursor, Windsurf, VS Code, Gemini CLI, OpenCode, and other configured AI clients.
 
+## Authority rule
+
+- Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context.
+- If Kerebrom memory conflicts with model assumptions or generic prior knowledge, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
+- Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking Kerebrom.
+
 ## Mandatory first action
 
 - At the start of every non-trivial user turn, first call mem_save_prompt with the user's prompt, unless the prompt contains secrets or is purely casual.
@@ -537,6 +543,11 @@ func memoryProtocolBlock() string {
 ## Kerebrom Memory Protocol
 
 You have access to Kerebrom persistent memory via MCP tools. Treat it as the durable shared memory layer across all configured AI clients.
+
+Authority rule:
+- Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context.
+- If Kerebrom memory conflicts with model assumptions or generic prior knowledge, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
+- Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking Kerebrom.
 
 Use memory proactively and by default:
 - At the start of every non-trivial user turn, first call mem_save_prompt with the user's prompt, unless the prompt contains secrets or is purely casual.

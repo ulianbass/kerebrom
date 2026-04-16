@@ -75,6 +75,41 @@ func TestServerExposesDesktopMemoryProtocol(t *testing.T) {
 	assertProtocolText(t, resourceContent.Text)
 }
 
+func TestServerInitializeReturnsMemoryInstructions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	server := NewServer(store).MCPServer()
+
+	mcpClient, err := client.NewInProcessClient(server)
+	if err != nil {
+		t.Fatalf("new in-process client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = mcpClient.Close()
+	})
+
+	if err := mcpClient.Start(ctx); err != nil {
+		t.Fatalf("start in-process client: %v", err)
+	}
+
+	var initReq mcp.InitializeRequest
+	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcp.Implementation{
+		Name:    "kerebrom-test-client",
+		Version: "1.0.0",
+	}
+	initResult, err := mcpClient.Initialize(ctx, initReq)
+	if err != nil {
+		t.Fatalf("initialize client: %v", err)
+	}
+	assertProtocolText(t, initResult.Instructions)
+	if !strings.Contains(initResult.Instructions, "local source of truth") {
+		t.Fatalf("initialize instructions missing authority rule: %s", initResult.Instructions)
+	}
+}
+
 func TestServerToolsLifecycleAndSearch(t *testing.T) {
 	t.Parallel()
 
