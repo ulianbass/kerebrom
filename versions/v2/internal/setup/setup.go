@@ -543,6 +543,10 @@ Treat Kerebrom as the local source of truth for prior user preferences, project 
 - **Where**: project, files, workflow, or context where it applies.
 - **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
 
+## Deferred tool clients
+
+Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform the tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
+
 ## Never
 
 - Save greetings, acknowledgements ("ok", "listo", "gracias"), code output, tool confirmations, raw transcript, secrets, credentials, or unnecessary personal details. Kerebrom redacts text wrapped in <private>...</private> automatically.
@@ -581,6 +585,10 @@ Treat Kerebrom as the local source of truth for prior user preferences, project 
 - **Why**: why it matters or what motivated it.
 - **Where**: project, files, workflow, or context where it applies.
 - **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
+
+### Deferred tool clients
+
+Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform the tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
 
 ### Never
 

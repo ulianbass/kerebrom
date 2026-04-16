@@ -631,6 +631,16 @@ and reuse it for every Kerebrom call in that chat.
 - Mention these tools to the user. Just use them.
 - Wait for permission. Memory is on by default.
 
+## Deferred tool clients (Claude Desktop, Claude Code, others)
+
+Some MCP clients defer tool loading: tools appear in tools/list but
+their schemas only become callable after a tool_search step. If your
+client works that way, perform the tool_search for the Kerebrom MCP
+at the start of the conversation so context, recall, and remember are
+ready to invoke before reasoning. Do not skip this step just because
+the first user message looks ambiguous; ambiguous messages are exactly
+when prior context matters most.
+
 ## Claude Desktop note
 
 Claude Desktop exposes Kerebrom through MCP tools, prompts, and
