@@ -26,4 +26,4 @@
 - Kerebrom v1 does not copy Engram plugin code. Agent setup is clean-room and config/protocol based.
 - Automation depth is client-dependent: lifecycle hooks where supported, MCP plus strict protocol where the native app exposes no hook surface. Claude Desktop local chat is MCP-only; Claude Code gets per-turn hooks; cloud surfaces need remote MCP.
 - Any future Kerebrom-only enhancements must not compromise the v1 compatibility surface.
-- As of `v1.0.7`, MCP profile allowlisting and default-project fallback are implemented. Full cross-client parity is still not closed until OpenCode event-plugin parity and richer visual TUI parity are either implemented or explicitly declared out of scope.
+- As of `v1.0.8`, MCP profile allowlisting, default-project fallback, and MCP initialize-time memory authority instructions are implemented. Full cross-client parity is still not closed until OpenCode event-plugin parity and richer visual TUI parity are either implemented or explicitly declared out of scope.
