@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Release v1.0.9](https://github.com/ulianbass/kerebrom/releases/tag/v1.0.9) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Release v1.1.0](https://github.com/ulianbass/kerebrom/releases/tag/v1.1.0) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > One durable memory layer for Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and other MCP-capable clients.

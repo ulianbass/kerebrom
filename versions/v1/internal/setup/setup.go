@@ -15,6 +15,30 @@ const (
 	codexMemoryBlockEnd   = "<!-- KEREBROM:END -->"
 )
 
+// kerebromClaudeAutoApproveTools are the Kerebrom MCP tools added to
+// Claude Code's permissions.allow so the agent does not need to ask for
+// confirmation before each memory call. The list mirrors the tools the
+// MCP server registers (see internal/transport/mcp/server.go).
+var kerebromClaudeAutoApproveTools = []string{
+	"mcp__Kerebrom__mem_bootstrap",
+	"mcp__Kerebrom__recall",
+	"mcp__Kerebrom__mem_save",
+	"mcp__Kerebrom__mem_search",
+	"mcp__Kerebrom__mem_update",
+	"mcp__Kerebrom__mem_delete",
+	"mcp__Kerebrom__mem_suggest_topic_key",
+	"mcp__Kerebrom__mem_context",
+	"mcp__Kerebrom__mem_timeline",
+	"mcp__Kerebrom__mem_get_observation",
+	"mcp__Kerebrom__mem_stats",
+	"mcp__Kerebrom__mem_save_prompt",
+	"mcp__Kerebrom__mem_session_summary",
+	"mcp__Kerebrom__mem_session_start",
+	"mcp__Kerebrom__mem_session_end",
+	"mcp__Kerebrom__mem_capture_passive",
+	"mcp__Kerebrom__mem_merge_projects",
+}
+
 type Options struct {
 	HomeDir    string
 	ProjectDir string
@@ -267,6 +291,9 @@ func setupClaudeCode(opts Options) (Result, error) {
 		return Result{}, err
 	}
 	if err := upsertClaudeHooks(settings, hookDir); err != nil {
+		return Result{}, err
+	}
+	if err := upsertClaudePermissionsAllow(settings, kerebromClaudeAutoApproveTools); err != nil {
 		return Result{}, err
 	}
 	if err := writeJSONFile(settingsPath, settings); err != nil {
@@ -654,6 +681,47 @@ func upsertClaudeHooks(settings map[string]any, hookDir string) error {
 		},
 	})
 	settings["hooks"] = hooks
+	return nil
+}
+
+// upsertClaudePermissionsAllow merges the provided tool identifiers into
+// settings.permissions.allow without removing any pre-existing entries the
+// user may have added. Idempotent: re-running setup does not duplicate items.
+func upsertClaudePermissionsAllow(settings map[string]any, tools []string) error {
+	rawPerms, ok := settings["permissions"]
+	if !ok || rawPerms == nil {
+		rawPerms = map[string]any{}
+	}
+	perms, ok := rawPerms.(map[string]any)
+	if !ok {
+		return fmt.Errorf("unexpected permissions shape in Claude settings")
+	}
+
+	rawAllow, ok := perms["allow"]
+	if !ok || rawAllow == nil {
+		rawAllow = []any{}
+	}
+	allow, ok := rawAllow.([]any)
+	if !ok {
+		return fmt.Errorf("unexpected permissions.allow shape in Claude settings")
+	}
+
+	existing := make(map[string]bool, len(allow))
+	for _, item := range allow {
+		if s, ok := item.(string); ok {
+			existing[s] = true
+		}
+	}
+	for _, tool := range tools {
+		if existing[tool] {
+			continue
+		}
+		allow = append(allow, tool)
+		existing[tool] = true
+	}
+
+	perms["allow"] = allow
+	settings["permissions"] = perms
 	return nil
 }
 

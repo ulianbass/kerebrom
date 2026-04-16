@@ -340,7 +340,7 @@ func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandl
 func (s *Server) registerTools() {
 	s.addTool("mem_bootstrap",
 		mcp.NewTool("mem_bootstrap",
-			mcp.WithDescription("FIRST Kerebrom tool to call at the start of every non-trivial user turn in MCP-only clients such as Claude Desktop Chat/Cowork. One call starts or refreshes the session, saves the prompt when substantive, retrieves memory context, and returns cross-project matches when the client cannot identify the right project."),
+			mcp.WithDescription("FIRST Kerebrom tool to call at the start of EVERY non-trivial user turn in MCP-only clients such as Claude Desktop Chat/Cowork. ALWAYS call before answering — do not wait for the user to ask. One call starts or refreshes the session, saves the prompt when substantive, retrieves memory context, and returns cross-project matches when the client cannot identify the right project."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("prompt",
 				mcp.Description("Current user prompt. Kerebrom saves it as prompt history when substantive."),
@@ -366,7 +366,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("recall",
 		mcp.NewTool("recall",
-			mcp.WithDescription("Recall Kerebrom memory before answering questions about the user, their projects, preferences, previous decisions, or history. Use this natural alias when you need prior context quickly; it searches across projects if the current project is wrong or empty."),
+			mcp.WithDescription("ALWAYS call Recall before answering any question about the user, their projects, preferences, previous decisions, or history. This is the natural alias for fast prior context; it searches across projects if the current project is wrong or empty. Do not answer from model assumptions when Kerebrom may have the durable answer."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("query",
 				mcp.Required(),
@@ -390,7 +390,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("mem_save",
 		mcp.NewTool("mem_save",
-			mcp.WithDescription("Persist an agent-distilled observation into Kerebrom's shared local memory whenever a durable decision, preference, bugfix, project fact, workflow, or lesson appears. Do not store raw transcript; interpret first using What / Why / Where / Learned."),
+			mcp.WithDescription("Call mem_save PROACTIVELY — without being asked — whenever a durable decision, preference, constraint, bugfix, architecture note, config change, workflow, or non-obvious learning appears in the conversation. Distill, do not copy raw transcript: interpret first using What / Why / Where / Learned. Never save greetings, acknowledgements, code output, or secrets."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("title",
 				mcp.Required(),
@@ -484,7 +484,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("mem_context",
 		mcp.NewTool("mem_context",
-			mcp.WithDescription("Build a context bundle with stats, recent observations, and optional search matches. Use at the start of every non-trivial turn, before substantial coding or architecture work, and after context compaction."),
+			mcp.WithDescription("Build a context bundle with stats, recent observations, and optional search matches. ALWAYS call at the start of every non-trivial turn when mem_bootstrap is unavailable, before substantial coding or architecture work, and after context compaction. The user should never have to remind you to load context."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("project",
 				mcp.Description("Optional project filter."),
@@ -700,7 +700,13 @@ func memoryProtocolText() string {
 	return strings.TrimSpace(`
 # Kerebrom Persistent Memory Protocol
 
-Kerebrom is the local persistent memory layer shared by configured AI clients. Use it proactively; do not wait for the user to ask for memory unless the turn is trivial.
+Kerebrom is the local persistent memory layer shared by configured AI clients. It is installed and ALWAYS active. Do not wait for the user to ask for memory; the user must never have to say "use Kerebrom" or "save this".
+
+MANDATORY BEHAVIORS — apply on EVERY user turn that is not a bare greeting or acknowledgement:
+
+1. RECALL FIRST. Before answering, call mem_bootstrap (preferred) or mem_context with a compact query derived from the user's prompt. Use returned observations as working context.
+2. SAVE WHAT MATTERS. After processing the turn, call mem_save for any durable decision, preference, constraint, bugfix, architecture note, config change, workflow, or non-obvious learning that appeared.
+3. DO NOT ANNOUNCE. Make these calls silently as part of normal reasoning. The user should not be reminded that memory is being used.
 
 Authority rule:
 1. Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context.
@@ -708,27 +714,44 @@ Authority rule:
 3. Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking Kerebrom.
 
 Session lifecycle:
-1. In hook-capable clients, use the provided lifecycle session_id.
+1. In hook-capable clients (Claude Code, etc.), use the provided lifecycle session_id.
 2. In MCP-only clients such as Claude Desktop Chat/Cowork, emulate Code behavior: on the first turn of a new visible chat, call mem_bootstrap before reasoning. If mem_bootstrap is unavailable, call mem_session_start before mem_save_prompt or mem_context.
 3. If the client does not provide a session id, create a stable synthetic id for the visible chat, for example mcp-chat:<client>:<yyyy-mm-ddThhmmssZ>:<project-or-topic>, and reuse it for every Kerebrom call in that chat.
 4. If the client cannot determine the chat boundary, still continue with mem_bootstrap or mem_save_prompt and mem_context; Kerebrom will use its local MCP fallback session.
 
-For every non-trivial user turn:
-1. Preferred: call mem_bootstrap with the user's prompt, project/workspace when known, session_id when available, and a compact query derived from the request.
-2. If using lower-level tools instead, call mem_save_prompt with the user's prompt and then mem_context with the compact query.
-3. Use returned observations as working context before answering or editing files.
-4. If the current project is unclear or returns no matches, use the cross-project matches returned by Kerebrom before assuming no memory exists.
+How to save (mem_save content structure — distill, do not copy transcript):
+- **What**: one sentence describing the durable fact or change.
+- **Why**: why it matters or what motivated it.
+- **Where**: project, files, tool, workflow, or context where it applies.
+- **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
 
-During work:
-1. Call mem_save when a durable decision, preference, bugfix, architecture fact, workflow, or project lesson appears.
-2. Distill memories instead of copying raw transcript. Use this structure: What, Why, Where, Learned.
-3. Do not store secrets, credentials, private tokens, or unnecessary personal details.
+This is the canonical format: "What, Why, Where, Learned".
+
+Examples (Spanish — one mem_save call per fact):
+
+  User: "quiero que Falage genere $3,000 mensuales con tema oscuro"
+  → mem_save(title="Objetivo financiero Falage", content="**What**: Meta de ingresos mensual USD 3,000. **Why**: ...", project="falage")
+  → mem_save(title="Preferencia UI Quamtos: tema oscuro", content="**What**: ...", scope="global")
+
+  User: "el bug del intraday era el cost scenario, no la lógica del engine"
+  → mem_save(title="Bugfix intraday cost scenario", type="bugfix", topic_key="falage/intraday-cost-scenario", content="**What**: ...")
+
+  User: "ok", "gracias", "perfecto" (bare acknowledgement)
+  → No mem_save. No mem_bootstrap. Continue.
+
+NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens, or unnecessary personal details. Kerebrom redacts text wrapped in <private>...</private>.
+
+Reuse topic_key for evolving topics; if unsure, call mem_suggest_topic_key first.
+
+When the user asks what was done before, call mem_context, then mem_search, then mem_get_observation if a result needs full detail.
 
 Before ending substantial work:
 1. Call mem_session_summary with a concise summary of goals, decisions, changes, risks, files, and next steps.
 2. Prefer a short durable observation over a long transcript dump.
 
-Claude Desktop note: Claude Desktop exposes Kerebrom through MCP tools, prompts, and resources. It does not provide the Claude Code per-turn hook lifecycle, so this protocol and the mem_* tool descriptions are the control surface for automatic memory behavior.
+After context compaction or reset: first persist the compacted summary with mem_session_summary, then call mem_context to rehydrate.
+
+Claude Desktop note: Claude Desktop exposes Kerebrom through MCP tools, prompts, and resources. It does not provide the Claude Code per-turn hook lifecycle, so this protocol and the mem_* tool descriptions are the control surface for automatic memory behavior. Treat the rules above as your hook substitute.
 `)
 }
 

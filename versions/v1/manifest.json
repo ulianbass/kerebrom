@@ -1,7 +1,7 @@
 {
   "version_line": "v1",
-  "semver": "v1.0.9",
-  "status": "v1_mcp_chat_bootstrap_authoritative_release",
+  "semver": "v1.1.0",
+  "status": "v1_plug_and_play_hardening_release",
   "repo_root_is_product_root": false,
   "factory_version_root": "versions/v1",
   "release_contract": {
