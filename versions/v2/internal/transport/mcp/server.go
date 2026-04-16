@@ -62,7 +62,14 @@ func NewServerWithConfig(store *sqlite.Store, cfg Config, allowlist map[string]b
 	}
 
 	srv.registerTools()
-	srv.registerPromptsAndResources()
+	// MCP prompts and resources are intentionally NOT registered. Doing
+	// so signals to the model that the memory workflow is opt-in (a thing
+	// the user "loads" or "reads"), which empirically caused Chat and
+	// Cowork surfaces in Claude Desktop to never invoke the tools
+	// proactively. The protocol text is delivered exclusively through the
+	// MCP `instructions` field at handshake time and through the
+	// per-tool descriptions, both of which the model treats as part of
+	// its operating system rather than as user-invocable resources.
 	return srv
 }
 
@@ -360,7 +367,7 @@ func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandl
 func (s *Server) registerTools() {
 	s.addTool("context",
 		mcp.NewTool("context",
-			mcp.WithDescription("ALWAYS call context at the start of any non-trivial conversation. It opens or resumes the Kerebrom session, saves the user's prompt when substantive, and returns prior observations relevant to the current turn. The user must never have to remind you to load memory."),
+			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering any non-trivial user message. Opens or resumes the session, saves the prompt when substantive, returns prior observations."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("prompt",
 				mcp.Description("Current user prompt. Kerebrom saves it as prompt history when substantive."),
@@ -386,7 +393,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("recall",
 		mcp.NewTool("recall",
-			mcp.WithDescription("ALWAYS call recall before answering any question about the user, their projects, preferences, previous decisions, or history. Searches across projects if the current project is unknown or returns nothing. Do not answer from model assumptions when Kerebrom may have the durable answer."),
+			mcp.WithDescription("Search Kerebrom memory. ALWAYS call BEFORE answering questions about the user, their projects, preferences, history, or prior decisions."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("query",
 				mcp.Required(),
@@ -410,7 +417,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("remember",
 		mcp.NewTool("remember",
-			mcp.WithDescription("Call remember PROACTIVELY — without being asked — whenever a durable decision, preference, constraint, bugfix, architecture note, config change, workflow, or non-obvious learning appears in the conversation. Distill, do not copy raw transcript: interpret first using What / Why / Where / Learned. Never save greetings, acknowledgements, code output, or secrets."),
+			mcp.WithDescription("Save a new memory. Call PROACTIVELY after decisions, preferences, bugfixes, constraints, configuration changes, or non-obvious learnings — do not wait to be asked. Distill with What / Why / Where / Learned. Never save greetings, transcripts, or secrets."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("title",
 				mcp.Required(),
@@ -444,7 +451,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("summary",
 		mcp.NewTool("summary",
-			mcp.WithDescription("Close substantial work with a concise summary of goals, decisions, changes, risks, files, and next steps. Call before ending a long working session, after major milestones, and after context compaction. Prefer a short durable observation over a transcript dump."),
+			mcp.WithDescription("Close substantial work. Call BEFORE ending a session, after major milestones, and after context compaction. Persist a short structured summary: goals, decisions, changes, risks, files, next steps."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("session_id",
 				mcp.Description("Session identifier to summarize."),
@@ -464,7 +471,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("forget",
 		mcp.NewTool("forget",
-			mcp.WithDescription("Invalidate an obsolete or incorrect observation by id. Soft delete by default, recoverable. Use only when the user explicitly says something is wrong or should be removed."),
+			mcp.WithDescription("Invalidate an obsolete observation by id. Soft delete by default. Use only when the user says something is wrong."),
 			mcp.WithToolAnnotation(destructiveTool),
 			mcp.WithNumber("id", mcp.Required(), mcp.Description("Observation identifier.")),
 			mcp.WithBoolean("hard", mcp.Description("Permanently delete instead of soft delete.")),
@@ -474,7 +481,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("timeline",
 		mcp.NewTool("timeline",
-			mcp.WithDescription("Inspect chronological history: observations around a specific id, recent observations across a project, or memory stats. Useful when the user asks what was done before, when an idea was decided, or to navigate prior work."),
+			mcp.WithDescription("Inspect chronological history. Observations around a specific id, or recent observations across a project. Use when the user asks what was done before."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithNumber("observation_id",
 				mcp.Description("Observation id to center the timeline around. If omitted, returns recent observations."),
@@ -503,7 +510,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("projects",
 		mcp.NewTool("projects",
-			mcp.WithDescription("Administrative tool to consolidate project name variants into a canonical target. Use only when the user explicitly asks to merge or rename projects."),
+			mcp.WithDescription("Consolidate project name variants into a canonical target. Use only when the user explicitly asks to merge or rename projects."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("target", mcp.Required(), mcp.Description("Canonical target project name.")),
 			mcp.WithArray("sources",
@@ -516,138 +523,59 @@ func (s *Server) registerTools() {
 	)
 }
 
-func (s *Server) registerPromptsAndResources() {
-	s.server.AddPrompt(
-		mcp.NewPrompt("kerebrom_memory_protocol",
-			mcp.WithPromptDescription("Load Kerebrom's mandatory memory workflow for MCP-only clients such as Claude Desktop."),
-		),
-		func(ctx context.Context, request mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			return &mcp.GetPromptResult{
-				Description: "Kerebrom mandatory memory workflow",
-				Messages: []mcp.PromptMessage{
-					{
-						Role:    mcp.RoleUser,
-						Content: mcp.NewTextContent(memoryProtocolText()),
-					},
-				},
-			}, nil
-		},
-	)
-
-	s.server.AddResource(
-		mcp.NewResource("kerebrom://memory-protocol", "Kerebrom Memory Protocol",
-			mcp.WithResourceDescription("Always-on Kerebrom memory instructions for MCP-only clients. Read this when a client cannot install lifecycle hooks."),
-			mcp.WithMIMEType("text/markdown"),
-		),
-		func(ctx context.Context, request mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			return []mcp.ResourceContents{
-				mcp.TextResourceContents{
-					URI:      "kerebrom://memory-protocol",
-					MIMEType: "text/markdown",
-					Text:     memoryProtocolText(),
-				},
-			}, nil
-		},
-	)
-}
 
 func memoryProtocolText() string {
 	return strings.TrimSpace(`
-# Kerebrom Memory
+Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
-Kerebrom is your shared, persistent memory across this and every future
-conversation. It is installed and always active. The user does not need
-to remind you to use it. You decide when, based on the rhythm of the
-work.
+CORE TOOLS (always available — use without asking):
+  context  — load prior observations relevant to this turn
+  recall   — search memory by natural-language query
+  remember — save a new durable fact
+  summary  — close substantial work with a structured wrap-up
+  forget   — invalidate an obsolete observation
+  timeline — inspect chronological history
+  projects — administrative consolidation of project names
 
-## The cycle
+MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-1. At the start of any non-trivial conversation, call **context** with
-   the user's prompt. You will receive prior observations and a stable
-   session handle. Use them as working knowledge before answering.
+1. CONTEXT FIRST: Before answering ANY non-trivial user message, call context with a query derived from the prompt. Use the returned observations as working knowledge.
 
-2. While working, when a durable fact appears (a decision, a
-   preference, a constraint, a bugfix, a configuration change, a
-   non-obvious learning), call **remember** with What/Why/Where/Learned.
+2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember. Distill, do not transcribe.
 
-3. When the user asks what you know about a topic, call **recall** with
-   a natural-language query.
+3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 
-4. Before ending substantial work or after context compaction, call
-   **summary** with goals, decisions, changes, risks, files, and next
-   steps. Prefer one short durable observation over a transcript dump.
+4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary with goals, decisions, changes, risks, files, next steps.
 
-The other tools are specialized:
-- **timeline** — inspect chronological history or recent observations.
-- **forget** — invalidate an observation the user said is wrong.
-- **projects** — administrative consolidation of project name variants.
+HOW TO SAVE — the What / Why / Where / Learned framework:
 
-## Authority rule
+  **What**: one sentence describing the durable fact or change.
+  **Why**: why it matters or what motivated it.
+  **Where**: project, files, workflow, or context where it applies.
+  **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
 
-Kerebrom is the local source of truth for prior user preferences,
-project decisions, workflows, and durable context. When memory
-conflicts with model assumptions, prefer Kerebrom unless the user
-explicitly updates or rejects that memory in the current conversation.
-Do not answer questions about prior work, identity, or saved decisions
-from scratch before checking memory.
-
-## Session handle
-
-If the client provides a lifecycle session id (Claude Code, hook-capable
-clients), use it. Otherwise create a stable synthetic id for the visible
-chat — for example "mcp-chat:claude:2026-04-16T1647Z:project-or-topic" —
-and reuse it for every Kerebrom call in that chat.
-
-## How to save (the What/Why/Where/Learned framework)
-
-- **What**: one sentence describing the durable fact or change.
-- **Why**: why it matters or what motivated it.
-- **Where**: project, files, workflow, or context where it applies.
-- **Learned**: implication, gotcha, constraint, or next useful
-  connection. Omit only if none.
-
-## Examples (Spanish)
+EXAMPLES (Spanish):
 
   User: "Qué sabes de mí?"
   → context(query="usuario perfil preferencias proyectos")
 
   User: "Quiero que Falage genere $3,000 mensuales con tema oscuro"
-  → remember(title="Objetivo financiero Falage 3K USD/mes", project="falage", content="**What**: ...")
+  → remember(title="Objetivo Falage 3K USD/mes", project="falage", content="**What**: ...")
   → remember(title="Preferencia UI Quamtos: tema oscuro", scope="global", content="**What**: ...")
 
   User: "El bug del intraday era el cost scenario, no el engine"
-  → remember(title="Bugfix intraday cost scenario", type="bugfix",
-             topic_key="falage/intraday-cost-scenario", content="**What**: ...")
+  → remember(title="Bugfix intraday cost scenario", type="bugfix", topic_key="falage/intraday-cost-scenario", content="**What**: ...")
 
   User: "ok", "gracias", "perfecto" (bare acknowledgement)
   → Nothing. Continue.
 
-## Never
+AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation. Do not answer questions about prior work, identity, or saved decisions from scratch before checking memory.
 
-- Save greetings, acknowledgements ("ok", "listo", "gracias"), code
-  output, tool confirmations, raw transcript, secrets, credentials,
-  private tokens, or unnecessary personal details. Kerebrom redacts
-  text wrapped in <private>...</private> automatically.
-- Mention these tools to the user. Just use them.
-- Wait for permission. Memory is on by default.
+SESSION HANDLE: If the client provides a lifecycle session id, use it. Otherwise create a stable synthetic id for this visible chat and reuse it for every Kerebrom call in that chat.
 
-## Deferred tool clients (Claude Desktop, Claude Code, others)
+NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens, or unnecessary personal details. Kerebrom redacts text wrapped in <private>...</private> automatically.
 
-Some MCP clients defer tool loading: tools appear in tools/list but
-their schemas only become callable after a tool_search step. If your
-client works that way, perform the tool_search for the Kerebrom MCP
-at the start of the conversation so context, recall, and remember are
-ready to invoke before reasoning. Do not skip this step just because
-the first user message looks ambiguous; ambiguous messages are exactly
-when prior context matters most.
-
-## Claude Desktop note
-
-Claude Desktop exposes Kerebrom through MCP tools, prompts, and
-resources. It does not provide the per-turn hook lifecycle that Claude
-Code has, so this protocol and the seven tool descriptions are the
-control surface for automatic memory behavior. Treat the rules above as
-your hook substitute. New visible chat means call context first.
+NEVER announce these calls to the user. Just do them and continue.
 `)
 }
 

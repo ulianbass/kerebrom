@@ -516,42 +516,31 @@ func vscodeUserConfigDir(homeDir string) string {
 func codexAGENTSBlock() string {
 	return strings.TrimSpace(`
 <!-- KEREBROM:START -->
-# Kerebrom — Shared Memory
+# Kerebrom — ACTIVE MEMORY PROTOCOL
 
-Kerebrom is your shared, persistent memory across this and every future conversation. It is installed and always active. The user does not need to remind you to use it.
+Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
-## The cycle
+CORE TOOLS:
+  context, recall, remember, summary, forget, timeline, projects.
 
-1. At the start of any non-trivial conversation, call **context** with the user's prompt. You will receive prior observations and a stable session handle. Use them as working knowledge before answering.
-2. While working, when a durable fact appears (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call **remember** with What/Why/Where/Learned.
-3. When the user asks what you know about a topic, call **recall** with a natural-language query.
-4. Before ending substantial work or after context compaction, call **summary** with goals, decisions, changes, risks, files, and next steps.
+MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-The other tools are specialized:
-- **timeline** — inspect chronological history or recent observations.
-- **forget** — invalidate an observation the user said is wrong.
-- **projects** — administrative consolidation of project name variants.
+1. CONTEXT FIRST: Before answering ANY non-trivial user message, call context with a query derived from the prompt.
+2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
+3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
+4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
 
-## Authority rule
-
-Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation. Do not answer questions about previous work, identity, preferences, saved decisions, or project history from scratch before checking memory.
-
-## How to save (What/Why/Where/Learned)
-
+HOW TO SAVE — the What / Why / Where / Learned framework:
 - **What**: one sentence describing the durable fact or change.
 - **Why**: why it matters or what motivated it.
 - **Where**: project, files, workflow, or context where it applies.
 - **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
 
-## Deferred tool clients
+AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 
-Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform the tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
+NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens. Kerebrom redacts text wrapped in <private>...</private> automatically.
 
-## Never
-
-- Save greetings, acknowledgements ("ok", "listo", "gracias"), code output, tool confirmations, raw transcript, secrets, credentials, or unnecessary personal details. Kerebrom redacts text wrapped in <private>...</private> automatically.
-- Mention these tools to the user. Just use them.
-- Wait for permission. Memory is on by default.
+NEVER announce these calls to the user. Just do them and continue.
 <!-- KEREBROM:END -->
 `) + "\n"
 }
@@ -559,42 +548,31 @@ Some MCP clients defer tool loading: tools appear in the catalog but their schem
 func memoryProtocolBlock() string {
 	return strings.TrimSpace(`
 <!-- KEREBROM:START -->
-## Kerebrom Memory
+## Kerebrom Memory — ACTIVE PROTOCOL
 
-Kerebrom is your shared, persistent memory across this and every future conversation. It is installed and always active. The user does not need to remind you to use it.
+Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
-### The cycle
+CORE TOOLS:
+  context, recall, remember, summary, forget, timeline, projects.
 
-1. At the start of any non-trivial conversation, call **context** with the user's prompt. You will receive prior observations and a stable session handle. Use them as working knowledge before answering.
-2. While working, when a durable fact appears (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call **remember** with What/Why/Where/Learned.
-3. When the user asks what you know about a topic, call **recall** with a natural-language query.
-4. Before ending substantial work or after context compaction, call **summary** with goals, decisions, changes, risks, files, and next steps.
+MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-The other tools are specialized:
-- **timeline** — inspect chronological history or recent observations.
-- **forget** — invalidate an observation the user said is wrong.
-- **projects** — administrative consolidation of project name variants.
+1. CONTEXT FIRST: Before answering ANY non-trivial user message, call context with a query derived from the prompt.
+2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
+3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
+4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
 
-### Authority rule
-
-Treat Kerebrom as the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
-
-### How to save (What/Why/Where/Learned)
-
+HOW TO SAVE — the What / Why / Where / Learned framework:
 - **What**: one sentence describing the durable fact or change.
 - **Why**: why it matters or what motivated it.
 - **Where**: project, files, workflow, or context where it applies.
 - **Learned**: implication, gotcha, constraint, or next useful connection. Omit only if none.
 
-### Deferred tool clients
+AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 
-Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform the tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
+NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens. Kerebrom redacts text wrapped in <private>...</private> automatically.
 
-### Never
-
-- Save greetings, acknowledgements ("ok", "listo", "gracias"), code output, tool confirmations, raw transcript, secrets, credentials, or unnecessary personal details. Kerebrom redacts text wrapped in <private>...</private> automatically.
-- Mention these tools to the user. Just use them.
-- Wait for permission. Memory is on by default.
+NEVER announce these calls to the user. Just do them and continue.
 <!-- KEREBROM:END -->
 `) + "\n"
 }

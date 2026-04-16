@@ -17,7 +17,14 @@ import (
 
 // ----- Protocol surface -----
 
-func TestServerExposesDesktopMemoryProtocol(t *testing.T) {
+// TestServerDoesNotExposePromptsOrResources locks in the v2 design
+// decision documented at server.go: registering MCP prompts or
+// resources for the memory workflow signals to the model that the
+// system is opt-in (a thing the user "loads" or "reads"). The protocol
+// must travel exclusively via WithInstructions and the per-tool
+// descriptions, both of which the model treats as part of its
+// operating environment rather than as user-invocable surfaces.
+func TestServerDoesNotExposePromptsOrResources(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -25,31 +32,13 @@ func TestServerExposesDesktopMemoryProtocol(t *testing.T) {
 	mcpClient := newTestClient(t, ctx, store)
 
 	prompts, err := mcpClient.ListPrompts(ctx, mcp.ListPromptsRequest{})
-	if err != nil {
-		t.Fatalf("list prompts: %v", err)
+	if err == nil && len(prompts.Prompts) > 0 {
+		t.Fatalf("Kerebrom v2 must not expose MCP prompts; got %#v", prompts.Prompts)
 	}
-	if len(prompts.Prompts) != 1 || prompts.Prompts[0].Name != "kerebrom_memory_protocol" {
-		t.Fatalf("unexpected prompts: %#v", prompts.Prompts)
-	}
-
-	var promptReq mcp.GetPromptRequest
-	promptReq.Params.Name = "kerebrom_memory_protocol"
-	prompt, err := mcpClient.GetPrompt(ctx, promptReq)
-	if err != nil {
-		t.Fatalf("get prompt: %v", err)
-	}
-	content, ok := prompt.Messages[0].Content.(mcp.TextContent)
-	if !ok {
-		t.Fatalf("expected prompt text content, got %T", prompt.Messages[0].Content)
-	}
-	assertProtocolText(t, content.Text)
 
 	resources, err := mcpClient.ListResources(ctx, mcp.ListResourcesRequest{})
-	if err != nil {
-		t.Fatalf("list resources: %v", err)
-	}
-	if len(resources.Resources) != 1 || resources.Resources[0].URI != "kerebrom://memory-protocol" {
-		t.Fatalf("unexpected resources: %#v", resources.Resources)
+	if err == nil && len(resources.Resources) > 0 {
+		t.Fatalf("Kerebrom v2 must not expose MCP resources; got %#v", resources.Resources)
 	}
 }
 
@@ -116,14 +105,14 @@ func TestServerRegistersSevenSemanticTools(t *testing.T) {
 		assertToolAnnotation(t, tools.Tools, name, ann.readOnly, ann.destructive)
 	}
 
-	assertToolDescriptionContains(t, tools.Tools, "context", "ALWAYS call context")
-	assertToolDescriptionContains(t, tools.Tools, "recall", "ALWAYS call recall")
+	assertToolDescriptionContains(t, tools.Tools, "context", "ALWAYS call BEFORE")
+	assertToolDescriptionContains(t, tools.Tools, "recall", "ALWAYS call BEFORE")
 	assertToolDescriptionContains(t, tools.Tools, "remember", "PROACTIVELY")
 	assertToolDescriptionContains(t, tools.Tools, "remember", "What / Why / Where / Learned")
 	assertToolDescriptionContains(t, tools.Tools, "summary", "goals, decisions, changes, risks")
 	assertToolDescriptionContains(t, tools.Tools, "timeline", "chronological")
 	assertToolDescriptionContains(t, tools.Tools, "forget", "Soft delete")
-	assertToolDescriptionContains(t, tools.Tools, "projects", "consolidate")
+	assertToolDescriptionContains(t, tools.Tools, "projects", "Consolidate")
 }
 
 func TestAgentProfileExposesSixTools(t *testing.T) {
@@ -398,13 +387,13 @@ func assertProtocolText(t *testing.T, text string) {
 	t.Helper()
 
 	for _, want := range []string{
-		"Kerebrom Memory",
+		"persistent memory",
 		"context",
 		"remember",
 		"recall",
 		"summary",
-		"What/Why/Where/Learned",
-		"Claude Desktop",
+		"What / Why / Where / Learned",
+		"MANDATORY BEHAVIORS",
 		"visible chat",
 	} {
 		if !strings.Contains(text, want) {
