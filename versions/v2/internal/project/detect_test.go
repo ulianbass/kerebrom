@@ -1,6 +1,7 @@
 package project
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,33 @@ func TestDetectFallsBackToDirectoryName(t *testing.T) {
 
 	if got := Detect(dir); got != "proyecto-kerebrom" {
 		t.Fatalf("Detect() = %q, want %q", got, "proyecto-kerebrom")
+	}
+}
+
+func TestDetectDoesNotTreatRootOrHomeAsStrongProjects(t *testing.T) {
+	if got := Detect(filepath.VolumeName(os.TempDir()) + string(filepath.Separator)); got != "default" {
+		t.Fatalf("Detect(root) = %q, want default", got)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("home directory unavailable")
+	}
+	if got := Detect(home); got != "default" {
+		t.Fatalf("Detect(home) = %q, want default", got)
+	}
+}
+
+func TestProjectLookupFilterTreatsWeakNamesAsCrossProject(t *testing.T) {
+	tests := []string{"", ".", "/", "default", "home"}
+	for _, input := range tests {
+		if got := LookupFilter(input); got != "" {
+			t.Fatalf("LookupFilter(%q) = %q, want empty cross-project filter", input, got)
+		}
+	}
+
+	if got := LookupFilter("Proyecto Falage"); got != "proyecto-falage" {
+		t.Fatalf("LookupFilter(strong project) = %q, want proyecto-falage", got)
 	}
 }
 

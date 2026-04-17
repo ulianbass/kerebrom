@@ -25,6 +25,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 6. **Cleanup of v1 leftovers**: a v1 user upgrading to v2 ends with no `mcp__Kerebrom__mem_*` entries lingering in their `permissions.allow`.
 7. **Agent-installable repository**: Claude, Codex, Copilot, or another coding agent can read the repository-native install instructions and guide an end user through a safe `versions/v2` install without guessing.
 8. **Activation without noisy saves**: Kerebrom should activate through `context` on every user message when tools are available, while `remember` remains limited to durable facts and does not save bare acknowledgements as observations.
+9. **Global retrieval despite project drift**: clients that launch without a real workspace must not become isolated under weak projects such as `/` or `default`; reads fall back to cross-project memory and strong-project recalls can still surface better matches from another project.
 
 ## Non-goals
 
@@ -41,7 +42,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.0.3` |
+| `semver` | `v2.0.4` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

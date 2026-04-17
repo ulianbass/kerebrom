@@ -199,6 +199,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	if strings.TrimSpace(*query) == "" && len(fs.Args()) > 0 {
 		*query = strings.Join(fs.Args(), " ")
 	}
+	lookupProject := projectdetect.LookupFilter(*project)
 
 	store, closeFn, err := openStore(context.Background())
 	if err != nil {
@@ -209,7 +210,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 
 	results, err := store.SearchObservations(context.Background(), sqlite.SearchOptions{
 		Query:   *query,
-		Project: *project,
+		Project: lookupProject,
 		Type:    *observationType,
 		Scope:   *scope,
 		Limit:   *limit,
@@ -242,6 +243,7 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 	if strings.TrimSpace(*project) == "" && len(fs.Args()) > 0 {
 		*project = fs.Args()[0]
 	}
+	lookupProject := projectdetect.LookupFilter(*project)
 
 	store, closeFn, err := openStore(context.Background())
 	if err != nil {
@@ -250,14 +252,14 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
-	stats, err := store.Stats(context.Background(), *project)
+	stats, err := store.Stats(context.Background(), lookupProject)
 	if err != nil {
 		fmt.Fprintf(stderr, "load stats: %v\n", err)
 		return 1
 	}
 
 	recent, err := store.ListObservations(context.Background(), sqlite.ListObservationOptions{
-		Project: *project,
+		Project: lookupProject,
 		Scope:   *scope,
 		Limit:   *limit,
 	})
@@ -265,12 +267,12 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "list observations: %v\n", err)
 		return 1
 	}
-	sessions, err := store.ListSessions(context.Background(), *project, *limit)
+	sessions, err := store.ListSessions(context.Background(), lookupProject, *limit)
 	if err != nil {
 		fmt.Fprintf(stderr, "list sessions: %v\n", err)
 		return 1
 	}
-	prompts, err := store.ListPrompts(context.Background(), *project, *limit)
+	prompts, err := store.ListPrompts(context.Background(), lookupProject, *limit)
 	if err != nil {
 		fmt.Fprintf(stderr, "list prompts: %v\n", err)
 		return 1
@@ -281,7 +283,7 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 	if queryText != "" {
 		matches, err = store.SearchObservations(context.Background(), sqlite.SearchOptions{
 			Query:   queryText,
-			Project: *project,
+			Project: lookupProject,
 			Scope:   *scope,
 			Limit:   *limit,
 		})
@@ -291,7 +293,7 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	fmt.Fprintf(stdout, "project=%s query=%s\n", strings.TrimSpace(*project), queryText)
+	fmt.Fprintf(stdout, "project=%s project_filter=%s query=%s\n", strings.TrimSpace(*project), strings.TrimSpace(lookupProject), queryText)
 	fmt.Fprintf(stdout, "stats: sessions=%d active_sessions=%d observations=%d prompts=%d projects=%d\n",
 		stats.SessionCount,
 		stats.ActiveSessionCount,
@@ -352,6 +354,7 @@ func runTimeline(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(reorderFlagArgs(args, nil)); err != nil {
 		return 2
 	}
+	lookupProject := projectdetect.LookupFilter(*project)
 
 	store, closeFn, err := openStore(context.Background())
 	if err != nil {
@@ -376,7 +379,7 @@ func runTimeline(args []string, stdout, stderr io.Writer) int {
 	}
 
 	results, err := store.ListObservations(context.Background(), sqlite.ListObservationOptions{
-		Project:   *project,
+		Project:   lookupProject,
 		Scope:     *scope,
 		SessionID: *sessionID,
 		Limit:     *limit,
@@ -403,6 +406,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(reorderFlagArgs(args, nil)); err != nil {
 		return 2
 	}
+	lookupProject := projectdetect.LookupFilter(*project)
 
 	store, closeFn, err := openStore(context.Background())
 	if err != nil {
@@ -411,7 +415,7 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
-	stats, err := store.Stats(context.Background(), *project)
+	stats, err := store.Stats(context.Background(), lookupProject)
 	if err != nil {
 		fmt.Fprintf(stderr, "load stats: %v\n", err)
 		return 1

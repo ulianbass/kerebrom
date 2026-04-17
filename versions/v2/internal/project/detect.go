@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -24,7 +25,7 @@ func Detect(directory string) string {
 		return normalize(name)
 	}
 	if name := filepath.Base(directory); name != "" && name != "." {
-		return normalize(name)
+		return MetadataDefault(name)
 	}
 	return "default"
 }
@@ -70,11 +71,53 @@ func repoNameFromRemote(remote string) string {
 }
 
 func normalize(name string) string {
-	name = strings.TrimSpace(strings.ToLower(name))
-	name = strings.ReplaceAll(name, "_", "-")
-	name = strings.Join(strings.Fields(name), "-")
+	name = canonical(name)
 	if name == "" {
 		return "default"
 	}
 	return name
+}
+
+func canonical(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	name = strings.ReplaceAll(name, "_", "-")
+	name = strings.Join(strings.Fields(name), "-")
+	return name
+}
+
+func Normalize(name string) string {
+	return normalize(name)
+}
+
+func LookupFilter(name string) string {
+	name = canonical(name)
+	if isWeakCanonical(name) {
+		return ""
+	}
+	return name
+}
+
+func MetadataDefault(name string) string {
+	name = canonical(name)
+	if isWeakCanonical(name) {
+		return "default"
+	}
+	return name
+}
+
+func IsWeak(name string) bool {
+	return isWeakCanonical(canonical(name))
+}
+
+func isWeakCanonical(name string) bool {
+	if name == "" || name == "." || name == "/" || name == "default" || name == "home" {
+		return true
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		homeBase := canonical(filepath.Base(home))
+		if homeBase != "" && name == homeBase {
+			return true
+		}
+	}
+	return false
 }

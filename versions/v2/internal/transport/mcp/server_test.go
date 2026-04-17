@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
@@ -222,6 +223,82 @@ func TestCycleContextRememberRecallSummary(t *testing.T) {
 	if _, ok := summaryPayload["session"]; !ok {
 		t.Fatalf("summary payload missing session block: %#v", summaryPayload)
 	}
+}
+
+func TestContextFromWeakDefaultProjectSearchesAcrossProjects(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	falageObservation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:      "decision",
+		Title:     "Usuario anticipa 0 PASS en combinator post-2020",
+		Content:   "**What**: NQ PreLondon combinator post-2020 termina en 0 PASS y se decide evaluar salto directo.",
+		Project:   "Proyecto Falage",
+		Scope:     "project",
+		TopicKey:  "phase4-close-go-live-nq-prelondon",
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("save falage observation: %v", err)
+	}
+
+	server := NewServerWithConfig(store, Config{DefaultProject: "/"}, ResolveTools("agent")).MCPServer()
+	mcpClient := newTestClientForServer(t, ctx, server)
+
+	contextResult := callTool(t, ctx, mcpClient, "context", map[string]any{
+		"prompt": "busca la última información guardada hoy sobre NQ PreLondon 0 PASS post-2020",
+		"query":  "última información guardada hoy NQ PreLondon 0 PASS post-2020 combinator",
+		"limit":  10,
+	})
+	payload := mustStructuredMap(t, contextResult)
+	if payload["project_filter"] != "" {
+		t.Fatalf("weak default project should use cross-project lookup, got filter %v", payload["project_filter"])
+	}
+	if payload["project_filter_relaxed"] != true {
+		t.Fatalf("weak default project should mark project_filter_relaxed=true: %#v", payload)
+	}
+	assertObservationInPayload(t, payload, "recent_observations", falageObservation.ID)
+	assertObservationInPayload(t, payload, "matches", falageObservation.ID)
+}
+
+func TestRecallFromStrongProjectAlsoSurfacesBetterCrossProjectMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	if _, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:    "learning",
+		Title:   "Kerebrom generic memory",
+		Content: "**What**: Kerebrom guarda información de proyecto y memoria global hoy.",
+		Project: "Proyecto Kerebrom",
+		Scope:   "project",
+	}); err != nil {
+		t.Fatalf("save generic project observation: %v", err)
+	}
+	falageObservation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:     "decision",
+		Title:    "Usuario anticipa 0 PASS en combinator post-2020",
+		Content:  "**What**: Falage NQ PreLondon combinator post-2020 confirma 0 PASS y cambia el siguiente paso.",
+		Project:  "Proyecto Falage",
+		Scope:    "project",
+		TopicKey: "phase4-close-go-live-nq-prelondon",
+	})
+	if err != nil {
+		t.Fatalf("save falage observation: %v", err)
+	}
+
+	mcpClient := newTestClient(t, ctx, store)
+	recallResult := callTool(t, ctx, mcpClient, "recall", map[string]any{
+		"query":   "última información guardada hoy NQ PreLondon 0 PASS post-2020 combinator proyecto Falage",
+		"project": "Proyecto Kerebrom",
+		"limit":   10,
+	})
+	payload := mustStructuredMap(t, recallResult)
+	if payload["project_filter_relaxed"] != true {
+		t.Fatalf("expected strong-project recall to report relaxed cross-project matches: %#v", payload)
+	}
+	assertObservationInPayload(t, payload, "matches", falageObservation.ID)
 }
 
 // ----- Forget -----
@@ -576,6 +653,25 @@ func mustStructuredMap(t *testing.T, result *mcp.CallToolResult) map[string]any 
 		t.Fatalf("expected structured content map, got %T", result.StructuredContent)
 	}
 	return payload
+}
+
+func assertObservationInPayload(t *testing.T, payload map[string]any, key string, id int64) {
+	t.Helper()
+
+	items, ok := payload[key].([]any)
+	if !ok {
+		t.Fatalf("payload[%s] is not an observation array: %#v", key, payload[key])
+	}
+	for _, item := range items {
+		observation, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if int64(observation["id"].(float64)) == id {
+			return
+		}
+	}
+	t.Fatalf("observation %d not found in payload[%s]: %#v", id, key, payload[key])
 }
 
 func mustNestedMap(t *testing.T, payload map[string]any, key string) map[string]any {

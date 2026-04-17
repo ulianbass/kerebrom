@@ -12,6 +12,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/ulianbass/kerebrom/internal/config"
+	projectmeta "github.com/ulianbass/kerebrom/internal/project"
 	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 	"github.com/ulianbass/kerebrom/internal/version"
@@ -646,7 +647,9 @@ func (s *Server) handleRemember(ctx context.Context, request mcp.CallToolRequest
 }
 
 func (s *Server) handleContext(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	project := s.projectOrDefault(request.GetString("project", ""))
+	rawProject := request.GetString("project", "")
+	project := s.projectOrDefault(rawProject)
+	lookupProject := s.lookupProjectFilter(rawProject, project)
 	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
 	directory := strings.TrimSpace(request.GetString("directory", ""))
 	if directory == "" {
@@ -667,7 +670,7 @@ func (s *Server) handleContext(ctx context.Context, request mcp.CallToolRequest)
 	if query == "" {
 		query = strings.TrimSpace(prompt)
 	}
-	payload, err := s.contextPayload(ctx, project, "", query, request.GetInt("limit", 10))
+	payload, err := s.contextPayload(ctx, project, lookupProject, "", query, request.GetInt("limit", 10))
 	if err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -687,13 +690,16 @@ func (s *Server) handleRecall(ctx context.Context, request mcp.CallToolRequest) 
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	project := s.projectOrDefault(request.GetString("project", ""))
+	rawProject := request.GetString("project", "")
+	project := s.projectOrDefault(rawProject)
+	lookupProject := s.lookupProjectFilter(rawProject, project)
 	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
 	s.activity.RecordToolCall(sessionID)
 
 	payload, err := s.contextPayload(
 		ctx,
 		project,
+		lookupProject,
 		request.GetString("scope", ""),
 		query,
 		request.GetInt("limit", 10),
@@ -725,7 +731,9 @@ func (s *Server) handleForget(ctx context.Context, request mcp.CallToolRequest) 
 }
 
 func (s *Server) handleTimeline(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	project := s.projectOrDefault(request.GetString("project", ""))
+	rawProject := request.GetString("project", "")
+	project := s.projectOrDefault(rawProject)
+	lookupProject := s.lookupProjectFilter(rawProject, project)
 	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
 	s.activity.RecordToolCall(sessionID)
 
@@ -738,7 +746,7 @@ func (s *Server) handleTimeline(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	results, err := s.store.ListObservations(ctx, sqlite.ListObservationOptions{
-		Project:   project,
+		Project:   lookupProject,
 		Scope:     request.GetString("scope", ""),
 		SessionID: request.GetString("session_id", ""),
 		Limit:     request.GetInt("limit", 20),
@@ -825,11 +833,14 @@ func (s *Server) projectOrDefault(project string) string {
 	if project == "" {
 		project = strings.TrimSpace(s.config.DefaultProject)
 	}
-	project = sqlite.NormalizeProject(project)
-	if project == "" {
-		return "default"
+	return projectmeta.MetadataDefault(project)
+}
+
+func (s *Server) lookupProjectFilter(rawProject string, project string) string {
+	if strings.TrimSpace(rawProject) == "" {
+		return ""
 	}
-	return project
+	return projectmeta.LookupFilter(project)
 }
 
 func (s *Server) sessionIDOrDefault(sessionID string, project string) string {
@@ -888,44 +899,44 @@ func (s *Server) savePromptIfSubstantive(ctx context.Context, sessionID string, 
 	return map[string]any{"saved": true, "prompt": prompt}, nil
 }
 
-func (s *Server) contextPayload(ctx context.Context, project string, scope string, query string, limit int) (map[string]any, error) {
-	stats, err := s.store.Stats(ctx, project)
+func (s *Server) contextPayload(ctx context.Context, project string, lookupProject string, scope string, query string, limit int) (map[string]any, error) {
+	stats, err := s.store.Stats(ctx, lookupProject)
 	if err != nil {
 		return nil, err
 	}
 
 	recent, err := s.store.ListObservations(ctx, sqlite.ListObservationOptions{
-		Project: project,
+		Project: lookupProject,
 		Scope:   scope,
 		Limit:   limit,
 	})
 	if err != nil {
 		return nil, err
 	}
-	sessions, err := s.store.ListSessions(ctx, project, limit)
+	sessions, err := s.store.ListSessions(ctx, lookupProject, limit)
 	if err != nil {
 		return nil, err
 	}
-	prompts, err := s.store.ListPrompts(ctx, project, limit)
+	prompts, err := s.store.ListPrompts(ctx, lookupProject, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	query = strings.TrimSpace(query)
 	var matches []sqlite.Observation
-	projectFilterRelaxed := false
+	projectFilterRelaxed := lookupProject == ""
 	if query != "" {
 		matches, err = s.store.SearchObservations(ctx, sqlite.SearchOptions{
 			Query:   query,
-			Project: project,
+			Project: lookupProject,
 			Scope:   scope,
 			Limit:   limit,
 		})
 		if err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(project) != "" && shouldRelaxProjectFilter(matches, project) {
-			relaxedMatches, err := s.store.SearchObservations(ctx, sqlite.SearchOptions{
+		if strings.TrimSpace(lookupProject) != "" {
+			broadMatches, err := s.store.SearchObservations(ctx, sqlite.SearchOptions{
 				Query: query,
 				Scope: scope,
 				Limit: limit,
@@ -933,12 +944,15 @@ func (s *Server) contextPayload(ctx context.Context, project string, scope strin
 			if err != nil {
 				return nil, err
 			}
-			matches, projectFilterRelaxed = mergeRelaxedMatches(matches, relaxedMatches, project, limit)
+			var relaxedAdded bool
+			matches, relaxedAdded = mergeBroadMatches(matches, broadMatches, lookupProject, limit)
+			projectFilterRelaxed = relaxedAdded
 		}
 	}
 
 	return map[string]any{
 		"project":                strings.TrimSpace(project),
+		"project_filter":         strings.TrimSpace(lookupProject),
 		"query":                  query,
 		"project_filter_relaxed": projectFilterRelaxed,
 		"stats":                  stats,
@@ -949,23 +963,7 @@ func (s *Server) contextPayload(ctx context.Context, project string, scope strin
 	}, nil
 }
 
-func shouldRelaxProjectFilter(matches []sqlite.Observation, project string) bool {
-	project = sqlite.NormalizeProject(project)
-	if project == "" {
-		return false
-	}
-	if len(matches) == 0 {
-		return true
-	}
-	for _, match := range matches {
-		if sqlite.NormalizeProject(match.Project) == project && match.Scope != "global" {
-			return false
-		}
-	}
-	return true
-}
-
-func mergeRelaxedMatches(current []sqlite.Observation, relaxed []sqlite.Observation, project string, limit int) ([]sqlite.Observation, bool) {
+func mergeBroadMatches(primary []sqlite.Observation, broad []sqlite.Observation, project string, limit int) ([]sqlite.Observation, bool) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -978,30 +976,18 @@ func mergeRelaxedMatches(current []sqlite.Observation, relaxed []sqlite.Observat
 	relaxedAdded := false
 	project = sqlite.NormalizeProject(project)
 
-	for _, observation := range relaxed {
+	for _, observation := range broad {
 		if len(merged) >= limit {
 			break
 		}
-		if sqlite.NormalizeProject(observation.Project) == project || observation.Scope == "global" {
-			continue
-		}
-		seen[observation.ID] = true
-		merged = append(merged, observation)
-		relaxedAdded = true
-	}
-
-	for _, observation := range current {
-		if len(merged) >= limit {
-			break
-		}
-		if seen[observation.ID] {
-			continue
+		if sqlite.NormalizeProject(observation.Project) != project && observation.Scope != "global" {
+			relaxedAdded = true
 		}
 		seen[observation.ID] = true
 		merged = append(merged, observation)
 	}
 
-	for _, observation := range relaxed {
+	for _, observation := range primary {
 		if len(merged) >= limit {
 			break
 		}

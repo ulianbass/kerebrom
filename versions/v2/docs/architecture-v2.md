@@ -90,6 +90,12 @@ The protocol text encodes a four-step rhythm the model follows automatically:
 
 `context` is the activation step and should run on every user message when the client exposes Kerebrom tools. Prompt persistence remains filtered inside `context`, so short acknowledgements can activate memory without becoming durable observations. `forget`, `timeline`, and `projects` are specialized — invoked only when explicitly needed.
 
+## Project lookup behavior
+
+Project names organize memory; they must not become hard walls that hide relevant context from another AI client. v2.0.4 treats weak project identities such as `/`, `.`, `default`, `home`, or the user's home-folder name as **unknown** for read paths. When `context`, `recall`, `timeline`, or HTTP context/timeline receive an unknown project, they use a cross-project lookup so MCP-only clients launched outside a workspace still see the latest durable memories.
+
+When a strong project is supplied explicitly, Kerebrom still searches that project first, but `context` and `recall` also merge broad cross-project matches. This prevents generic local hits from hiding a more relevant observation in another project, while preserving project metadata for organization, summaries, prompts, and explicit project filters.
+
 ## Self-update flow
 
 `kerebrom update` runs the following pipeline:

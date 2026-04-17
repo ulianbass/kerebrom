@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	projectmeta "github.com/ulianbass/kerebrom/internal/project"
 	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
 	"github.com/ulianbass/kerebrom/internal/version"
@@ -404,9 +405,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	project := projectmeta.LookupFilter(r.URL.Query().Get("project"))
 	results, err := s.store.SearchObservations(r.Context(), sqlite.SearchOptions{
 		Query:   r.URL.Query().Get("q"),
-		Project: r.URL.Query().Get("project"),
+		Project: project,
 		Type:    r.URL.Query().Get("type"),
 		Scope:   r.URL.Query().Get("scope"),
 		Limit:   limit,
@@ -445,8 +447,9 @@ func (s *Server) handleTimeline(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
+	project := projectmeta.LookupFilter(r.URL.Query().Get("project"))
 	results, err := s.store.ListObservations(r.Context(), sqlite.ListObservationOptions{
-		Project:   r.URL.Query().Get("project"),
+		Project:   project,
 		Scope:     r.URL.Query().Get("scope"),
 		SessionID: r.URL.Query().Get("session_id"),
 		Limit:     limit,
@@ -469,7 +472,8 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project := r.URL.Query().Get("project")
+	rawProject := r.URL.Query().Get("project")
+	project := projectmeta.LookupFilter(rawProject)
 	scope := r.URL.Query().Get("scope")
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
@@ -500,6 +504,7 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var matches []sqlite.Observation
+	projectFilterRelaxed := project == ""
 	if query != "" {
 		matches, err = s.store.SearchObservations(r.Context(), sqlite.SearchOptions{
 			Query:   query,
@@ -511,17 +516,71 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
+		if strings.TrimSpace(project) != "" {
+			broadMatches, err := s.store.SearchObservations(r.Context(), sqlite.SearchOptions{
+				Query: query,
+				Scope: scope,
+				Limit: limit,
+			})
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			var relaxedAdded bool
+			matches, relaxedAdded = mergeBroadMatches(matches, broadMatches, project, limit)
+			projectFilterRelaxed = relaxedAdded
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"project":             strings.TrimSpace(project),
-		"query":               query,
-		"stats":               stats,
-		"recent_sessions":     sessions,
-		"recent_prompts":      prompts,
-		"recent_observations": recent,
-		"matches":             matches,
+		"project":                strings.TrimSpace(rawProject),
+		"project_filter":         strings.TrimSpace(project),
+		"query":                  query,
+		"project_filter_relaxed": projectFilterRelaxed,
+		"stats":                  stats,
+		"recent_sessions":        sessions,
+		"recent_prompts":         prompts,
+		"recent_observations":    recent,
+		"matches":                matches,
 	})
+}
+
+func mergeBroadMatches(primary []sqlite.Observation, broad []sqlite.Observation, project string, limit int) ([]sqlite.Observation, bool) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	seen := map[int64]bool{}
+	merged := make([]sqlite.Observation, 0, limit)
+	relaxedAdded := false
+	project = sqlite.NormalizeProject(project)
+
+	for _, observation := range broad {
+		if len(merged) >= limit {
+			break
+		}
+		if sqlite.NormalizeProject(observation.Project) != project && observation.Scope != "global" {
+			relaxedAdded = true
+		}
+		seen[observation.ID] = true
+		merged = append(merged, observation)
+	}
+
+	for _, observation := range primary {
+		if len(merged) >= limit {
+			break
+		}
+		if seen[observation.ID] {
+			continue
+		}
+		seen[observation.ID] = true
+		merged = append(merged, observation)
+	}
+
+	return merged, relaxedAdded
 }
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {

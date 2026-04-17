@@ -296,3 +296,69 @@ func TestServerLifecycleAndSearch(t *testing.T) {
 		t.Fatalf("unexpected session summary: %+v", summaryPayload)
 	}
 }
+
+func TestHTTPContextAndTimelineTreatWeakProjectAsCrossProject(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "kerebrom.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	if err := InitStore(ctx, store); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	observation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:    "decision",
+		Title:   "NQ PreLondon post-2020 0 PASS",
+		Content: "**What**: Proyecto Falage confirma NQ PreLondon post-2020 con 0 PASS.",
+		Project: "Proyecto Falage",
+		Scope:   "project",
+	})
+	if err != nil {
+		t.Fatalf("save observation: %v", err)
+	}
+
+	server := NewServer(store)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/timeline?project=/&limit=5", nil)
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("timeline status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var timelinePayload struct {
+		Results []sqlite.Observation `json:"results"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &timelinePayload); err != nil {
+		t.Fatalf("decode timeline payload: %v", err)
+	}
+	if len(timelinePayload.Results) == 0 || timelinePayload.Results[0].ID != observation.ID {
+		t.Fatalf("weak project timeline should include cross-project observation %d, got %+v", observation.ID, timelinePayload.Results)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/context?project=/&q=NQ+PreLondon+post-2020+0+PASS&limit=5", nil)
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("context status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var contextPayload struct {
+		ProjectFilter        string               `json:"project_filter"`
+		ProjectFilterRelaxed bool                 `json:"project_filter_relaxed"`
+		Matches              []sqlite.Observation `json:"matches"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &contextPayload); err != nil {
+		t.Fatalf("decode context payload: %v", err)
+	}
+	if contextPayload.ProjectFilter != "" || !contextPayload.ProjectFilterRelaxed {
+		t.Fatalf("weak project context should use relaxed cross-project lookup: %+v", contextPayload)
+	}
+	if len(contextPayload.Matches) == 0 || contextPayload.Matches[0].ID != observation.ID {
+		t.Fatalf("weak project context should include cross-project match %d, got %+v", observation.ID, contextPayload.Matches)
+	}
+}
