@@ -59,7 +59,7 @@ kerebrom update
 
 | Moment | Tool |
 |---|---|
-| Start non-trivial work | `context` |
+| Every user message | `context` |
 | Search a topic | `recall` |
 | Save a durable learning | `remember` |
 | Close substantial work | `summary` |
@@ -67,7 +67,7 @@ kerebrom update
 | Invalidate wrong memory | `forget` |
 | Admin project consolidation | `projects` |
 
-Observations are interpreted memories, not raw transcripts. Use `What / Why / Where / Learned`.
+Activation is every user message when Kerebrom tools are available. Observations are interpreted memories, not raw transcripts. Use `What / Why / Where / Learned` only when there is a durable fact to preserve.
 
 ## Architecture
 

@@ -188,6 +188,9 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if !strings.Contains(coworkMemory, "only authoritative durable memory source") {
 		t.Fatalf("Cowork seed should establish Kerebrom authority: %q", coworkMemory)
 	}
+	if !strings.Contains(coworkMemory, "Before answering any user message") {
+		t.Fatalf("Cowork seed should require every-turn context activation: %q", coworkMemory)
+	}
 
 	if _, err := Run("claude", Options{
 		HomeDir:    homeDir,
@@ -216,6 +219,9 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	claudeMD := mustReadFile(t, filepath.Join(homeDir, ".claude", "CLAUDE.md"))
 	if strings.Count(claudeMD, codexMemoryBlockStart) != 1 {
 		t.Fatalf("claude memory protocol block duplicated or missing: %q", claudeMD)
+	}
+	if !strings.Contains(claudeMD, "Before answering ANY user message") {
+		t.Fatalf("claude memory protocol should require every-turn context activation: %q", claudeMD)
 	}
 	coworkMemory = mustReadFile(t, coworkMemoryPath)
 	if strings.Count(coworkMemory, codexMemoryBlockStart) != 1 {

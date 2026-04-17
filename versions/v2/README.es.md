@@ -59,7 +59,7 @@ kerebrom update
 
 | Momento | Tool |
 |---|---|
-| Iniciar trabajo no trivial | `context` |
+| Cada mensaje del usuario | `context` |
 | Buscar un tema | `recall` |
 | Guardar aprendizaje durable | `remember` |
 | Cerrar trabajo sustancial | `summary` |
@@ -67,7 +67,7 @@ kerebrom update
 | Invalidar memoria incorrecta | `forget` |
 | Consolidación admin de proyectos | `projects` |
 
-Las observaciones son memorias interpretadas, no transcripciones crudas. Usa `What / Why / Where / Learned`.
+La activación ocurre en cada mensaje del usuario cuando las tools de Kerebrom están disponibles. Las observaciones son memorias interpretadas, no transcripciones crudas. Usa `What / Why / Where / Learned` solo cuando haya un hecho durable que preservar.
 
 ## Arquitectura
 

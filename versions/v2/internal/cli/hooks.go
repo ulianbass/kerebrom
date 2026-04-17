@@ -220,7 +220,7 @@ Automatic lifecycle is enabled:
 - Stop closes the session.
 
 The cycle:
-- Call context at the start of any non-trivial conversation or when the user references prior work.
+- Treat Kerebrom as active on every user prompt. The hook has already saved the prompt when substantive and injected current context; if you need more prior context before answering, call context again.
 - Call recall when you need to look up a specific topic.
 - Call remember immediately after decisions, preferences, constraints, bugfixes, architecture notes, config changes, and non-obvious discoveries.
 - Use the What/Why/Where/Learned framework: one sentence describing the durable fact or change; why it matters; where it applies; the implication, gotcha, or constraint (omit if none).

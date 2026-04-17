@@ -34,9 +34,9 @@ Then tell the user to fully restart Claude Desktop, Claude Code, Codex, Cursor, 
 
 When Kerebrom is installed in an AI client, the agent should treat it as the durable source of truth for prior project context:
 
-- Call `context` at the start of non-trivial work.
+- Call `context` before answering every user message when Kerebrom tools are available, including short or ambiguous messages.
 - Call `recall` when the user asks what is known about a topic.
-- Call `remember` when a durable decision, preference, bugfix, configuration change, or non-obvious learning appears.
+- Call `remember` only when a durable decision, preference, bugfix, configuration change, or non-obvious learning appears.
 - Call `summary` before ending substantial work or after compaction.
 - Use `forget` only when the user says memory is wrong or obsolete.
 

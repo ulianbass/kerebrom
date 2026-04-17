@@ -367,7 +367,7 @@ func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandl
 func (s *Server) registerTools() {
 	s.addTool("context",
 		mcp.NewTool("context",
-			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering any non-trivial user message. Opens or resumes the session, saves the prompt when substantive, returns prior observations."),
+			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering EVERY user message when this tool is available, including short or ambiguous prompts. Opens or resumes the session, saves only substantive prompts, returns prior observations."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("prompt",
 				mcp.Description("Current user prompt. Kerebrom saves it as prompt history when substantive."),
@@ -535,7 +535,7 @@ SPECIALIZED TOOLS:
 
 MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-1. CONTEXT FIRST: Before answering ANY non-trivial user message, call context with a query derived from the prompt. Use the returned observations as working knowledge.
+1. ACTIVATE ON EVERY USER MESSAGE: Before answering ANY user message, call context immediately with a query derived from the prompt. This applies even when the prompt is short, ambiguous, casual, or looks like an acknowledgement. Use the returned observations as working knowledge before reasoning. If context returns no useful memory, continue normally.
 
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember. Distill, do not transcribe.
 
@@ -555,15 +555,18 @@ EXAMPLES (Spanish):
   User: "Qué sabes de mí?"
   → context(query="usuario perfil preferencias proyectos")
 
+  User: "ok", "gracias", "perfecto" (bare acknowledgement)
+  → context(query="continuidad de la conversación actual")
+  → Do not call remember unless there is a durable fact to save.
+
   User: "Quiero que Falage genere $3,000 mensuales con tema oscuro"
+  → context(query="Falage objetivo ingresos tema oscuro")
   → remember(title="Objetivo Falage 3K USD/mes", project="falage", content="**What**: ...")
   → remember(title="Preferencia UI Quamtos: tema oscuro", scope="global", content="**What**: ...")
 
   User: "El bug del intraday era el cost scenario, no el engine"
+  → context(query="Falage intraday cost scenario engine bug")
   → remember(title="Bugfix intraday cost scenario", type="bugfix", topic_key="falage/intraday-cost-scenario", content="**What**: ...")
-
-  User: "ok", "gracias", "perfecto" (bare acknowledgement)
-  → Nothing. Continue.
 
 AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation. Do not answer questions about prior work, identity, or saved decisions from scratch before checking memory.
 

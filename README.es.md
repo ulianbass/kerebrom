@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.2](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.2) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.3](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.3) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -17,7 +17,7 @@ Los clientes de IA suelen recordar en silos separados. Claude Code, Claude Deskt
 
 | Problema | Comportamiento de Kerebrom |
 |---|---|
-| El contexto desaparece entre chats | `context` recupera observaciones previas del proyecto al inicio de trabajo no trivial. |
+| El contexto desaparece entre chats | `context` se activa en cada mensaje del usuario y recupera observaciones previas antes de que el agente responda. |
 | Los agentes guardan transcripciones ruidosas | `remember` guarda observaciones destiladas, no dumps crudos de conversación. |
 | Claude y Codex saben cosas distintas | Todos los clientes configurados leen y escriben el mismo almacén SQLite local. |
 | El setup es frágil | `setup auto` detecta clientes instalados y escribe sus superficies nativas de configuración. |
@@ -90,7 +90,7 @@ Kerebrom v2 expone siete tools semánticos. Los primeros seis son tools cotidian
 
 | Momento | Tool | Propósito |
 |---|---|---|
-| Empieza trabajo significativo | `context` | Abre/reanuda sesión, guarda el prompt cuando corresponde y recupera observaciones útiles. |
+| Cada mensaje del usuario | `context` | Abre/reanuda sesión, guarda el prompt solo cuando corresponde y recupera observaciones útiles antes de que el agente responda. |
 | Hace falta un tema específico | `recall` | Busca memoria con lenguaje natural. |
 | Aparece un hecho durable | `remember` | Guarda una observación interpretada con `What / Why / Where / Learned`. |
 | El trabajo termina o se compacta | `summary` | Persiste objetivos, decisiones, cambios, riesgos, archivos y próximos pasos. |
@@ -98,7 +98,7 @@ Kerebrom v2 expone siete tools semánticos. Los primeros seis son tools cotidian
 | El usuario dice que algo está mal | `forget` | Invalida una observación obsoleta. |
 | Hay que consolidar nombres de proyecto | `projects` | Mantenimiento administrativo de proyectos. |
 
-El usuario no debería tener que decir "guarda esto" para cada decisión durable. El agente decide qué vale la pena guardar y evita saludos, confirmaciones, secretos, salida de comandos y ruido de transcripción cruda.
+El usuario no debería tener que decir "usa Kerebrom" o "guarda esto" en cada turno. La activación ocurre en cada mensaje del usuario; el guardado durable sigue ocurriendo solo cuando el mensaje contiene algo que vale la pena preservar.
 
 ## Modelo De Seguridad Local-First
 

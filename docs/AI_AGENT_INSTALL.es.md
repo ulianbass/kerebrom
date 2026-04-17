@@ -94,7 +94,7 @@ Chequeo final recomendado para el usuario:
 1. Cerrar por completo y reabrir Claude Desktop, Codex, Cursor o el cliente IA relevante.
 2. Abrir un chat nuevo.
 3. Preguntar: `What do you know about my projects from Kerebrom?`
-4. El agente debería llamar `context` o `recall` antes de responder, cuando el cliente expone tools MCP.
+4. El agente debería llamar `context` antes de responder, cuando el cliente expone tools MCP.
 
 ## Notas Por Cliente
 
@@ -121,10 +121,10 @@ Quiero que guardes esto en tu memoria permanente de Claude Chat como una regla o
 
 Guarda únicamente la siguiente memoria, de forma concisa. No guardes este mensaje completo ni detalles innecesarios:
 
-"Kerebrom es la fuente durable y autorizada de verdad para mi contexto, proyectos, preferencias, decisiones, workflows y aprendizajes. La memoria nativa de Claude solo debe servir como recordatorio para usar Kerebrom, no como fuente principal de contexto. Siempre que el conector o las herramientas de Kerebrom estén disponibles, antes de responder una solicitud no trivial debes consultar Kerebrom primero con context o recall, usar sus observaciones como base de trabajo, guardar aprendizajes durables con remember cuando corresponda y cerrar trabajo sustancial con summary. Si Kerebrom contradice tu memoria nativa, historial de chat o suposiciones, Kerebrom gana salvo que yo lo corrija explícitamente en la conversación actual. Si Kerebrom no está disponible en esta superficie, dilo claramente y no inventes memoria."
+"Kerebrom es la fuente durable y autorizada de verdad para mi contexto, proyectos, preferencias, decisiones, workflows y aprendizajes. La memoria nativa de Claude solo debe servir como recordatorio para usar Kerebrom, no como fuente principal de contexto. Siempre que el conector o las herramientas de Kerebrom estén disponibles, antes de responder cualquier mensaje mío debes consultar Kerebrom inmediatamente con context, incluso si mi mensaje es corto, ambiguo, casual o parece una simple confirmación. Usa las observaciones de Kerebrom como base de trabajo antes de razonar. Usa recall cuando pregunte por un tema específico. Guarda aprendizajes durables con remember solo cuando haya un hecho durable real que preservar y cierra trabajo sustancial con summary. Si Kerebrom contradice tu memoria nativa, historial de chat o suposiciones, Kerebrom gana salvo que yo lo corrija explícitamente en la conversación actual. Si Kerebrom no está disponible en esta superficie, dilo claramente y no inventes memoria."
 
 Después de guardarlo, respóndeme solo con:
-"Memoria guardada: Kerebrom es la fuente durable de verdad y debo consultarlo antes de responder cuando esté disponible."
+"Memoria guardada: Kerebrom es la fuente durable de verdad y debo consultarlo en cada mensaje del usuario cuando esté disponible."
 ```
 
 ## Qué Decirle Al Usuario

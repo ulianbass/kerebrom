@@ -574,7 +574,7 @@ Kerebrom is the only authoritative durable memory source. This native Claude mem
 
 When Kerebrom tools or connectors are available:
 
-1. Before answering any non-trivial request, call context with a natural-language query derived from the user's prompt.
+1. Before answering any user message, call context immediately with a natural-language query derived from the user's prompt. This applies even when the prompt is short, ambiguous, casual, or looks like an acknowledgement.
 2. Use the returned observations as working knowledge before answering.
 3. When the user asks about a specific topic, call recall before answering.
 4. When a durable fact appears, call remember with a distilled What / Why / Where / Learned observation. Do not save raw transcript.
@@ -618,7 +618,7 @@ ADMIN TOOL:
 
 MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-1. CONTEXT FIRST: Before answering ANY non-trivial user message, call context with a query derived from the prompt.
+1. ACTIVATE ON EVERY USER MESSAGE: Before answering ANY user message, call context immediately with a query derived from the prompt. This applies even when the prompt is short, ambiguous, casual, or looks like an acknowledgement. If context returns no useful memory, continue normally.
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
@@ -655,7 +655,7 @@ ADMIN TOOL:
 
 MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
-1. CONTEXT FIRST: Before answering ANY non-trivial user message, call context with a query derived from the prompt.
+1. ACTIVATE ON EVERY USER MESSAGE: Before answering ANY user message, call context immediately with a query derived from the prompt. This applies even when the prompt is short, ambiguous, casual, or looks like an acknowledgement. If context returns no useful memory, continue normally.
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.

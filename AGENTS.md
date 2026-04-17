@@ -66,4 +66,4 @@ Kerebrom is a local-first persistent memory layer for AI agents. The intended us
 User -> AI client -> Kerebrom MCP -> local SQLite + FTS5 -> recovered project context -> AI client
 ```
 
-The user should not need to say "use Kerebrom" in every conversation. Configured agents should call `context`, `recall`, `remember`, and `summary` according to the Kerebrom protocol.
+The user should not need to say "use Kerebrom" in every conversation. Configured agents should call `context` before answering every user message when Kerebrom tools are available, then call `recall`, `remember`, and `summary` according to the Kerebrom protocol. Activation is every turn; durable saving is only when there is something real to preserve.

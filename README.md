@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.2](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.2) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.3](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.3) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -17,7 +17,7 @@ AI clients usually remember in separate silos. Claude Code, Claude Desktop Chat,
 
 | Problem | Kerebrom behavior |
 |---|---|
-| Context disappears between chats | `context` retrieves prior project observations at the start of non-trivial work. |
+| Context disappears between chats | `context` activates on every user message and retrieves prior project observations before the agent answers. |
 | Agents save noisy transcripts | `remember` stores distilled observations, not raw conversation dumps. |
 | Claude/Codex know different things | All configured clients read and write the same local SQLite store. |
 | Setup is fragile | `setup auto` detects installed clients and writes their native config surfaces. |
@@ -90,7 +90,7 @@ Kerebrom v2 exposes seven semantic tools. The first six are everyday agent tools
 
 | Moment | Tool | Purpose |
 |---|---|---|
-| Start meaningful work | `context` | Open/resume a session, save the prompt when appropriate, and retrieve useful prior observations. |
+| Every user message | `context` | Open/resume a session, save the prompt only when appropriate, and retrieve useful prior observations before the agent answers. |
 | Need a specific topic | `recall` | Search memory by natural-language query. |
 | Durable fact appears | `remember` | Save an interpreted observation using `What / Why / Where / Learned`. |
 | Work is ending or compacting | `summary` | Persist goals, decisions, changes, risks, files, and next steps. |
@@ -98,7 +98,7 @@ Kerebrom v2 exposes seven semantic tools. The first six are everyday agent tools
 | User says memory is wrong | `forget` | Invalidate an obsolete observation. |
 | Project names need consolidation | `projects` | Admin-only project maintenance. |
 
-The user should not have to say "save this" for every durable decision. The agent decides what is worth saving and avoids greetings, acknowledgements, secrets, command output, and raw transcript noise.
+The user should not have to say "use Kerebrom" or "save this" for every turn. Activation happens every user message; durable saving still happens only when the message contains something worth preserving.
 
 ## Local-First Security Model
 

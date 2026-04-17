@@ -33,7 +33,7 @@ Kerebrom v2 replaces the seventeen `mem_*` tools with a clean surface of seven s
 
 The MCP `WithInstructions` text and every per-tool description are rewritten in terms of the new vocabulary and a four-step cycle:
 
-1. `context` — start of any non-trivial conversation.
+1. `context` — activation step before answering every user message when tools are available.
 2. `remember` — when a durable fact appears.
 3. `recall` — when the user asks about a topic.
 4. `summary` — closing substantial work.

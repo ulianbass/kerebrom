@@ -57,7 +57,7 @@ Seven tools registered in `internal/transport/mcp/server.go`:
 
 Profile resolution: `kerebrom mcp --tools=agent` (default for setup) registers the first six. `--tools=admin` registers `projects`. `--tools=all` registers everything.
 
-The MCP `instructions` field returned at handshake is the canonical protocol text living in `memoryProtocolText()`. The same text is also exposed as the `kerebrom_memory_protocol` MCP prompt and as the `kerebrom://memory-protocol` MCP resource for clients that surface those primitives separately.
+The MCP `instructions` field returned at handshake is the canonical protocol text living in `memoryProtocolText()`. v2 intentionally does not expose MCP prompts or resources for the memory workflow because those surfaces make the protocol feel optional rather than active.
 
 ## The cycle
 
@@ -65,8 +65,8 @@ The protocol text encodes a four-step rhythm the model follows automatically:
 
 ```
                  ┌──────────────────────┐
-   user prompt ──▶│ 1. context           │  open/resume session, fetch
-                 │    (always at start) │  prior observations
+   user prompt ──▶│ 1. context           │  every user message: open/resume
+                 │    (always first)    │  session, fetch prior observations
                  └─────────┬────────────┘
                            │ working knowledge
                            ▼
@@ -88,7 +88,7 @@ The protocol text encodes a four-step rhythm the model follows automatically:
                  └──────────────────────┘
 ```
 
-`forget`, `timeline`, and `projects` are specialized — invoked only when explicitly needed.
+`context` is the activation step and should run on every user message when the client exposes Kerebrom tools. Prompt persistence remains filtered inside `context`, so short acknowledgements can activate memory without becoming durable observations. `forget`, `timeline`, and `projects` are specialized — invoked only when explicitly needed.
 
 ## Self-update flow
 

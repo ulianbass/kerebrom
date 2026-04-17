@@ -94,7 +94,7 @@ Recommended user-facing final check:
 1. Fully quit and reopen Claude Desktop, Codex, Cursor, or the relevant AI client.
 2. Start a fresh chat.
 3. Ask: `What do you know about my projects from Kerebrom?`
-4. The agent should call `context` or `recall` before answering, when the client exposes MCP tools.
+4. The agent should call `context` before answering, when the client exposes MCP tools.
 
 ## Client-Specific Notes
 
@@ -121,10 +121,10 @@ I want you to save this in your permanent Claude Chat memory as an operational r
 
 Save only the following memory, concisely. Do not save this whole message or unnecessary details:
 
-"Kerebrom is the durable and authoritative source of truth for my context, projects, preferences, decisions, workflows, and learnings. Claude's native memory should only serve as a reminder to use Kerebrom, not as the primary source of context. Whenever the Kerebrom connector or tools are available, before answering any non-trivial request you must consult Kerebrom first with context or recall, use its observations as working knowledge, save durable learnings with remember when appropriate, and close substantial work with summary. If Kerebrom contradicts your native memory, chat history, or assumptions, Kerebrom wins unless I explicitly correct it in the current conversation. If Kerebrom is not available in this surface, say so clearly and do not invent memory."
+"Kerebrom is the durable and authoritative source of truth for my context, projects, preferences, decisions, workflows, and learnings. Claude's native memory should only serve as a reminder to use Kerebrom, not as the primary source of context. Whenever the Kerebrom connector or tools are available, before answering any user message you must immediately consult Kerebrom with context, even if my message is short, ambiguous, casual, or looks like an acknowledgement. Use Kerebrom's observations as working knowledge before reasoning. Use recall when I ask about a specific topic. Save durable learnings with remember only when there is a real durable fact to preserve, and close substantial work with summary. If Kerebrom contradicts your native memory, chat history, or assumptions, Kerebrom wins unless I explicitly correct it in the current conversation. If Kerebrom is not available in this surface, say so clearly and do not invent memory."
 
 After saving it, reply only with:
-"Memory saved: Kerebrom is the durable source of truth and I should consult it before answering when available."
+"Memory saved: Kerebrom is the durable source of truth and I should consult it on every user message when available."
 ```
 
 ## What To Tell The User

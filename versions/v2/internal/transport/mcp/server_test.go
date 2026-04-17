@@ -70,6 +70,9 @@ func TestServerInitializeReturnsMemoryInstructions(t *testing.T) {
 	if !strings.Contains(initResult.Instructions, "local source of truth") {
 		t.Fatalf("initialize instructions missing authority rule: %s", initResult.Instructions)
 	}
+	if !strings.Contains(initResult.Instructions, "Before answering ANY user message") {
+		t.Fatalf("initialize instructions missing every-turn context rule: %s", initResult.Instructions)
+	}
 }
 
 // ----- Tool registration -----
@@ -106,6 +109,7 @@ func TestServerRegistersSevenSemanticTools(t *testing.T) {
 	}
 
 	assertToolDescriptionContains(t, tools.Tools, "context", "ALWAYS call BEFORE")
+	assertToolDescriptionContains(t, tools.Tools, "context", "EVERY user message")
 	assertToolDescriptionContains(t, tools.Tools, "recall", "ALWAYS call BEFORE")
 	assertToolDescriptionContains(t, tools.Tools, "remember", "PROACTIVELY")
 	assertToolDescriptionContains(t, tools.Tools, "remember", "What / Why / Where / Learned")
