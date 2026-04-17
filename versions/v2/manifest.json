@@ -25,6 +25,7 @@
     "sync_layout": ".kerebrom/manifest.json + .kerebrom/chunks/*.jsonl.gz"
   },
   "canonical_docs": [
+    "../../docs/AI_AGENT_INSTALL.md",
     "docs/product-spec-v2.md",
     "docs/architecture-v2.md",
     "docs/migration-v1-to-v2.md",

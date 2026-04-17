@@ -23,6 +23,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 4. **Self-update**: `kerebrom update` brings the user from any older release to the latest with one command and a single confirmation.
 5. **No data loss across upgrades**: SQLite schema unchanged from v1, sync chunks unchanged.
 6. **Cleanup of v1 leftovers**: a v1 user upgrading to v2 ends with no `mcp__Kerebrom__mem_*` entries lingering in their `permissions.allow`.
+7. **Agent-installable repository**: Claude, Codex, Copilot, or another coding agent can read the repository-native install instructions and guide an end user through a safe `versions/v2` install without guessing.
 
 ## Non-goals
 
@@ -30,6 +31,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 - Telemetry of any kind.
 - Server-side memory consolidation beyond what the agent itself does in `summary`.
 - Multi-user or networked sync (v2 sync chunks are still filesystem-based).
+- Remote MCP as the default install path. `mcp-http` is advanced and opt-in because it changes the privacy boundary.
 
 ## Release contract
 
@@ -54,6 +56,7 @@ Any change to these fields is a semver-major event.
 ## References
 
 - [docs/architecture-v2.md](architecture-v2.md) — component map, MCP surface details, update flow, setup flow.
+- [../../../docs/AI_AGENT_INSTALL.md](../../../docs/AI_AGENT_INSTALL.md) — end-user install guide for Claude/Codex-style agents.
 - [docs/migration-v1-to-v2.md](migration-v1-to-v2.md) — upgrade guide and rollback notes.
 - [docs/adr/0003-v2-semantic-surface.md](adr/0003-v2-semantic-surface.md) — decision record for the surface rewrite.
 - [docs/release-checklist-v2.md](release-checklist-v2.md) — what to verify before tagging.

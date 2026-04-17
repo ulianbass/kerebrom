@@ -1,8 +1,8 @@
 # Kerebrom v2
 
-> Local-first persistent memory for AI agents — one durable brain shared across Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client.
+[Root README](../../README.md) · [AI agent install guide](../../docs/AI_AGENT_INSTALL.md) · [Product spec](docs/product-spec-v2.md) · [Architecture](docs/architecture-v2.md)
 
-Kerebrom v2 is a clean-room rewrite that replaces the v1 `mem_*` tool surface with seven semantic verbs the model picks up by intuition: **context**, **recall**, **remember**, **summary**, **forget**, **timeline**, and **projects**. The user no longer has to say "use Kerebrom" — the agent calls memory on its own when it sees the right tool name.
+> Current stable Kerebrom line: seven semantic memory tools, local SQLite + FTS5 storage, plug-and-play setup for AI clients, and self-update from GitHub Releases.
 
 ## Install
 
@@ -12,65 +12,87 @@ cd kerebrom/versions/v2
 make install-user
 ```
 
-That single command:
+The install target builds the binary, installs it at `~/local/bin/kerebrom`, links it from `~/.local/bin/kerebrom`, and runs `kerebrom setup auto`.
 
-1. Builds the `kerebrom` binary with embedded version metadata.
-2. Installs it to `~/local/bin/kerebrom` and links it from `~/.local/bin/kerebrom`.
-3. Runs `kerebrom setup auto` to wire every detected AI client (Claude Desktop, Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code).
-4. Seeds Claude Cowork's native `memory/CLAUDE.md` when Claude Desktop has local Cowork account storage, so Cowork treats Kerebrom as the durable source of truth.
+Force a target when needed:
 
-Restart any open AI client so it picks up the new MCP server. From that point on, memory is automatic.
+```bash
+make install-user SETUP_AGENT=claude-desktop
+make install-user SETUP_AGENT=codex
+make install-user SETUP_AGENT=all
+```
+
+Supported setup targets:
+
+```text
+auto, all, claude, claude-code, claude-desktop, codex, cursor,
+gemini-cli, opencode, windsurf, vscode
+```
+
+Restart open AI clients after install.
+
+## Install Through An AI Agent
+
+If a user asks Claude, Codex, or another coding agent to install this repo, the agent should read:
+
+- [../../AGENTS.md](../../AGENTS.md)
+- [../../CLAUDE.md](../../CLAUDE.md)
+- [../../docs/AI_AGENT_INSTALL.md](../../docs/AI_AGENT_INSTALL.md)
+
+The intended agent instruction is:
+
+```text
+Use versions/v2, run make install-user, verify kerebrom version and stats,
+report configured clients, and do not enable remote HTTP memory unless asked.
+```
 
 ## Update
 
 ```bash
+kerebrom update --check
 kerebrom update
 ```
 
-Fetches the latest GitHub release, downloads its source tarball, and runs `make install-user` against `versions/v2`. Use `--check` to inspect without installing or `--yes` to skip the confirmation prompt.
+`kerebrom update` downloads the latest GitHub release source tarball, runs `make install-user` from `versions/v2`, and keeps the existing SQLite data intact.
 
-## Architecture in one screen
+## Memory Cycle
+
+| Moment | Tool |
+|---|---|
+| Start non-trivial work | `context` |
+| Search a topic | `recall` |
+| Save a durable learning | `remember` |
+| Close substantial work | `summary` |
+| Inspect chronology | `timeline` |
+| Invalidate wrong memory | `forget` |
+| Admin project consolidation | `projects` |
+
+Observations are interpreted memories, not raw transcripts. Use `What / Why / Where / Learned`.
+
+## Architecture
 
 ```text
-versions/v2/
-  cmd/kerebrom/             CLI entrypoint
-  internal/cli/             commands, hooks, TUI
-  internal/setup/           local AI-client setup with cleanup of v1 entries
-  internal/store/sqlite/    SQLite + FTS5 memory store (schema unchanged from v1)
-  internal/transport/mcp/   MCP server: 7 semantic tools, no aliases
-  internal/transport/http/  local HTTP API
-  internal/sync/            compressed sync chunks
-  internal/updater/         self-update via GitHub Releases
-  docs/                     ADRs, architecture, migration, release checklist
+cmd/kerebrom/             CLI entrypoint
+internal/cli/             commands, hooks, TUI
+internal/setup/           local AI-client setup and v1 cleanup
+internal/store/sqlite/    SQLite + FTS5 memory store
+internal/transport/mcp/   semantic MCP server
+internal/transport/http/  local HTTP API
+internal/sync/            compressed sync chunks
+internal/updater/         self-update
+docs/                     specs, ADRs, migration, release checklist
 ```
 
-The DB lives at `~/.kerebrom/kerebrom.db`. v2 reads and writes the same schema as v1, so upgrading does not touch your data.
+Runtime data lives in `~/.kerebrom/`.
 
-## The cycle
-
-The six day-to-day tools plus one explicit admin tool compose the memory rhythm:
-
-| When | Tool |
-|---|---|
-| Start of any non-trivial conversation | `context` |
-| Need to look up a topic | `recall` |
-| Durable fact, decision, or learning appears | `remember` |
-| Closing substantial work | `summary` |
-| Inspect history | `timeline` |
-| User says something is wrong | `forget` |
-| Consolidate project name variants after the user explicitly asks | `projects` (admin profile) |
-
-Detail in [docs/architecture-v2.md](docs/architecture-v2.md). Migration notes in [docs/migration-v1-to-v2.md](docs/migration-v1-to-v2.md).
-
-## Build and test
+## Build And Test
 
 ```bash
-cd versions/v2
 make test
 make build
 ./bin/kerebrom version
 ```
 
-## License
+## Safety
 
-Source-available proprietary. See [LICENSE](../../LICENSE).
+Kerebrom is local-first by default. Do not expose `mcp-http` or patch Claude Chat cloud memory unless the user explicitly chooses a supported, documented path. Claude Cowork native memory is seeded only through stable local desktop storage when present.

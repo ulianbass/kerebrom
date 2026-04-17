@@ -24,7 +24,9 @@ Run through this list before tagging a new v2.x release.
 ## 3. READMEs reflect reality
 
 - [ ] Root `README.md` and `README.es.md` show the latest release link.
-- [ ] `versions/v2/README.md` and `README.es.md` describe install, update, and the cycle.
+- [ ] `README.md`, `README.es.md`, `versions/v2/README.md`, and `versions/v2/README.es.md` describe install, update, and the cycle.
+- [ ] `AGENTS.md`, `CLAUDE.md`, and `docs/AI_AGENT_INSTALL.md` match the current setup behavior.
+- [ ] GitHub About description/topics still describe the current released product line.
 - [ ] `docs/migration-v1-to-v2.md` is accurate for any new behavior added since the previous v2.x release.
 
 ## 4. Smoke test on a clean machine

@@ -1,8 +1,8 @@
 # Kerebrom v2
 
-> Memoria persistente local para agentes de IA — un solo cerebro durable compartido entre Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP.
+[README raíz](../../README.es.md) · [Guía para agentes IA](../../docs/AI_AGENT_INSTALL.es.md) · [Spec de producto](docs/product-spec-v2.md) · [Arquitectura](docs/architecture-v2.md)
 
-Kerebrom v2 es una reescritura clean-room que reemplaza la superficie `mem_*` de v1 con siete verbos semánticos que el modelo entiende por intuición: **context**, **recall**, **remember**, **summary**, **forget**, **timeline** y **projects**. Ya no tienes que pedir "usa Kerebrom" — el agente llama a la memoria por iniciativa propia al ver el nombre correcto.
+> Línea estable actual de Kerebrom: siete tools semánticos de memoria, almacenamiento local SQLite + FTS5, setup plug-and-play para clientes IA y auto-actualización desde GitHub Releases.
 
 ## Instalación
 
@@ -12,65 +12,87 @@ cd kerebrom/versions/v2
 make install-user
 ```
 
-Ese único comando:
+El target de instalación compila el binario, lo instala en `~/local/bin/kerebrom`, lo enlaza desde `~/.local/bin/kerebrom` y ejecuta `kerebrom setup auto`.
 
-1. Compila el binario `kerebrom` con metadatos de versión embebidos.
-2. Lo instala en `~/local/bin/kerebrom` y lo enlaza desde `~/.local/bin/kerebrom`.
-3. Ejecuta `kerebrom setup auto` para configurar cada cliente IA detectado (Claude Desktop, Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code).
-4. Si Claude Desktop ya tiene storage local de Cowork, siembra su `memory/CLAUDE.md` nativo para que Cowork trate Kerebrom como la fuente durable de verdad.
+Forzar un target cuando haga falta:
 
-Reinicia cualquier cliente IA abierto para que recoja el nuevo servidor MCP. A partir de ahí, la memoria es automática.
+```bash
+make install-user SETUP_AGENT=claude-desktop
+make install-user SETUP_AGENT=codex
+make install-user SETUP_AGENT=all
+```
+
+Targets soportados:
+
+```text
+auto, all, claude, claude-code, claude-desktop, codex, cursor,
+gemini-cli, opencode, windsurf, vscode
+```
+
+Reinicia los clientes IA abiertos después de instalar.
+
+## Instalar A Través De Un Agente IA
+
+Si un usuario pide a Claude, Codex u otro agente de código instalar este repo, el agente debe leer:
+
+- [../../AGENTS.md](../../AGENTS.md)
+- [../../CLAUDE.md](../../CLAUDE.md)
+- [../../docs/AI_AGENT_INSTALL.es.md](../../docs/AI_AGENT_INSTALL.es.md)
+
+La instrucción esperada para el agente es:
+
+```text
+Usa versions/v2, ejecuta make install-user, verifica kerebrom version y stats,
+reporta clientes configurados y no habilites memoria HTTP remota salvo que se pida.
+```
 
 ## Actualizar
 
 ```bash
+kerebrom update --check
 kerebrom update
 ```
 
-Descarga el último release de GitHub, extrae el tarball de fuentes y ejecuta `make install-user` contra `versions/v2`. Usa `--check` para verificar sin instalar o `--yes` para saltar la confirmación.
+`kerebrom update` descarga el tarball de fuentes del último release de GitHub, ejecuta `make install-user` desde `versions/v2` y conserva intacta la data SQLite existente.
 
-## Arquitectura en una pantalla
+## Ciclo De Memoria
+
+| Momento | Tool |
+|---|---|
+| Iniciar trabajo no trivial | `context` |
+| Buscar un tema | `recall` |
+| Guardar aprendizaje durable | `remember` |
+| Cerrar trabajo sustancial | `summary` |
+| Inspeccionar cronología | `timeline` |
+| Invalidar memoria incorrecta | `forget` |
+| Consolidación admin de proyectos | `projects` |
+
+Las observaciones son memorias interpretadas, no transcripciones crudas. Usa `What / Why / Where / Learned`.
+
+## Arquitectura
 
 ```text
-versions/v2/
-  cmd/kerebrom/             entrada CLI
-  internal/cli/             comandos, hooks, TUI
-  internal/setup/           configuración de clientes IA + limpieza de entradas v1
-  internal/store/sqlite/    almacén SQLite + FTS5 (mismo esquema que v1)
-  internal/transport/mcp/   servidor MCP: 7 tools semánticos, sin alias
-  internal/transport/http/  API HTTP local
-  internal/sync/            chunks de sincronización comprimidos
-  internal/updater/         auto-actualización vía GitHub Releases
-  docs/                     ADRs, arquitectura, migración, checklist de release
+cmd/kerebrom/             entrada CLI
+internal/cli/             comandos, hooks, TUI
+internal/setup/           setup local de clientes IA y limpieza v1
+internal/store/sqlite/    almacén SQLite + FTS5
+internal/transport/mcp/   servidor MCP semántico
+internal/transport/http/  API HTTP local
+internal/sync/            chunks de sync comprimidos
+internal/updater/         auto-actualización
+docs/                     specs, ADRs, migración, checklist de release
 ```
 
-La DB vive en `~/.kerebrom/kerebrom.db`. v2 lee y escribe el mismo esquema que v1, así que actualizar no toca tus datos.
+Los datos de runtime viven en `~/.kerebrom/`.
 
-## El ciclo
-
-Los seis tools cotidianos y un tool admin explícito componen el ritmo de memoria:
-
-| Cuándo | Tool |
-|---|---|
-| Inicio de cualquier conversación no trivial | `context` |
-| Necesitas buscar un tema | `recall` |
-| Aparece un hecho durable, decisión o aprendizaje | `remember` |
-| Cerrando trabajo sustancial | `summary` |
-| Inspeccionar historia | `timeline` |
-| El usuario dice que algo está mal | `forget` |
-| Consolidar variantes de nombres de proyecto cuando el usuario lo pide explícitamente | `projects` (perfil admin) |
-
-Detalles en [docs/architecture-v2.md](docs/architecture-v2.md). Notas de migración en [docs/migration-v1-to-v2.md](docs/migration-v1-to-v2.md).
-
-## Compilar y probar
+## Compilar Y Probar
 
 ```bash
-cd versions/v2
 make test
 make build
 ./bin/kerebrom version
 ```
 
-## Licencia
+## Seguridad
 
-Software propietario con código disponible. Ver [LICENSE](../../LICENSE).
+Kerebrom es local-first por defecto. No expongas `mcp-http` ni parchees memoria cloud de Claude Chat salvo que el usuario elija explícitamente una ruta soportada y documentada. La memoria nativa de Claude Cowork se siembra solo por storage local estable de la app de escritorio cuando existe.

@@ -118,6 +118,14 @@ Requirements: Git is **not** required. `make` and `go` are required (same requir
 
 `setup auto` falls back to `claude-desktop` when no client config is detected. `setup all` covers everything explicitly. `setup <agent>` targets one client.
 
+The public repository also carries installer-facing agent instructions:
+
+- Root `AGENTS.md` for Codex/OpenAI-style agents.
+- Root `CLAUDE.md` for Claude-aware agents.
+- Root `docs/AI_AGENT_INSTALL.md` for any agent or human installer.
+
+Those files are documentation surfaces, but they are part of the install contract: a user should be able to ask an AI agent to install the repository and have the agent land on the same `versions/v2 + make install-user + verify + restart clients` path as the README.
+
 ## Storage
 
 `internal/store/sqlite` owns the only persistent state. Schema (unchanged from v1):
@@ -161,3 +169,4 @@ The updater is testable end-to-end:
 | Change the protocol text | `memoryProtocolText` in `internal/transport/mcp/server.go` and `memoryProtocolBlock`/`codexAGENTSBlock` in `internal/setup/setup.go` |
 | Change the update behavior | `internal/updater/update.go` (Config struct + Run flow) |
 | Add a new CLI command | `internal/cli/app.go` (case in `Run` + `runFoo` function) |
+| Change end-user installation behavior | `Makefile`, `internal/setup/setup.go`, root `AGENTS.md`, root `CLAUDE.md`, and `docs/AI_AGENT_INSTALL.md` |
