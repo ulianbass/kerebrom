@@ -17,6 +17,7 @@ That single command:
 1. Builds the `kerebrom` binary with embedded version metadata.
 2. Installs it to `~/local/bin/kerebrom` and links it from `~/.local/bin/kerebrom`.
 3. Runs `kerebrom setup auto` to wire every detected AI client (Claude Desktop, Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code).
+4. Seeds Claude Cowork's native `memory/CLAUDE.md` when Claude Desktop has local Cowork account storage, so Cowork treats Kerebrom as the durable source of truth.
 
 Restart any open AI client so it picks up the new MCP server. From that point on, memory is automatic.
 

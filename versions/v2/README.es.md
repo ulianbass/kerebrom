@@ -17,6 +17,7 @@ Ese único comando:
 1. Compila el binario `kerebrom` con metadatos de versión embebidos.
 2. Lo instala en `~/local/bin/kerebrom` y lo enlaza desde `~/.local/bin/kerebrom`.
 3. Ejecuta `kerebrom setup auto` para configurar cada cliente IA detectado (Claude Desktop, Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code).
+4. Si Claude Desktop ya tiene storage local de Cowork, siembra su `memory/CLAUDE.md` nativo para que Cowork trate Kerebrom como la fuente durable de verdad.
 
 Reinicia cualquier cliente IA abierto para que recoja el nuevo servidor MCP. A partir de ahí, la memoria es automática.
 

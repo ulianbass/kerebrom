@@ -342,10 +342,15 @@ func setupClaudeDesktop(opts Options) (Result, error) {
 	}); err != nil {
 		return Result{}, err
 	}
+	coworkMemoryFiles, err := seedClaudeCoworkGlobalMemory(opts.HomeDir)
+	if err != nil {
+		return Result{}, err
+	}
 
+	files := append([]string{desktopMCPPath}, coworkMemoryFiles...)
 	return Result{
 		Agent: "claude-desktop",
-		Files: []string{desktopMCPPath},
+		Files: files,
 	}, nil
 }
 
@@ -358,6 +363,71 @@ func claudeDesktopConfigPath(homeDir string) string {
 	default:
 		return filepath.Join(homeDir, ".config", "Claude", "claude_desktop_config.json")
 	}
+}
+
+func claudeLocalAgentModeSessionsDir(homeDir string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support", "Claude", "local-agent-mode-sessions")
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Roaming", "Claude", "local-agent-mode-sessions")
+	default:
+		return filepath.Join(homeDir, ".config", "Claude", "local-agent-mode-sessions")
+	}
+}
+
+func seedClaudeCoworkGlobalMemory(homeDir string) ([]string, error) {
+	root := claudeLocalAgentModeSessionsDir(homeDir)
+	accountEntries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read Claude local agent sessions dir %s: %w", root, err)
+	}
+
+	files := []string{}
+	for _, accountEntry := range accountEntries {
+		if !accountEntry.IsDir() {
+			continue
+		}
+		accountDir := filepath.Join(root, accountEntry.Name())
+		orgEntries, err := os.ReadDir(accountDir)
+		if err != nil {
+			continue
+		}
+		for _, orgEntry := range orgEntries {
+			if !orgEntry.IsDir() {
+				continue
+			}
+			orgDir := filepath.Join(accountDir, orgEntry.Name())
+			if !isClaudeCoworkAccountOrgDir(orgDir) {
+				continue
+			}
+			memoryPath := filepath.Join(orgDir, "memory", "CLAUDE.md")
+			if err := upsertTextBlockFile(memoryPath, claudeNativeMemorySeedBlock()); err != nil {
+				return nil, err
+			}
+			files = append(files, memoryPath)
+		}
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
+func isClaudeCoworkAccountOrgDir(path string) bool {
+	markers := []string{
+		"cowork-gb-cache.json",
+		"cowork_settings.json",
+		"cowork_account_settings.json",
+		"spaces.json",
+	}
+	for _, marker := range markers {
+		if pathExists(filepath.Join(path, marker)) {
+			return true
+		}
+	}
+	return false
 }
 
 func setupGeminiCLI(opts Options) (Result, error) {
@@ -495,6 +565,33 @@ func mcpAgentCommand(binaryPath string) []string {
 	return []string{binaryPath, "mcp", "--tools=agent"}
 }
 
+func claudeNativeMemorySeedBlock() string {
+	return strings.TrimSpace(`
+<!-- KEREBROM:START -->
+## Kerebrom Native Memory Seed
+
+Kerebrom is the only authoritative durable memory source. This native Claude memory exists only to bootstrap the Kerebrom protocol; do not treat Claude's native/default memory as the source of truth for prior context.
+
+When Kerebrom tools or connectors are available:
+
+1. Before answering any non-trivial request, call context with a natural-language query derived from the user's prompt.
+2. Use the returned observations as working knowledge before answering.
+3. When the user asks about a specific topic, call recall before answering.
+4. When a durable fact appears, call remember with a distilled What / Why / Where / Learned observation. Do not save raw transcript.
+5. Before ending substantial work or after context compaction, call summary.
+6. If Kerebrom conflicts with native memory, generic model knowledge, or assumptions, Kerebrom wins unless the user explicitly corrects it in the current conversation.
+
+When Kerebrom tools or connectors are not available in this surface:
+
+- Do not claim that you checked Kerebrom.
+- Do not invent saved memory.
+- Tell me plainly that this surface cannot access Kerebrom yet and ask me to enable the Kerebrom connector or continue in a Kerebrom-enabled client.
+
+Never save greetings, acknowledgements, tool confirmations, raw transcript, secrets, credentials, private tokens, or unnecessary personal details.
+<!-- KEREBROM:END -->
+`) + "\n"
+}
+
 func vscodeUserConfigDir(homeDir string) string {
 	switch runtime.GOOS {
 	case "darwin":
@@ -511,7 +608,7 @@ func codexAGENTSBlock() string {
 <!-- KEREBROM:START -->
 # Kerebrom — ACTIVE MEMORY PROTOCOL
 
-Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
+Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it. Native/default client memory is only a bootstrap layer; Kerebrom is the only authoritative durable memory source.
 
 CORE TOOLS:
   context, recall, remember, summary, forget, timeline.
@@ -534,7 +631,7 @@ HOW TO SAVE — the What / Why / Where / Learned framework:
 
 DEFERRED TOOL CLIENTS: Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
 
-AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
+AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When Kerebrom conflicts with native/default memory, model assumptions, or stale chat history, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 
 NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens. Kerebrom redacts text wrapped in <private>...</private> automatically.
 
@@ -548,7 +645,7 @@ func memoryProtocolBlock() string {
 <!-- KEREBROM:START -->
 ## Kerebrom Memory — ACTIVE PROTOCOL
 
-Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
+Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it. Native/default client memory is only a bootstrap layer; Kerebrom is the only authoritative durable memory source.
 
 CORE TOOLS:
   context, recall, remember, summary, forget, timeline.
@@ -571,7 +668,7 @@ HOW TO SAVE — the What / Why / Where / Learned framework:
 
 DEFERRED TOOL CLIENTS: Some MCP clients defer tool loading: tools appear in the catalog but their schemas only become callable after a tool_search step. If your client works that way, perform tool_search for the Kerebrom MCP at the start of the conversation so context, recall, and remember are ready before reasoning. Do not skip this just because the first user message looks ambiguous; ambiguous messages are exactly when prior context matters most.
 
-AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When memory conflicts with model assumptions, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
+AUTHORITY RULE: Kerebrom is the local source of truth for prior user preferences, project decisions, workflows, and durable context. When Kerebrom conflicts with native/default memory, model assumptions, or stale chat history, prefer Kerebrom unless the user explicitly updates or rejects that memory in the current conversation.
 
 NEVER save: greetings, "ok", "listo", "gracias", code output, tool confirmations, raw transcript, secrets, credentials, private tokens. Kerebrom redacts text wrapped in <private>...</private> automatically.
 

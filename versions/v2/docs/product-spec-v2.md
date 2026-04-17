@@ -19,13 +19,14 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 
 1. **Plug-and-play in Claude Desktop**: opening a fresh chat and asking "what do you know about my projects?" triggers an automatic `context` call without the user mentioning Kerebrom.
 2. **Plug-and-play in Claude Code**: hooks fire on session start, prompt submit, subagent stop, stop, and post-compaction without manual intervention; the agent never asks permission to call memory tools.
-3. **Self-update**: `kerebrom update` brings the user from any older release to the latest with one command and a single confirmation.
-4. **No data loss across upgrades**: SQLite schema unchanged from v1, sync chunks unchanged.
-5. **Cleanup of v1 leftovers**: a v1 user upgrading to v2 ends with no `mcp__Kerebrom__mem_*` entries lingering in their `permissions.allow`.
+3. **Cowork native bootstrap**: when Claude Desktop has local Cowork account storage, setup seeds Cowork's native `memory/CLAUDE.md` with an idempotent Kerebrom authority block.
+4. **Self-update**: `kerebrom update` brings the user from any older release to the latest with one command and a single confirmation.
+5. **No data loss across upgrades**: SQLite schema unchanged from v1, sync chunks unchanged.
+6. **Cleanup of v1 leftovers**: a v1 user upgrading to v2 ends with no `mcp__Kerebrom__mem_*` entries lingering in their `permissions.allow`.
 
 ## Non-goals
 
-- Programmatic modification of Claude Personal Preferences (no public API exists).
+- Programmatic modification of Claude Chat account memory, Claude Personal Preferences, or cloud-backed memory controls through private APIs or browser databases.
 - Telemetry of any kind.
 - Server-side memory consolidation beyond what the agent itself does in `summary`.
 - Multi-user or networked sync (v2 sync chunks are still filesystem-based).
@@ -37,7 +38,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.0.1` |
+| `semver` | `v2.0.2` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

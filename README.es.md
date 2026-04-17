@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Release v2.0.1](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.1) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Release v2.0.2](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.2) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Una sola capa de memoria durable para Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier otro cliente compatible con MCP.
@@ -32,6 +32,7 @@ Cada línea vive en su propio directorio `versions/vN/` para que las versiones f
 - **CLI, API HTTP, dashboard de terminal, export/import, chunks de sync comprimidos** — todo lo de v1, con el vocabulario v2.
 - **Hooks de ciclo de vida de Claude Code** para inicio de sesión, ingesta de prompt, captura pasiva, recuperación post-compactación y cierre de sesión.
 - **Setup para Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf y VS Code** con el nuevo texto de protocolo.
+- **Semilla nativa de memoria para Cowork** cuando Claude Desktop ya tiene storage local de Cowork, para que su propio `CLAUDE.md` apunte a Kerebrom como única fuente durable de verdad.
 - **Marco de memoria distilada**: los prompts son historia de intención; las observaciones son memorias interpretadas con el formato `What / Why / Where / Learned`.
 
 ## Instalación
@@ -81,6 +82,16 @@ Los seis tools cotidianos y un tool admin explícito componen el ritmo de memori
 | Consolidar variantes de nombres de proyecto cuando el usuario lo pide explícitamente | `projects` (perfil admin) |
 
 El usuario nunca tiene que decir "usa Kerebrom" o "guarda esto en memoria". El agente usa los tools por iniciativa propia cuando los nombres coinciden con la intención.
+
+## Superficies De Memoria En Claude
+
+Claude expone distintas superficies de memoria. Kerebrom configura cada una solo por una superficie local estable:
+
+- **Claude Code** recibe hooks y `~/.claude/CLAUDE.md`, así la captura de prompts y la inyección de contexto pueden ejecutarse automáticamente.
+- **Claude Desktop Chat** recibe MCP local. La memoria de cuenta de Chat vive detrás de servicios cloud, así que Kerebrom no parchea APIs privadas de Claude ni bases internas del navegador.
+- **Claude Cowork** recibe MCP local y, cuando la app de escritorio ya creó storage local de Cowork, una semilla nativa en `memory/CLAUDE.md` que le indica tratar Kerebrom como única fuente durable de verdad.
+
+Si una superficie no puede acceder a los tools de Kerebrom, la semilla le indica al modelo decirlo claramente en vez de inventar memoria.
 
 ## Comandos cotidianos
 

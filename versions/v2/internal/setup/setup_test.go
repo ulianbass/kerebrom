@@ -91,10 +91,13 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
 	mcpPath := filepath.Join(homeDir, ".claude", "mcp.json")
 	desktopMCPPath := claudeDesktopConfigPath(homeDir)
+	coworkMemoryPath := filepath.Join(claudeLocalAgentModeSessionsDir(homeDir), "account-1", "org-1", "memory", "CLAUDE.md")
 
 	mustWriteFile(t, settingsPath, `{"extraKnownMarketplaces":{"test":{"source":{"repo":"example/repo","source":"github"}}},"permissions":{"allow":["mcp__Kerebrom__mem_context","mcp__Kerebrom__projects","mcp__TradingView__chart_get_state"]}}`)
 	mustWriteFile(t, mcpPath, `{"mcpServers":{"TradingView MCP":{"command":"/path/to/node","args":["/path/to/tradingview.js"]}}}`)
 	mustWriteFile(t, desktopMCPPath, `{"mcpServers":{"TradingView MCP":{"command":"/path/to/node","args":["/path/to/tradingview.js"]}},"preferences":{"menuBarEnabled":false}}`)
+	mustWriteFile(t, filepath.Join(claudeLocalAgentModeSessionsDir(homeDir), "account-1", "org-1", "cowork-gb-cache.json"), `{}`)
+	mustWriteFile(t, coworkMemoryPath, "Existing Cowork instructions.\n")
 
 	result, err := Run("claude", Options{
 		HomeDir:    homeDir,
@@ -103,7 +106,7 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run claude setup: %v", err)
 	}
-	if result.Agent != "claude" || len(result.Files) != 9 {
+	if result.Agent != "claude" || len(result.Files) != 10 {
 		t.Fatalf("unexpected claude result: %+v", result)
 	}
 
@@ -175,6 +178,16 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if _, ok := desktopConfig["preferences"]; !ok {
 		t.Fatalf("claude desktop setup removed preferences: %#v", desktopConfig)
 	}
+	coworkMemory := mustReadFile(t, coworkMemoryPath)
+	if !strings.Contains(coworkMemory, "Existing Cowork instructions.") {
+		t.Fatalf("claude desktop setup removed existing Cowork memory: %q", coworkMemory)
+	}
+	if strings.Count(coworkMemory, codexMemoryBlockStart) != 1 {
+		t.Fatalf("expected one Kerebrom seed in Cowork global memory: %q", coworkMemory)
+	}
+	if !strings.Contains(coworkMemory, "only authoritative durable memory source") {
+		t.Fatalf("Cowork seed should establish Kerebrom authority: %q", coworkMemory)
+	}
 
 	if _, err := Run("claude", Options{
 		HomeDir:    homeDir,
@@ -204,6 +217,10 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if strings.Count(claudeMD, codexMemoryBlockStart) != 1 {
 		t.Fatalf("claude memory protocol block duplicated or missing: %q", claudeMD)
 	}
+	coworkMemory = mustReadFile(t, coworkMemoryPath)
+	if strings.Count(coworkMemory, codexMemoryBlockStart) != 1 {
+		t.Fatalf("claude Cowork global memory duplicated Kerebrom block: %q", coworkMemory)
+	}
 }
 
 func TestRunClaudeDesktopSetupOnlyIsMinimal(t *testing.T) {
@@ -212,8 +229,10 @@ func TestRunClaudeDesktopSetupOnlyIsMinimal(t *testing.T) {
 	homeDir := t.TempDir()
 	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
 	desktopMCPPath := claudeDesktopConfigPath(homeDir)
+	coworkMemoryPath := filepath.Join(claudeLocalAgentModeSessionsDir(homeDir), "account-1", "org-1", "memory", "CLAUDE.md")
 
 	mustWriteFile(t, desktopMCPPath, `{"mcpServers":{"TradingView MCP":{"command":"/path/to/node","args":["/path/to/tradingview.js"]}},"preferences":{"menuBarEnabled":false}}`)
+	mustWriteFile(t, filepath.Join(claudeLocalAgentModeSessionsDir(homeDir), "account-1", "org-1", "cowork-gb-cache.json"), `{}`)
 
 	result, err := Run("claude-desktop", Options{
 		HomeDir:    homeDir,
@@ -222,7 +241,7 @@ func TestRunClaudeDesktopSetupOnlyIsMinimal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run claude-desktop setup: %v", err)
 	}
-	if result.Agent != "claude-desktop" || len(result.Files) != 1 {
+	if result.Agent != "claude-desktop" || len(result.Files) != 2 {
 		t.Fatalf("unexpected claude-desktop result: %+v", result)
 	}
 
@@ -246,6 +265,10 @@ func TestRunClaudeDesktopSetupOnlyIsMinimal(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(homeDir, ".kerebrom", "hooks", "claude-code")); !os.IsNotExist(err) {
 		t.Fatalf("claude-desktop setup should not create Claude Code hooks, err=%v", err)
+	}
+	coworkMemory := mustReadFile(t, coworkMemoryPath)
+	if !strings.Contains(coworkMemory, "Kerebrom Native Memory Seed") {
+		t.Fatalf("claude-desktop setup should seed Cowork native memory: %q", coworkMemory)
 	}
 }
 

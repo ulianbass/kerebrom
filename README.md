@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Release v2.0.1](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.1) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Release v2.0.2](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.2) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > One durable memory layer for Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any other MCP-capable client.
@@ -32,6 +32,7 @@ Each line lives under its own `versions/vN/` directory so future versions evolve
 - **CLI, HTTP API, terminal dashboard, export/import, compressed sync chunks** — everything v1 had, with the v2 vocabulary.
 - **Claude Code lifecycle hooks** for session start, prompt ingest, passive capture, compaction recovery, and session close.
 - **Setup for Codex, Claude Desktop, Cursor, Gemini CLI, OpenCode, Windsurf, and VS Code** with the new protocol text.
+- **Native Cowork memory seed** when Claude Desktop has local Cowork account storage, so Cowork's own `CLAUDE.md` points back to Kerebrom as the only durable source of truth.
 - **Distilled memory framework**: prompts are intent history; observations are agent-interpreted `What / Why / Where / Learned` memories.
 
 ## Install
@@ -81,6 +82,16 @@ The six day-to-day tools plus one explicit admin tool compose the memory rhythm:
 | Consolidate project name variants after the user explicitly asks | `projects` (admin profile) |
 
 The user never has to say "use Kerebrom" or "save this in memory". The agent uses the tools on its own when the names match the intent.
+
+## Claude Memory Surfaces
+
+Claude exposes different memory surfaces. Kerebrom configures each one only through a stable local surface:
+
+- **Claude Code** gets hooks plus `~/.claude/CLAUDE.md`, so prompt capture and context injection can run automatically.
+- **Claude Desktop Chat** gets local MCP. Chat's account memory is cloud-backed, so Kerebrom does not patch private Claude APIs or browser databases.
+- **Claude Cowork** gets local MCP and, when the desktop app has created local Cowork account storage, a native `memory/CLAUDE.md` seed that tells Cowork to treat Kerebrom as the only durable source of truth.
+
+If a surface cannot access Kerebrom tools, the seed instructs the model to say so plainly instead of inventing memory.
 
 ## Everyday Commands
 
