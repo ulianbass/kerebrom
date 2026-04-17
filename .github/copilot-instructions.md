@@ -17,3 +17,5 @@ kerebrom stats
 ```
 
 Do not enable remote `mcp-http`, delete memory, import backups, or modify unrelated AI-client settings unless the user explicitly asks. Kerebrom is local-first by default and stores runtime memory in `~/.kerebrom/`.
+
+If a user asks how to seed Claude Chat native memory, point them to the copy-paste prompt in `docs/AI_AGENT_INSTALL.md`.

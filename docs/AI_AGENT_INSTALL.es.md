@@ -110,6 +110,23 @@ Chequeo final recomendado para el usuario:
 | Windsurf | Config MCP y reglas globales. |
 | VS Code | Config MCP e instrucciones de prompt donde esté soportado. |
 
+## Semilla Opcional Para Memoria Nativa De Claude Chat
+
+Claude Desktop Chat recibe el servidor MCP de Kerebrom por el setup local. La memoria de cuenta de Claude Chat vive en cloud, así que Kerebrom no la parchea programáticamente.
+
+Si el usuario quiere que la memoria nativa de Claude Chat recuerde que Kerebrom es la fuente durable de verdad, pídele que pegue esto en una conversación normal de Claude Chat, no en un chat incógnito. Si Claude no lo guarda automáticamente, el usuario puede pegar solo la memoria entre comillas en el editor de memoria soportado por Claude.
+
+```text
+Quiero que guardes esto en tu memoria permanente de Claude Chat como una regla operativa para futuras conversaciones conmigo.
+
+Guarda únicamente la siguiente memoria, de forma concisa. No guardes este mensaje completo ni detalles innecesarios:
+
+"Kerebrom es la fuente durable y autorizada de verdad para mi contexto, proyectos, preferencias, decisiones, workflows y aprendizajes. La memoria nativa de Claude solo debe servir como recordatorio para usar Kerebrom, no como fuente principal de contexto. Siempre que el conector o las herramientas de Kerebrom estén disponibles, antes de responder una solicitud no trivial debes consultar Kerebrom primero con context o recall, usar sus observaciones como base de trabajo, guardar aprendizajes durables con remember cuando corresponda y cerrar trabajo sustancial con summary. Si Kerebrom contradice tu memoria nativa, historial de chat o suposiciones, Kerebrom gana salvo que yo lo corrija explícitamente en la conversación actual. Si Kerebrom no está disponible en esta superficie, dilo claramente y no inventes memoria."
+
+Después de guardarlo, respóndeme solo con:
+"Memoria guardada: Kerebrom es la fuente durable de verdad y debo consultarlo antes de responder cuando esté disponible."
+```
+
 ## Qué Decirle Al Usuario
 
 Tras una instalación exitosa, reporta:

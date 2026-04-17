@@ -26,7 +26,7 @@ Then tell the user to fully restart Claude Desktop, Claude Code, Codex, Cursor, 
 
 - Kerebrom is local-first. Runtime memory lives in `~/.kerebrom/`.
 - Do not enable `mcp-http` unless the user explicitly asks for remote connector support and accepts the privacy tradeoff.
-- Do not modify Claude Chat account memory through private APIs or browser databases. If a native Claude Chat memory hint is needed, the user must add it manually through Claude's supported memory UI.
+- Do not modify Claude Chat account memory through private APIs or browser databases. If a native Claude Chat memory hint is needed, point the user to the copy-paste prompt in [docs/AI_AGENT_INSTALL.md](docs/AI_AGENT_INSTALL.md#optional-claude-chat-native-memory-seed).
 - Do not import, reset, or delete existing Kerebrom memory unless the user explicitly asks.
 - Do not mix v1 and v2 implementation lines. The current product root is `versions/v2`.
 

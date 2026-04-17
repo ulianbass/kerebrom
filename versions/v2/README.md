@@ -95,4 +95,4 @@ make build
 
 ## Safety
 
-Kerebrom is local-first by default. Do not expose `mcp-http` or patch Claude Chat cloud memory unless the user explicitly chooses a supported, documented path. Claude Cowork native memory is seeded only through stable local desktop storage when present.
+Kerebrom is local-first by default. Do not expose `mcp-http` or patch Claude Chat cloud memory unless the user explicitly chooses a supported, documented path. Claude Cowork native memory is seeded only through stable local desktop storage when present. For Claude Chat's native cloud memory, use the manual prompt in [../../docs/AI_AGENT_INSTALL.md](../../docs/AI_AGENT_INSTALL.md#optional-claude-chat-native-memory-seed).

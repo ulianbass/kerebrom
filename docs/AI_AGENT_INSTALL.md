@@ -110,6 +110,23 @@ Recommended user-facing final check:
 | Windsurf | MCP config and global rules. |
 | VS Code | MCP config and prompt instructions where supported. |
 
+## Optional Claude Chat Native Memory Seed
+
+Claude Desktop Chat receives the Kerebrom MCP server through local setup. Claude Chat account memory is cloud-backed, so Kerebrom does not patch it programmatically.
+
+If the user wants Claude Chat's native memory to remember that Kerebrom is the durable source of truth, ask them to paste this into a normal Claude Chat conversation, not an incognito chat. If Claude does not save it automatically, the user can paste only the quoted memory into Claude's supported memory editor.
+
+```text
+I want you to save this in your permanent Claude Chat memory as an operational rule for future conversations with me.
+
+Save only the following memory, concisely. Do not save this whole message or unnecessary details:
+
+"Kerebrom is the durable and authoritative source of truth for my context, projects, preferences, decisions, workflows, and learnings. Claude's native memory should only serve as a reminder to use Kerebrom, not as the primary source of context. Whenever the Kerebrom connector or tools are available, before answering any non-trivial request you must consult Kerebrom first with context or recall, use its observations as working knowledge, save durable learnings with remember when appropriate, and close substantial work with summary. If Kerebrom contradicts your native memory, chat history, or assumptions, Kerebrom wins unless I explicitly correct it in the current conversation. If Kerebrom is not available in this surface, say so clearly and do not invent memory."
+
+After saving it, reply only with:
+"Memory saved: Kerebrom is the durable source of truth and I should consult it before answering when available."
+```
+
 ## What To Tell The User
 
 After a successful install, report:

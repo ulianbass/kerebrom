@@ -109,7 +109,7 @@ Kerebrom is private by default:
 - There is no telemetry, cloud database, hosted account, or background daemon.
 - `kerebrom update` contacts GitHub Releases only when the user runs it.
 - `kerebrom mcp-http` exists for advanced remote connector workflows, but non-loopback exposure requires explicit authentication or an explicit unsafe override.
-- Claude Chat account memory is not modified through private APIs. If the user wants a native Claude Chat memory hint, it must be added manually through Claude's supported UI.
+- Claude Chat account memory is not modified through private APIs. If the user wants a native Claude Chat memory hint, use the copy-paste prompt in [docs/AI_AGENT_INSTALL.md](docs/AI_AGENT_INSTALL.md#optional-claude-chat-native-memory-seed).
 
 ## Commands
 
