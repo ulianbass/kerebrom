@@ -42,7 +42,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.0.4` |
+| `semver` | `v2.0.5` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

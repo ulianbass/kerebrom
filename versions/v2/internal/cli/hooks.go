@@ -230,16 +230,17 @@ The cycle:
 }
 
 func hookContextText(ctx context.Context, store *sqlite.Store, project string) (string, error) {
-	stats, err := store.Stats(ctx, project)
+	lookupProject := projectdetect.LookupFilter(project)
+	stats, err := store.Stats(ctx, lookupProject)
 	if err != nil {
 		return "", err
 	}
-	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: project, Limit: 8})
+	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: lookupProject, Limit: 8})
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Kerebrom Context\n\nproject=%s sessions=%d active_sessions=%d observations=%d prompts=%d\n", project, stats.SessionCount, stats.ActiveSessionCount, stats.ObservationCount, stats.PromptCount)
+	fmt.Fprintf(&b, "## Kerebrom Context\n\nproject=%s project_filter=%s sessions=%d active_sessions=%d observations=%d prompts=%d\n", project, lookupProject, stats.SessionCount, stats.ActiveSessionCount, stats.ObservationCount, stats.PromptCount)
 	if len(recent) == 0 {
 		b.WriteString("\nNo prior observations yet.\n")
 		return b.String(), nil
@@ -282,7 +283,7 @@ func shouldInjectPromptSaveReminder(ctx context.Context, store *sqlite.Store, pr
 	if err != nil || time.Since(startedAt) < 5*time.Minute {
 		return false
 	}
-	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: project, SessionID: session.ID, Limit: 1})
+	recent, err := store.ListObservations(ctx, sqlite.ListObservationOptions{Project: projectdetect.LookupFilter(project), SessionID: session.ID, Limit: 1})
 	if err != nil {
 		return false
 	}

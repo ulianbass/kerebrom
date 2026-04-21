@@ -76,8 +76,8 @@ type Config struct {
 
 // Result is what an update run returns.
 type Result struct {
-	CurrentVersion string
-	LatestVersion  string
+	CurrentVersion  string
+	LatestVersion   string
 	UpdateAvailable bool
 	Installed       bool
 	InstallDir      string

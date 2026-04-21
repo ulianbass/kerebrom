@@ -288,6 +288,32 @@ func TestRunHookUserPromptSubmitNudgesLongSessionWithNoSavedObservation(t *testi
 	}
 }
 
+func TestHookContextTextUsesCrossProjectLookupForWeakProject(t *testing.T) {
+	store := newHookTestStore(t)
+	ctx := context.Background()
+
+	if _, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:    "decision",
+		Title:   "Falage cross-project context",
+		Content: "**What**: Falage memory should remain visible when hooks launch from a weak project.",
+		Project: "proyecto-falage",
+		Scope:   "project",
+	}); err != nil {
+		t.Fatalf("save observation: %v", err)
+	}
+
+	contextText, err := hookContextText(ctx, store, "/")
+	if err != nil {
+		t.Fatalf("hook context: %v", err)
+	}
+	if !strings.Contains(contextText, "project_filter=") {
+		t.Fatalf("context should expose lookup filter: %q", contextText)
+	}
+	if !strings.Contains(contextText, "Falage cross-project context") {
+		t.Fatalf("weak hook project should show cross-project memory: %q", contextText)
+	}
+}
+
 func newHookTestStore(t *testing.T) *sqlite.Store {
 	t.Helper()
 

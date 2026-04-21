@@ -607,6 +607,10 @@ func toolAllowed(allowlist map[string]bool, name string) bool {
 	return allowlist == nil || allowlist[name]
 }
 
+func (s *Server) hardDeletesAllowed() bool {
+	return s.allowlist == nil || s.allowlist["projects"]
+}
+
 func (s *Server) handleRemember(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	title, err := request.RequireString("title")
 	if err != nil {
@@ -723,6 +727,9 @@ func (s *Server) handleForget(ctx context.Context, request mcp.CallToolRequest) 
 	}
 
 	hard := request.GetBool("hard", false)
+	if hard && !s.hardDeletesAllowed() {
+		return mcp.NewToolResultError("hard forget requires an MCP profile that includes the admin surface; the default agent profile only supports soft delete"), nil
+	}
 	if err := s.store.DeleteObservation(ctx, sqlite.DeleteObservationInput{ID: int64(id), Hard: hard}); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}

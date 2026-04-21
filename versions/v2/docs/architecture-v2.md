@@ -92,7 +92,7 @@ The protocol text encodes a four-step rhythm the model follows automatically:
 
 ## Project lookup behavior
 
-Project names organize memory; they must not become hard walls that hide relevant context from another AI client. v2.0.4 treats weak project identities such as `/`, `.`, `default`, `home`, or the user's home-folder name as **unknown** for read paths. When `context`, `recall`, `timeline`, or HTTP context/timeline receive an unknown project, they use a cross-project lookup so MCP-only clients launched outside a workspace still see the latest durable memories.
+Project names organize memory; they must not become hard walls that hide relevant context from another AI client. v2.0.4 treats weak project identities such as `/`, `.`, `default`, `home`, or the user's home-folder name as **unknown** for read paths. When `context`, `recall`, `timeline`, HTTP context/timeline, or Claude Code hook context receive an unknown project, they use a cross-project lookup so clients launched outside a workspace still see the latest durable memories.
 
 When a strong project is supplied explicitly, Kerebrom still searches that project first, but `context` and `recall` also merge broad cross-project matches. This prevents generic local hits from hiding a more relevant observation in another project, while preserving project metadata for organization, summaries, prompts, and explicit project filters.
 
@@ -151,6 +151,10 @@ PRAGMA: `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeo
 ## Sync
 
 `internal/sync` writes append-only chunks to `~/.kerebrom/chunks/<chunkid>.jsonl.gz` with a `manifest.json` index. The chunk id is the truncated SHA-256 of the chunk's raw JSONL content. Import is idempotent via `MarkSyncChunkImported`. Designed for filesystem-level sync (iCloud, Dropbox, git), not for cross-user sharing.
+
+## Delete Safety
+
+`forget` is available in the default agent profile for soft-delete invalidation when the user says a memory is wrong. Permanent hard delete is blocked in the default MCP agent profile and requires an MCP profile that includes the admin surface, such as `--tools=all` or an explicit allowlist with both `forget` and `projects`. This keeps everyday memory cleanup reversible by default.
 
 ## Updater testing
 

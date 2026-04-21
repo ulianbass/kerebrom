@@ -345,6 +345,38 @@ func TestForgetSoftDeleteHidesObservation(t *testing.T) {
 	}
 }
 
+func TestForgetHardDeleteRequiresAdminProfile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	mcpClient := newTestClientForServer(t, ctx, NewServerWithTools(store, ResolveTools("agent")).MCPServer())
+
+	saved := mustNestedMap(t, mustStructuredMap(t, callTool(t, ctx, mcpClient, "remember", map[string]any{
+		"title":      "Protected observation",
+		"content":    "**What**: default agent profile must not hard-delete this memory.",
+		"project":    "scratch",
+		"session_id": "test-hard-forget",
+	})), "observation")
+	id := int64(saved["id"].(float64))
+
+	result := callTool(t, ctx, mcpClient, "forget", map[string]any{
+		"id":   id,
+		"hard": true,
+	})
+	if !result.IsError {
+		t.Fatalf("expected hard delete to be rejected in agent profile, got %#v", result)
+	}
+
+	observation, err := store.GetObservation(ctx, id)
+	if err != nil {
+		t.Fatalf("hard-delete rejection should preserve observation: %v", err)
+	}
+	if observation.DeletedAt != "" {
+		t.Fatalf("hard-delete rejection should not soft-delete observation: %+v", observation)
+	}
+}
+
 // ----- Timeline -----
 
 func TestTimelineReturnsRecentObservations(t *testing.T) {
