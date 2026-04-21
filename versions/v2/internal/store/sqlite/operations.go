@@ -73,7 +73,10 @@ func (s *Store) UpdateObservation(ctx context.Context, input UpdateObservationIn
 	if strings.TrimSpace(input.Type) == "" {
 		observationType = current.Type
 	}
-	project := normalizeProject(input.Project)
+	project, err := s.ResolveProject(ctx, input.Project)
+	if err != nil {
+		return Observation{}, err
+	}
 	if project == "" {
 		project = current.Project
 	}
@@ -133,7 +136,10 @@ func (s *Store) SavePrompt(ctx context.Context, input PromptInput) (Prompt, erro
 		return Prompt{}, fmt.Errorf("prompt content is required")
 	}
 
-	project := normalizeProject(input.Project)
+	project, err := s.ResolveProject(ctx, input.Project)
+	if err != nil {
+		return Prompt{}, err
+	}
 	if project == "" {
 		project = "default"
 	}
@@ -174,7 +180,11 @@ func (s *Store) GetPrompt(ctx context.Context, id int64) (Prompt, error) {
 }
 
 func (s *Store) ListPrompts(ctx context.Context, project string, limit int) ([]Prompt, error) {
-	project = normalizeProject(project)
+	resolvedProject, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	project = resolvedProject
 	if limit <= 0 {
 		limit = 10
 	}
@@ -292,7 +302,10 @@ func (s *Store) TimelineAroundObservation(ctx context.Context, observationID int
 }
 
 func (s *Store) MergeProjects(ctx context.Context, sources []string, target string) (map[string]any, error) {
-	target = normalizeProject(target)
+	target, err := s.ResolveProject(ctx, target)
+	if err != nil {
+		return nil, err
+	}
 	if target == "" {
 		return nil, fmt.Errorf("target project is required")
 	}
@@ -311,18 +324,35 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 		if source == "" || source == target {
 			continue
 		}
+		now := time.Now().UTC().Format(time.RFC3339)
 
 		sessionResult, err := tx.ExecContext(ctx, `UPDATE sessions SET project = ? WHERE project = ?`, target, source)
 		if err != nil {
 			return nil, fmt.Errorf("merge sessions for %s: %w", source, err)
 		}
-		observationResult, err := tx.ExecContext(ctx, `UPDATE observations SET project = ?, updated_at = ? WHERE project = ?`, target, time.Now().UTC().Format(time.RFC3339), source)
+		observationResult, err := tx.ExecContext(ctx, `UPDATE observations SET project = ?, updated_at = ? WHERE project = ?`, target, now, source)
 		if err != nil {
 			return nil, fmt.Errorf("merge observations for %s: %w", source, err)
 		}
 		promptResult, err := tx.ExecContext(ctx, `UPDATE user_prompts SET project = ? WHERE project = ?`, target, source)
 		if err != nil {
 			return nil, fmt.Errorf("merge prompts for %s: %w", source, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE project_aliases
+			SET target = ?, updated_at = ?
+			WHERE target = ?
+		`, target, now, source); err != nil {
+			return nil, fmt.Errorf("retarget aliases for %s: %w", source, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO project_aliases (alias, target, created_at, updated_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(alias) DO UPDATE SET
+				target = excluded.target,
+				updated_at = excluded.updated_at
+		`, source, target, now, now); err != nil {
+			return nil, fmt.Errorf("set project alias for %s: %w", source, err)
 		}
 
 		count := int64(0)
@@ -343,6 +373,84 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 	}
 
 	return map[string]any{"target": target, "updated": updated}, nil
+}
+
+func (s *Store) SetProjectAliases(ctx context.Context, aliases []string, target string) (map[string]any, error) {
+	target, err := s.ResolveProject(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	if target == "" {
+		return nil, fmt.Errorf("target project is required")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin set project aliases: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	updated := map[string]string{}
+	for _, alias := range aliases {
+		alias = normalizeProject(alias)
+		if alias == "" || alias == target {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO project_aliases (alias, target, created_at, updated_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(alias) DO UPDATE SET
+				target = excluded.target,
+				updated_at = excluded.updated_at
+		`, alias, target, now, now); err != nil {
+			return nil, fmt.Errorf("set project alias %s: %w", alias, err)
+		}
+		updated[alias] = target
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit set project aliases: %w", err)
+	}
+
+	return map[string]any{"target": target, "aliases": updated}, nil
+}
+
+func (s *Store) ListProjectAliases(ctx context.Context) ([]ProjectAlias, error) {
+	return s.listProjectAliases(ctx, "")
+}
+
+func (s *Store) listProjectAliases(ctx context.Context, project string) ([]ProjectAlias, error) {
+	project, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT alias, target, created_at, updated_at
+		FROM project_aliases
+		WHERE (? = '' OR alias = ? OR target = ?)
+		ORDER BY alias
+	`, project, project, project)
+	if err != nil {
+		return nil, fmt.Errorf("list project aliases: %w", err)
+	}
+	defer rows.Close()
+
+	var aliases []ProjectAlias
+	for rows.Next() {
+		var alias ProjectAlias
+		if err := rows.Scan(&alias.Alias, &alias.Target, &alias.CreatedAt, &alias.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan project alias: %w", err)
+		}
+		aliases = append(aliases, alias)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate project aliases: %w", err)
+	}
+
+	return aliases, nil
 }
 
 func (s *Store) ListProjects(ctx context.Context) ([]ProjectStats, error) {

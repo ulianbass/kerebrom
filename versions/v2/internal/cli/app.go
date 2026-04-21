@@ -208,6 +208,12 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
+	lookupProject, err = store.ResolveProject(context.Background(), lookupProject)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve project: %v\n", err)
+		return 1
+	}
+
 	results, err := store.SearchObservations(context.Background(), sqlite.SearchOptions{
 		Query:   *query,
 		Project: lookupProject,
@@ -251,6 +257,12 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer closeFn()
+
+	lookupProject, err = store.ResolveProject(context.Background(), lookupProject)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve project: %v\n", err)
+		return 1
+	}
 
 	stats, err := store.Stats(context.Background(), lookupProject)
 	if err != nil {
@@ -415,6 +427,12 @@ func runStats(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
+	lookupProject, err = store.ResolveProject(context.Background(), lookupProject)
+	if err != nil {
+		fmt.Fprintf(stderr, "resolve project: %v\n", err)
+		return 1
+	}
+
 	stats, err := store.Stats(context.Background(), lookupProject)
 	if err != nil {
 		fmt.Fprintf(stderr, "load stats: %v\n", err)
@@ -482,8 +500,8 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "exported %d sessions, %d observations, %d prompts to %s\n",
-		len(data.Sessions), len(data.Observations), len(data.Prompts), *output)
+	fmt.Fprintf(stdout, "exported %d aliases, %d sessions, %d observations, %d prompts to %s\n",
+		len(data.ProjectAliases), len(data.Sessions), len(data.Observations), len(data.Prompts), *output)
 	return 0
 }
 
@@ -522,7 +540,7 @@ func runImport(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "imported %d sessions, %d observations, %d prompts\n", summary.Sessions, summary.Observations, summary.Prompts)
+	fmt.Fprintf(stdout, "imported %d aliases, %d sessions, %d observations, %d prompts\n", summary.Aliases, summary.Sessions, summary.Observations, summary.Prompts)
 	return 0
 }
 
@@ -564,8 +582,8 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "sync import: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "imported_chunks=%d skipped_chunks=%d sessions=%d observations=%d prompts=%d\n",
-			result.Imported, result.Skipped, result.Counts.Sessions, result.Counts.Observations, result.Counts.Prompts)
+		fmt.Fprintf(stdout, "imported_chunks=%d skipped_chunks=%d aliases=%d sessions=%d observations=%d prompts=%d\n",
+			result.Imported, result.Skipped, result.Counts.Aliases, result.Counts.Sessions, result.Counts.Observations, result.Counts.Prompts)
 		return 0
 	default:
 		result, err := syncstore.Export(context.Background(), store, opts)
@@ -584,7 +602,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 
 func runProjects(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: kerebrom projects <list|consolidate|prune>")
+		fmt.Fprintln(stderr, "usage: kerebrom projects <list|aliases|alias|consolidate|prune>")
 		return 2
 	}
 
@@ -609,6 +627,42 @@ func runProjects(args []string, stdout, stderr io.Writer) int {
 		for _, project := range projects {
 			fmt.Fprintf(stdout, "%s sessions=%d observations=%d prompts=%d\n", project.Project, project.Sessions, project.Observations, project.Prompts)
 		}
+		return 0
+	case "aliases":
+		aliases, err := store.ListProjectAliases(context.Background())
+		if err != nil {
+			fmt.Fprintf(stderr, "list project aliases: %v\n", err)
+			return 1
+		}
+		if len(aliases) == 0 {
+			fmt.Fprintln(stdout, "no project aliases")
+			return 0
+		}
+		for _, alias := range aliases {
+			fmt.Fprintf(stdout, "%s -> %s\n", alias.Alias, alias.Target)
+		}
+		return 0
+	case "alias":
+		fs := newFlagSet("projects alias", stderr)
+		target := fs.String("target", "", "Canonical target project")
+		aliases := fs.String("aliases", "", "Comma-separated aliases")
+		if err := fs.Parse(reorderFlagArgs(args[1:], nil)); err != nil {
+			return 2
+		}
+		remaining := fs.Args()
+		if strings.TrimSpace(*target) == "" && len(remaining) > 0 {
+			*target = remaining[0]
+			remaining = remaining[1:]
+		}
+		aliasList := splitCSV(*aliases)
+		aliasList = append(aliasList, remaining...)
+		payload, err := store.SetProjectAliases(context.Background(), aliasList, *target)
+		if err != nil {
+			fmt.Fprintf(stderr, "set project aliases: %v\n", err)
+			return 1
+		}
+		raw, _ := json.Marshal(payload)
+		fmt.Fprintln(stdout, string(raw))
 		return 0
 	case "consolidate":
 		fs := newFlagSet("projects consolidate", stderr)
@@ -994,7 +1048,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprintln(w, "  export          Export memory data as JSON")
 	fmt.Fprintln(w, "  import          Import memory data from JSON")
 	fmt.Fprintln(w, "  sync            Export/import compressed sync chunks")
-	fmt.Fprintln(w, "  projects        List or consolidate project names")
+	fmt.Fprintln(w, "  projects        List, alias, or consolidate project names")
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Default data dir: %s\n", defaults.DataDir)
 	fmt.Fprintf(w, "Default db path: %s\n", defaults.DBPath())

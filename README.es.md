@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.5](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.5) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.6](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.6) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -96,7 +96,7 @@ Kerebrom v2 expone siete tools semánticos. Los primeros seis son tools cotidian
 | El trabajo termina o se compacta | `summary` | Persiste objetivos, decisiones, cambios, riesgos, archivos y próximos pasos. |
 | Revisar cronología | `timeline` | Inspecciona sesiones y observaciones recientes. |
 | El usuario dice que algo está mal | `forget` | Invalida una observación obsoleta. |
-| Hay que consolidar nombres de proyecto | `projects` | Mantenimiento administrativo de proyectos. |
+| Hay que consolidar nombres de proyecto | `projects` | Mueve variantes al proyecto canónico y deja alias persistentes para que no reaparezcan. |
 
 El usuario no debería tener que decir "usa Kerebrom" o "guarda esto" en cada turno. La activación ocurre en cada mensaje del usuario; el guardado durable sigue ocurriendo solo cuando el mensaje contiene algo que vale la pena preservar.
 
@@ -122,6 +122,8 @@ kerebrom setup all
 kerebrom stats
 kerebrom context --project my-project "que importa aqui?"
 kerebrom search "decision release"
+kerebrom projects aliases
+kerebrom projects consolidate --target proyecto-falage --sources falage
 kerebrom tui
 kerebrom export --output memory-export.json
 kerebrom sync --status

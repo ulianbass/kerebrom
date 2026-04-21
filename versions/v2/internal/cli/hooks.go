@@ -231,6 +231,13 @@ The cycle:
 
 func hookContextText(ctx context.Context, store *sqlite.Store, project string) (string, error) {
 	lookupProject := projectdetect.LookupFilter(project)
+	if strings.TrimSpace(lookupProject) != "" {
+		resolvedLookupProject, err := store.ResolveProject(ctx, lookupProject)
+		if err != nil {
+			return "", err
+		}
+		lookupProject = resolvedLookupProject
+	}
 	stats, err := store.Stats(ctx, lookupProject)
 	if err != nil {
 		return "", err

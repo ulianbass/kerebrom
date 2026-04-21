@@ -21,17 +21,19 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 2. **Plug-and-play in Claude Code**: hooks fire on session start, prompt submit, subagent stop, stop, and post-compaction without manual intervention; the agent never asks permission to call memory tools.
 3. **Cowork native bootstrap**: when Claude Desktop has local Cowork account storage, setup seeds Cowork's native `memory/CLAUDE.md` with an idempotent Kerebrom authority block.
 4. **Self-update**: `kerebrom update` brings the user from any older release to the latest with one command and a single confirmation.
-5. **No data loss across upgrades**: SQLite schema unchanged from v1, sync chunks unchanged.
+5. **No data loss across upgrades**: schema changes are additive and existing sessions, observations, prompts, and sync chunks continue to import.
 6. **Cleanup of v1 leftovers**: a v1 user upgrading to v2 ends with no `mcp__Kerebrom__mem_*` entries lingering in their `permissions.allow`.
 7. **Agent-installable repository**: Claude, Codex, Copilot, or another coding agent can read the repository-native install instructions and guide an end user through a safe `versions/v2` install without guessing.
 8. **Activation without noisy saves**: Kerebrom should activate through `context` on every user message when tools are available, while `remember` remains limited to durable facts and does not save bare acknowledgements as observations.
 9. **Global retrieval despite project drift**: clients that launch without a real workspace must not become isolated under weak projects such as `/` or `default`; reads fall back to cross-project memory and strong-project recalls can still surface better matches from another project.
+10. **Project alias stability**: once a project variant is consolidated, future writes through the old name resolve to the canonical project instead of recreating fragmentation.
+11. **Session lifecycle hygiene**: active sessions close through explicit summaries/hooks, and stale active sessions are auto-closed after 24 hours without activity.
 
 ## Non-goals
 
 - Programmatic modification of Claude Chat account memory, Claude Personal Preferences, or cloud-backed memory controls through private APIs or browser databases.
 - Telemetry of any kind.
-- Server-side memory consolidation beyond what the agent itself does in `summary`.
+- Semantic memory rewriting without explicit agent action. Kerebrom can consolidate project names, but it does not rewrite observation content by itself.
 - Multi-user or networked sync (v2 sync chunks are still filesystem-based).
 - Remote MCP as the default install path. `mcp-http` is advanced and opt-in because it changes the privacy boundary.
 
@@ -42,7 +44,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.0.5` |
+| `semver` | `v2.0.6` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

@@ -474,6 +474,14 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 
 	rawProject := r.URL.Query().Get("project")
 	project := projectmeta.LookupFilter(rawProject)
+	if strings.TrimSpace(project) != "" {
+		resolvedProject, err := s.store.ResolveProject(r.Context(), project)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		project = resolvedProject
+	}
 	scope := r.URL.Query().Get("scope")
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 

@@ -14,22 +14,27 @@ type ExportOptions struct {
 }
 
 type ExportData struct {
-	App          string        `json:"app"`
-	Schema       int           `json:"schema"`
-	ExportedAt   string        `json:"exported_at"`
-	Sessions     []Session     `json:"sessions"`
-	Observations []Observation `json:"observations"`
-	Prompts      []Prompt      `json:"prompts"`
+	App            string         `json:"app"`
+	Schema         int            `json:"schema"`
+	ExportedAt     string         `json:"exported_at"`
+	ProjectAliases []ProjectAlias `json:"project_aliases"`
+	Sessions       []Session      `json:"sessions"`
+	Observations   []Observation  `json:"observations"`
+	Prompts        []Prompt       `json:"prompts"`
 }
 
 type ImportSummary struct {
 	Sessions     int `json:"sessions"`
 	Observations int `json:"observations"`
 	Prompts      int `json:"prompts"`
+	Aliases      int `json:"aliases"`
 }
 
 func (s *Store) ExportData(ctx context.Context, opts ExportOptions) (ExportData, error) {
-	project := normalizeProject(opts.Project)
+	project, err := s.ResolveProject(ctx, opts.Project)
+	if err != nil {
+		return ExportData{}, err
+	}
 	since := strings.TrimSpace(opts.Since)
 
 	sessions, err := s.listSessions(ctx, project, since)
@@ -44,19 +49,28 @@ func (s *Store) ExportData(ctx context.Context, opts ExportOptions) (ExportData,
 	if err != nil {
 		return ExportData{}, err
 	}
+	aliases, err := s.listProjectAliases(ctx, project)
+	if err != nil {
+		return ExportData{}, err
+	}
 
 	return ExportData{
-		App:          "kerebrom",
-		Schema:       1,
-		ExportedAt:   time.Now().UTC().Format(time.RFC3339),
-		Sessions:     sessions,
-		Observations: observations,
-		Prompts:      prompts,
+		App:            "kerebrom",
+		Schema:         1,
+		ExportedAt:     time.Now().UTC().Format(time.RFC3339),
+		ProjectAliases: aliases,
+		Sessions:       sessions,
+		Observations:   observations,
+		Prompts:        prompts,
 	}, nil
 }
 
 func (s *Store) ListSessions(ctx context.Context, project string, limit int) ([]Session, error) {
-	project = normalizeProject(project)
+	resolvedProject, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	project = resolvedProject
 	if limit <= 0 {
 		limit = 10
 	}
@@ -98,9 +112,35 @@ func (s *Store) ImportData(ctx context.Context, data ExportData) (ImportSummary,
 	defer tx.Rollback()
 
 	var summary ImportSummary
+	for _, alias := range data.ProjectAliases {
+		aliasName := normalizeProject(alias.Alias)
+		targetName, err := resolveProject(ctx, tx, alias.Target)
+		if err != nil {
+			return ImportSummary{}, err
+		}
+		if aliasName == "" || targetName == "" || aliasName == targetName {
+			continue
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO project_aliases (alias, target, created_at, updated_at)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(alias) DO UPDATE SET
+				target = excluded.target,
+				updated_at = excluded.updated_at
+		`, aliasName, targetName, defaultString(alias.CreatedAt, now), defaultString(alias.UpdatedAt, now)); err != nil {
+			return ImportSummary{}, fmt.Errorf("import project alias %q: %w", alias.Alias, err)
+		}
+		summary.Aliases++
+	}
+
 	for _, session := range data.Sessions {
 		if strings.TrimSpace(session.ID) == "" {
 			continue
+		}
+		project, err := resolveProject(ctx, tx, session.Project)
+		if err != nil {
+			return ImportSummary{}, err
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO sessions (id, project, directory, started_at, ended_at, summary, status)
@@ -114,7 +154,7 @@ func (s *Store) ImportData(ctx context.Context, data ExportData) (ImportSummary,
 				status = excluded.status
 		`,
 			strings.TrimSpace(session.ID),
-			defaultString(normalizeProject(session.Project), "default"),
+			defaultString(project, "default"),
 			defaultString(strings.TrimSpace(session.Directory), "."),
 			defaultString(strings.TrimSpace(session.StartedAt), time.Now().UTC().Format(time.RFC3339)),
 			nullIfBlank(session.EndedAt),
@@ -158,7 +198,11 @@ func (s *Store) SearchPrompts(ctx context.Context, query string, project string,
 	if ftsQuery == "" {
 		return nil, fmt.Errorf("prompt search query is required")
 	}
-	project = normalizeProject(project)
+	resolvedProject, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	project = resolvedProject
 	if limit <= 0 {
 		limit = 10
 	}
@@ -279,7 +323,11 @@ func (s *Store) listPromptsForExport(ctx context.Context, project string, since 
 }
 
 func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation Observation) (int64, error) {
-	project := defaultString(normalizeProject(observation.Project), "default")
+	project, err := resolveProject(ctx, tx, observation.Project)
+	if err != nil {
+		return 0, err
+	}
+	project = defaultString(project, "default")
 	scope := normalizeScope(observation.Scope)
 	observationType := normalizeObservationType(observation.Type)
 	title := strings.TrimSpace(observation.Title)
@@ -364,6 +412,12 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 }
 
 func (s *Store) importPrompt(ctx context.Context, tx *sql.Tx, prompt Prompt) error {
+	project, err := resolveProject(ctx, tx, prompt.Project)
+	if err != nil {
+		return err
+	}
+	project = defaultString(project, "default")
+
 	sessionID := strings.TrimSpace(prompt.SessionID)
 	if sessionID != "" {
 		exists, err := sessionExists(ctx, tx, sessionID)
@@ -383,17 +437,17 @@ func (s *Store) importPrompt(ctx context.Context, tx *sql.Tx, prompt Prompt) err
 				content = excluded.content,
 				project = excluded.project,
 				created_at = excluded.created_at
-		`, prompt.ID, nullIfBlank(sessionID), stripPrivateTags(prompt.Content), defaultString(normalizeProject(prompt.Project), "default"), defaultString(prompt.CreatedAt, time.Now().UTC().Format(time.RFC3339)))
+		`, prompt.ID, nullIfBlank(sessionID), stripPrivateTags(prompt.Content), project, defaultString(prompt.CreatedAt, time.Now().UTC().Format(time.RFC3339)))
 		if err != nil {
 			return fmt.Errorf("import prompt %d: %w", prompt.ID, err)
 		}
 		return nil
 	}
 
-	_, err := tx.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO user_prompts (session_id, content, project, created_at)
 		VALUES (?, ?, ?, ?)
-	`, nullIfBlank(sessionID), stripPrivateTags(prompt.Content), defaultString(normalizeProject(prompt.Project), "default"), defaultString(prompt.CreatedAt, time.Now().UTC().Format(time.RFC3339)))
+	`, nullIfBlank(sessionID), stripPrivateTags(prompt.Content), project, defaultString(prompt.CreatedAt, time.Now().UTC().Format(time.RFC3339)))
 	if err != nil {
 		return fmt.Errorf("import prompt: %w", err)
 	}

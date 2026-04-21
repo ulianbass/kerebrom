@@ -907,6 +907,13 @@ func (s *Server) savePromptIfSubstantive(ctx context.Context, sessionID string, 
 }
 
 func (s *Server) contextPayload(ctx context.Context, project string, lookupProject string, scope string, query string, limit int) (map[string]any, error) {
+	if strings.TrimSpace(lookupProject) != "" {
+		resolvedLookupProject, err := s.store.ResolveProject(ctx, lookupProject)
+		if err != nil {
+			return nil, err
+		}
+		lookupProject = resolvedLookupProject
+	}
 	stats, err := s.store.Stats(ctx, lookupProject)
 	if err != nil {
 		return nil, err

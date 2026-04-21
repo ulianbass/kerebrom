@@ -96,6 +96,12 @@ Project names organize memory; they must not become hard walls that hide relevan
 
 When a strong project is supplied explicitly, Kerebrom still searches that project first, but `context` and `recall` also merge broad cross-project matches. This prevents generic local hits from hiding a more relevant observation in another project, while preserving project metadata for organization, summaries, prompts, and explicit project filters.
 
+v2.0.6 adds persistent project aliases. `kerebrom projects consolidate --target proyecto-falage --sources falage` now does two things: it moves existing sessions, observations, and prompts to the canonical project, and it stores `falage -> proyecto-falage` so future writes through the old name resolve to the canonical project instead of recreating the fragment. `kerebrom projects alias` can add alias rules without moving historical rows.
+
+## Session lifecycle behavior
+
+A session is active only until a client closes it through `summary`, `session-end`, or a native stop hook. Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
+
 ## Self-update flow
 
 `kerebrom update` runs the following pipeline:

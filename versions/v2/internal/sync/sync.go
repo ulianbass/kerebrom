@@ -92,8 +92,9 @@ func Export(ctx context.Context, store *sqlite.Store, opts Options) (ExportResul
 		Sessions:     len(data.Sessions),
 		Observations: len(data.Observations),
 		Prompts:      len(data.Prompts),
+		Aliases:      len(data.ProjectAliases),
 	}
-	if counts.Sessions == 0 && counts.Observations == 0 && counts.Prompts == 0 {
+	if counts.Sessions == 0 && counts.Observations == 0 && counts.Prompts == 0 && counts.Aliases == 0 {
 		return ExportResult{Created: false}, nil
 	}
 
@@ -162,6 +163,7 @@ func Import(ctx context.Context, store *sqlite.Store, opts Options) (ImportResul
 			return ImportResult{}, err
 		}
 		result.Imported++
+		result.Counts.Aliases += summary.Aliases
 		result.Counts.Sessions += summary.Sessions
 		result.Counts.Observations += summary.Observations
 		result.Counts.Prompts += summary.Prompts
@@ -286,6 +288,11 @@ func encodeJSONL(data sqlite.ExportData) ([]byte, error) {
 			return nil, err
 		}
 	}
+	for _, alias := range data.ProjectAliases {
+		if err := encodeChunkRecord(encoder, "project_alias", alias); err != nil {
+			return nil, err
+		}
+	}
 	for _, observation := range data.Observations {
 		if err := encodeChunkRecord(encoder, "observation", observation); err != nil {
 			return nil, err
@@ -375,6 +382,12 @@ func appendRecord(data *sqlite.ExportData, record chunkRecord) error {
 			return fmt.Errorf("decode session record: %w", err)
 		}
 		data.Sessions = append(data.Sessions, session)
+	case "project_alias":
+		var alias sqlite.ProjectAlias
+		if err := json.Unmarshal(record.Data, &alias); err != nil {
+			return fmt.Errorf("decode project alias record: %w", err)
+		}
+		data.ProjectAliases = append(data.ProjectAliases, alias)
 	case "observation":
 		var observation sqlite.Observation
 		if err := json.Unmarshal(record.Data, &observation); err != nil {

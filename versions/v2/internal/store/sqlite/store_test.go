@@ -30,6 +30,7 @@ func TestOpenAndInitCreatesSchema(t *testing.T) {
 	assertTableExists(t, store.DB(), "user_prompts")
 	assertTableExists(t, store.DB(), "prompts_fts")
 	assertTableExists(t, store.DB(), "sync_chunks")
+	assertTableExists(t, store.DB(), "project_aliases")
 }
 
 func TestInitRepairsEndedActiveSessions(t *testing.T) {
@@ -68,6 +69,161 @@ func TestInitRepairsEndedActiveSessions(t *testing.T) {
 	}
 	if session.Status != "completed" {
 		t.Fatalf("expected completed status after repair, got %+v", session)
+	}
+}
+
+func TestInitAutoClosesStaleActiveSessions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	_, err = store.DB().ExecContext(ctx, `
+		INSERT INTO sessions (id, project, directory, started_at, status)
+		VALUES ('stale-session', 'project', '.', '2000-01-01T00:00:00Z', 'active')
+	`)
+	if err != nil {
+		t.Fatalf("insert stale session: %v", err)
+	}
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("stale repair init: %v", err)
+	}
+
+	session, err := store.GetSession(ctx, "stale-session")
+	if err != nil {
+		t.Fatalf("get stale session: %v", err)
+	}
+	if session.Status != "completed" {
+		t.Fatalf("expected stale session to be completed, got %+v", session)
+	}
+	if session.Summary != "Auto-closed by Kerebrom after 24h without activity." {
+		t.Fatalf("unexpected stale session summary: %+v", session)
+	}
+}
+
+func TestProjectAliasesResolveWritesReadsAndMerges(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	if _, err := store.SetProjectAliases(ctx, []string{"Falage", "Quamtos"}, "Proyecto Falage"); err != nil {
+		t.Fatalf("set project aliases: %v", err)
+	}
+
+	if err := store.StartSession(ctx, StartSessionInput{
+		ID:      "alias-session",
+		Project: "Falage",
+	}); err != nil {
+		t.Fatalf("start aliased session: %v", err)
+	}
+	session, err := store.GetSession(ctx, "alias-session")
+	if err != nil {
+		t.Fatalf("get aliased session: %v", err)
+	}
+	if session.Project != "proyecto-falage" {
+		t.Fatalf("expected aliased session project, got %+v", session)
+	}
+
+	observation, err := store.SaveObservation(ctx, ObservationInput{
+		SessionID: "alias-session",
+		Type:      "decision",
+		Title:     "Quamtos belongs to Falage",
+		Content:   "Quamtos memories should resolve through the Falage project alias.",
+		Project:   "Quamtos",
+	})
+	if err != nil {
+		t.Fatalf("save aliased observation: %v", err)
+	}
+	if observation.Project != "proyecto-falage" {
+		t.Fatalf("expected aliased observation project, got %+v", observation)
+	}
+
+	results, err := store.SearchObservations(ctx, SearchOptions{
+		Query:   "Quamtos Falage",
+		Project: "Falage",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("search aliased observations: %v", err)
+	}
+	if len(results) != 1 || results[0].ID != observation.ID {
+		t.Fatalf("expected alias search to return observation %d, got %+v", observation.ID, results)
+	}
+
+	if _, err := store.SavePrompt(ctx, PromptInput{
+		SessionID: "alias-session",
+		Content:   "Falage prompt through alias.",
+		Project:   "Falage",
+	}); err != nil {
+		t.Fatalf("save aliased prompt: %v", err)
+	}
+
+	stats, err := store.Stats(ctx, "Quamtos")
+	if err != nil {
+		t.Fatalf("aliased stats: %v", err)
+	}
+	if stats.SessionCount != 1 || stats.ObservationCount != 1 || stats.PromptCount != 1 {
+		t.Fatalf("unexpected aliased stats: %+v", stats)
+	}
+
+	if _, err := store.SaveObservation(ctx, ObservationInput{
+		Title:   "Kerebrom variant",
+		Content: "Kerebrom project variant before consolidation.",
+		Project: "Kerebrom",
+	}); err != nil {
+		t.Fatalf("save pre-merge observation: %v", err)
+	}
+	if _, err := store.MergeProjects(ctx, []string{"Kerebrom"}, "Proyecto Kerebrom"); err != nil {
+		t.Fatalf("merge project variant: %v", err)
+	}
+
+	aliases, err := store.ListProjectAliases(ctx)
+	if err != nil {
+		t.Fatalf("list aliases: %v", err)
+	}
+	aliasTargets := map[string]string{}
+	for _, alias := range aliases {
+		aliasTargets[alias.Alias] = alias.Target
+	}
+	if aliasTargets["kerebrom"] != "proyecto-kerebrom" {
+		t.Fatalf("expected merge to persist kerebrom alias, got %+v", aliasTargets)
+	}
+
+	prompt, err := store.SavePrompt(ctx, PromptInput{
+		Content: "Future Kerebrom writes should use the canonical project.",
+		Project: "Kerebrom",
+	})
+	if err != nil {
+		t.Fatalf("save post-merge prompt through alias: %v", err)
+	}
+	if prompt.Project != "proyecto-kerebrom" {
+		t.Fatalf("expected prompt to resolve through merge alias, got %+v", prompt)
 	}
 }
 

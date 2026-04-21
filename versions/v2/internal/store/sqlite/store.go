@@ -16,8 +16,13 @@ import (
 )
 
 const defaultBusyTimeout = 5 * time.Second
+const defaultStaleSessionTTL = 24 * time.Hour
 
 var privateTagPattern = regexp.MustCompile(`(?is)<private>.*?</private>`)
+
+type projectResolver interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
 
 type Config struct {
 	Path string
@@ -105,6 +110,13 @@ type Stats struct {
 	ProjectCount       int `json:"project_count"`
 }
 
+type ProjectAlias struct {
+	Alias     string `json:"alias"`
+	Target    string `json:"target"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 func Open(cfg Config) (*Store, error) {
 	if cfg.Path == "" {
 		return nil, fmt.Errorf("sqlite path is required")
@@ -146,6 +158,9 @@ func (s *Store) Init(ctx context.Context) error {
 	if err := s.repairSessionLifecycle(ctx); err != nil {
 		return err
 	}
+	if err := s.repairStaleSessions(ctx); err != nil {
+		return err
+	}
 	if err := s.repairObservationDuplicates(ctx); err != nil {
 		return err
 	}
@@ -166,6 +181,40 @@ func (s *Store) repairSessionLifecycle(ctx context.Context) error {
 	`)
 	if err != nil {
 		return fmt.Errorf("repair session lifecycle: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) repairStaleSessions(ctx context.Context) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	cutoff := time.Now().UTC().Add(-defaultStaleSessionTTL).Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET ended_at = ?,
+			summary = CASE
+				WHEN trim(COALESCE(summary, '')) = '' THEN 'Auto-closed by Kerebrom after 24h without activity.'
+				ELSE summary
+			END,
+			status = 'completed'
+		WHERE status = 'active'
+		  AND (
+			SELECT MAX(activity_at)
+			FROM (
+				SELECT sessions.started_at AS activity_at
+				UNION ALL
+				SELECT observations.updated_at AS activity_at
+				FROM observations
+				WHERE observations.deleted_at IS NULL
+				  AND COALESCE(observations.session_id, '') = sessions.id
+				UNION ALL
+				SELECT user_prompts.created_at AS activity_at
+				FROM user_prompts
+				WHERE COALESCE(user_prompts.session_id, '') = sessions.id
+			)
+		  ) < ?
+	`, now, cutoff)
+	if err != nil {
+		return fmt.Errorf("repair stale sessions: %w", err)
 	}
 	return nil
 }
@@ -276,7 +325,10 @@ func (s *Store) StartSession(ctx context.Context, input StartSessionInput) error
 		return fmt.Errorf("session id is required")
 	}
 
-	project := normalizeProject(input.Project)
+	project, err := s.ResolveProject(ctx, input.Project)
+	if err != nil {
+		return err
+	}
 	if project == "" {
 		project = "default"
 	}
@@ -291,7 +343,7 @@ func (s *Store) StartSession(ctx context.Context, input StartSessionInput) error
 		startedAt = time.Now().UTC()
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO sessions (id, project, directory, started_at, status)
 		VALUES (?, ?, ?, ?, 'active')
 		ON CONFLICT(id) DO UPDATE SET
@@ -396,7 +448,10 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 
 	observationType := normalizeObservationType(input.Type)
 	scope := normalizeScope(input.Scope)
-	project := normalizeProject(input.Project)
+	project, err := s.ResolveProject(ctx, input.Project)
+	if err != nil {
+		return Observation{}, err
+	}
 	if project == "" {
 		project = "default"
 	}
@@ -438,7 +493,7 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 	}
 
 	var duplicateID int64
-	err := s.db.QueryRowContext(ctx, `
+	err = s.db.QueryRowContext(ctx, `
 		SELECT id
 		FROM observations
 		WHERE normalized_hash = ? AND deleted_at IS NULL
@@ -561,7 +616,10 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 		limit = 100
 	}
 
-	project := normalizeProject(opts.Project)
+	project, err := s.ResolveProject(ctx, opts.Project)
+	if err != nil {
+		return nil, err
+	}
 	observationType := optionalNormalizedValue(opts.Type)
 	scope := optionalNormalizedValue(opts.Scope)
 
@@ -675,7 +733,10 @@ func (s *Store) ListObservations(ctx context.Context, opts ListObservationOption
 		limit = 100
 	}
 
-	project := normalizeProject(opts.Project)
+	project, err := s.ResolveProject(ctx, opts.Project)
+	if err != nil {
+		return nil, err
+	}
 	scope := optionalNormalizedValue(opts.Scope)
 	sessionID := strings.TrimSpace(opts.SessionID)
 
@@ -752,7 +813,11 @@ func (s *Store) CountSessionObservations(ctx context.Context, sessionID string) 
 }
 
 func (s *Store) Stats(ctx context.Context, project string) (Stats, error) {
-	project = normalizeProject(project)
+	resolvedProject, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return Stats{}, err
+	}
+	project = resolvedProject
 
 	var stats Stats
 	if err := s.db.QueryRowContext(ctx, `
@@ -911,7 +976,53 @@ func schemaStatements() []string {
 			chunk_id TEXT PRIMARY KEY,
 			imported_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS project_aliases (
+			alias TEXT PRIMARY KEY,
+			target TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		);`,
 	}
+}
+
+func (s *Store) ResolveProject(ctx context.Context, value string) (string, error) {
+	return resolveProject(ctx, s.db, value)
+}
+
+func resolveProject(ctx context.Context, resolver projectResolver, value string) (string, error) {
+	project := normalizeProject(value)
+	if project == "" {
+		return "", nil
+	}
+
+	seen := map[string]bool{}
+	for depth := 0; depth < 10; depth++ {
+		if seen[project] {
+			return "", fmt.Errorf("project alias cycle detected at %q", project)
+		}
+		seen[project] = true
+
+		var target string
+		err := resolver.QueryRowContext(ctx, `
+			SELECT target
+			FROM project_aliases
+			WHERE alias = ?
+		`, project).Scan(&target)
+		if err == sql.ErrNoRows {
+			return project, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("resolve project alias %q: %w", project, err)
+		}
+
+		target = normalizeProject(target)
+		if target == "" || target == project {
+			return project, nil
+		}
+		project = target
+	}
+
+	return "", fmt.Errorf("project alias chain too deep for %q", value)
 }
 
 func normalizeProject(value string) string {

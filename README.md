@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.5](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.5) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.6](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.6) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -96,7 +96,7 @@ Kerebrom v2 exposes seven semantic tools. The first six are everyday agent tools
 | Work is ending or compacting | `summary` | Persist goals, decisions, changes, risks, files, and next steps. |
 | Inspect chronology | `timeline` | Review recent sessions and observations. |
 | User says memory is wrong | `forget` | Invalidate an obsolete observation. |
-| Project names need consolidation | `projects` | Admin-only project maintenance. |
+| Project names need consolidation | `projects` | Move variants into the canonical project and persist aliases so fragments do not reappear. |
 
 The user should not have to say "use Kerebrom" or "save this" for every turn. Activation happens every user message; durable saving still happens only when the message contains something worth preserving.
 
@@ -122,6 +122,8 @@ kerebrom setup all
 kerebrom stats
 kerebrom context --project my-project "what matters here?"
 kerebrom search "release decision"
+kerebrom projects aliases
+kerebrom projects consolidate --target proyecto-falage --sources falage
 kerebrom tui
 kerebrom export --output memory-export.json
 kerebrom sync --status
