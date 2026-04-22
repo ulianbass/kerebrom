@@ -98,6 +98,18 @@ When a strong project is supplied explicitly, Kerebrom still searches that proje
 
 v2.0.6 adds persistent project aliases. `kerebrom projects consolidate --target proyecto-falage --sources falage` now does two things: it moves existing sessions, observations, and prompts to the canonical project, and it stores `falage -> proyecto-falage` so future writes through the old name resolve to the canonical project instead of recreating the fragment. `kerebrom projects alias` can add alias rules without moving historical rows.
 
+## Chronological Memory Validity
+
+Observations carry three clocks:
+
+- `created_at`: when the observation row first entered the store.
+- `updated_at`: when the row was last maintained, including administrative metadata changes.
+- `valid_at`: when the memory content was last semantically asserted, corrected, or revalidated.
+
+Retrieval uses `valid_at` as the chronology of truth. `context`, `recall`, `timeline`, CLI context/search, HTTP context/search, and Claude/Codex hook context sort observations by semantic validity rather than raw row maintenance time. This prevents old facts from becoming "new" only because a project merge, import, duplicate repair, or other metadata operation touched the row.
+
+When an agent saves a correction with the same `topic_key`, Kerebrom updates the canonical observation and refreshes `valid_at` while keeping `created_at` for auditability. When the same observation is saved again as a duplicate, `last_seen_at` and `valid_at` refresh because the memory has been reasserted. Project consolidation updates project metadata but does not change `valid_at`.
+
 ## Session lifecycle behavior
 
 A session is active only until a client closes it through `summary`, `session-end`, or a native stop hook. Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.

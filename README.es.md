@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.6](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.6) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.7) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -99,6 +99,8 @@ Kerebrom v2 expone siete tools semánticos. Los primeros seis son tools cotidian
 | Hay que consolidar nombres de proyecto | `projects` | Mueve variantes al proyecto canónico y deja alias persistentes para que no reaparezcan. |
 
 El usuario no debería tener que decir "usa Kerebrom" o "guarda esto" en cada turno. La activación ocurre en cada mensaje del usuario; el guardado durable sigue ocurriendo solo cuando el mensaje contiene algo que vale la pena preservar.
+
+Las observaciones se ordenan por `valid_at`, la fecha semántica de cuándo una memoria fue afirmada, corregida o revalidada por última vez. El mantenimiento administrativo, como consolidar proyectos, no hace que hechos viejos parezcan nuevos, y las correcciones guardadas con el mismo `topic_key` actualizan la memoria canónica en vez de dejar contradicciones con la misma prioridad.
 
 ## Modelo De Seguridad Local-First
 

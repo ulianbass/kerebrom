@@ -39,6 +39,7 @@ When Kerebrom is installed in an AI client, the agent should treat it as the dur
 - Call `remember` only when a durable decision, preference, bugfix, configuration change, or non-obvious learning appears.
 - Call `summary` before ending substantial work or after compaction.
 - Use `forget` only when the user says memory is wrong or obsolete.
+- Treat `valid_at` as the semantic memory clock. When observations conflict, prefer the newest corrected or revalidated observation unless the user explicitly says an older memory is still authoritative.
 
 The saved observation format should be concise and interpreted:
 

@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.6](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.6) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.7) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -99,6 +99,8 @@ Kerebrom v2 exposes seven semantic tools. The first six are everyday agent tools
 | Project names need consolidation | `projects` | Move variants into the canonical project and persist aliases so fragments do not reappear. |
 
 The user should not have to say "use Kerebrom" or "save this" for every turn. Activation happens every user message; durable saving still happens only when the message contains something worth preserving.
+
+Observations are ordered by `valid_at`, the semantic timestamp for when a memory was last asserted, corrected, or revalidated. Administrative maintenance such as project consolidation does not make old facts look new, and corrections saved with the same `topic_key` update the canonical memory instead of leaving contradictory facts at equal priority.
 
 ## Local-First Security Model
 

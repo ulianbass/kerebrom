@@ -67,7 +67,7 @@ kerebrom update
 | Invalidar memoria incorrecta | `forget` |
 | Consolidación admin de proyectos y alias | `projects` |
 
-La activación ocurre en cada mensaje del usuario cuando las tools de Kerebrom están disponibles. Las observaciones son memorias interpretadas, no transcripciones crudas. Usa `What / Why / Where / Learned` solo cuando haya un hecho durable que preservar. La consolidación de proyectos guarda alias persistentes para que los nombres viejos sigan resolviendo al proyecto canónico.
+La activación ocurre en cada mensaje del usuario cuando las tools de Kerebrom están disponibles. Las observaciones son memorias interpretadas, no transcripciones crudas. Usa `What / Why / Where / Learned` solo cuando haya un hecho durable que preservar. La consolidación de proyectos guarda alias persistentes para que los nombres viejos sigan resolviendo al proyecto canónico. La recuperación usa `valid_at` como cronología semántica, por lo que las correcciones nuevas y los hechos revalidados tienen prioridad sobre memorias obsoletas sin borrar el historial.
 
 ## Arquitectura
 

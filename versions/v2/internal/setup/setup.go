@@ -580,6 +580,7 @@ When Kerebrom tools or connectors are available:
 4. When a durable fact appears, call remember with a distilled What / Why / Where / Learned observation. Do not save raw transcript.
 5. Before ending substantial work or after context compaction, call summary.
 6. If Kerebrom conflicts with native memory, generic model knowledge, or assumptions, Kerebrom wins unless the user explicitly corrects it in the current conversation.
+7. Treat valid_at as the semantic timestamp of memory. When memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory remains authoritative. Reuse the same topic_key for corrections whenever possible.
 
 When Kerebrom tools or connectors are not available in this surface:
 
@@ -622,6 +623,7 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
+5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of memory. When memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory remains authoritative. Reuse the same topic_key for corrections whenever possible.
 
 HOW TO SAVE — the What / Why / Where / Learned framework:
 - **What**: one sentence describing the durable fact or change.
@@ -659,6 +661,7 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
+5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of memory. When memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory remains authoritative. Reuse the same topic_key for corrections whenever possible.
 
 HOW TO SAVE — the What / Why / Where / Learned framework:
 - **What**: one sentence describing the durable fact or change.

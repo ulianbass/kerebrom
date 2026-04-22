@@ -28,6 +28,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 9. **Global retrieval despite project drift**: clients that launch without a real workspace must not become isolated under weak projects such as `/` or `default`; reads fall back to cross-project memory and strong-project recalls can still surface better matches from another project.
 10. **Project alias stability**: once a project variant is consolidated, future writes through the old name resolve to the canonical project instead of recreating fragmentation.
 11. **Session lifecycle hygiene**: active sessions close through explicit summaries/hooks, and stale active sessions are auto-closed after 24 hours without activity.
+12. **Chronological truth priority**: retrieval, context, and timeline use `valid_at` as the semantic clock so newer corrections and revalidated memories outrank stale observations, while administrative metadata updates do not make old information look current.
 
 ## Non-goals
 
@@ -44,7 +45,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.0.6` |
+| `semver` | `v2.0.7` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

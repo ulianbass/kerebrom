@@ -254,7 +254,7 @@ func hookContextText(ctx context.Context, store *sqlite.Store, project string) (
 	}
 	b.WriteString("\nRecent observations:\n")
 	for _, observation := range recent {
-		fmt.Fprintf(&b, "- [%d] %s: %s\n", observation.ID, observation.Title, oneLinePreview(observation.Content, 180))
+		fmt.Fprintf(&b, "- [%d] %s (valid_at=%s): %s\n", observation.ID, observation.Title, observation.ValidAt, oneLinePreview(observation.Content, 180))
 	}
 	return b.String(), nil
 }

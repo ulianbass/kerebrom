@@ -1124,7 +1124,7 @@ func oneLinePreview(value string, max int) string {
 }
 
 func printObservation(w io.Writer, observation sqlite.Observation) {
-	fmt.Fprintf(w, "[%d] %s | %s | %s\n", observation.ID, observation.Project, observation.Type, observation.Title)
+	fmt.Fprintf(w, "[%d] %s | %s | %s | valid_at=%s\n", observation.ID, observation.Project, observation.Type, observation.Title, observation.ValidAt)
 	fmt.Fprintf(w, "    %s\n", oneLinePreview(observation.Content, 120))
 }
 

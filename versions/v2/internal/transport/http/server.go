@@ -545,6 +545,7 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 		"project_filter":         strings.TrimSpace(project),
 		"query":                  query,
 		"project_filter_relaxed": projectFilterRelaxed,
+		"chronology_policy":      "Use valid_at as the semantic memory timestamp. If observations conflict, prefer the newest corrected/validated observation and use timeline when uncertainty remains.",
 		"stats":                  stats,
 		"recent_sessions":        sessions,
 		"recent_prompts":         prompts,

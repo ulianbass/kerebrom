@@ -368,7 +368,7 @@ func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandl
 func (s *Server) registerTools() {
 	s.addTool("context",
 		mcp.NewTool("context",
-			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering EVERY user message when this tool is available, including short or ambiguous prompts. Opens or resumes the session, saves only substantive prompts, returns prior observations."),
+			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering EVERY user message when this tool is available, including short or ambiguous prompts. Opens or resumes the session, saves only substantive prompts, returns prior observations ordered by semantic valid_at so newer corrections outrank stale facts."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("prompt",
 				mcp.Description("Current user prompt. Kerebrom saves it as prompt history when substantive."),
@@ -394,7 +394,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("recall",
 		mcp.NewTool("recall",
-			mcp.WithDescription("Search Kerebrom memory. ALWAYS call BEFORE answering questions about the user, their projects, preferences, history, or prior decisions."),
+			mcp.WithDescription("Search Kerebrom memory. ALWAYS call BEFORE answering questions about the user, their projects, preferences, history, or prior decisions. Results prioritize semantic valid_at; when memories conflict, prefer the latest corrected/validated observation."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("query",
 				mcp.Required(),
@@ -438,7 +438,7 @@ func (s *Server) registerTools() {
 				mcp.Description("Scope such as global, project, or session."),
 			),
 			mcp.WithString("topic_key",
-				mcp.Description("Canonical topic key used to group related observations."),
+				mcp.Description("Canonical topic key used to group related observations. Reuse the same topic_key for corrections so Kerebrom updates the canonical memory instead of preserving contradictions as equal facts."),
 			),
 			mcp.WithString("tool_name",
 				mcp.Description("Originating tool or integration name."),
@@ -482,7 +482,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("timeline",
 		mcp.NewTool("timeline",
-			mcp.WithDescription("Inspect chronological history. Observations around a specific id, or recent observations across a project. Use when the user asks what was done before."),
+			mcp.WithDescription("Inspect chronological history by semantic valid_at. Observations around a specific id, or recent observations across a project. Use when the user asks what was done before or whether a fact was later corrected."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithNumber("observation_id",
 				mcp.Description("Observation id to center the timeline around. If omitted, returns recent observations."),
@@ -543,6 +543,8 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 
 4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary with goals, decisions, changes, risks, files, next steps.
+
+5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of the memory. When two memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory is still authoritative. If you are saving a correction, reuse the same topic_key whenever possible so the old fact is updated instead of stored as an equal contradiction.
 
 HOW TO SAVE — the What / Why / Where / Learned framework:
 
@@ -969,6 +971,7 @@ func (s *Server) contextPayload(ctx context.Context, project string, lookupProje
 		"project_filter":         strings.TrimSpace(lookupProject),
 		"query":                  query,
 		"project_filter_relaxed": projectFilterRelaxed,
+		"chronology_policy":      "Use valid_at as the semantic memory timestamp. If observations conflict, prefer the newest corrected/validated observation and use timeline when uncertainty remains.",
 		"stats":                  stats,
 		"recent_sessions":        sessions,
 		"recent_prompts":         prompts,

@@ -84,6 +84,7 @@ type Observation struct {
 	LastSeenAt     string `json:"last_seen_at"`
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
+	ValidAt        string `json:"valid_at"`
 	DeletedAt      string `json:"deleted_at"`
 }
 
@@ -165,6 +166,9 @@ func (s *Store) Init(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureObservationUniqueIndexes(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureObservationSemanticClock(ctx); err != nil {
 		return err
 	}
 
@@ -302,6 +306,66 @@ func (s *Store) ensureObservationUniqueIndexes(ctx context.Context) error {
 		return fmt.Errorf("create observation hash unique index: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) ensureObservationSemanticClock(ctx context.Context) error {
+	hasColumn, err := s.hasColumn(ctx, "observations", "valid_at")
+	if err != nil {
+		return err
+	}
+	if !hasColumn {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE observations ADD COLUMN valid_at TEXT`); err != nil {
+			return fmt.Errorf("add observation valid_at column: %w", err)
+		}
+	}
+
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE observations
+		SET valid_at = CASE
+			WHEN revision_count > 0 THEN updated_at
+			WHEN duplicate_count > 0 AND trim(COALESCE(last_seen_at, '')) != '' THEN last_seen_at
+			ELSE created_at
+		END
+		WHERE trim(COALESCE(valid_at, '')) = ''
+	`); err != nil {
+		return fmt.Errorf("backfill observation valid_at: %w", err)
+	}
+
+	if _, err := s.db.ExecContext(ctx, `
+		CREATE INDEX IF NOT EXISTS idx_observations_project_valid_at
+		ON observations(project, valid_at DESC)
+	`); err != nil {
+		return fmt.Errorf("create observation valid_at index: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) hasColumn(ctx context.Context, table string, column string) (bool, error) {
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, fmt.Errorf("inspect %s schema: %w", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, columnType string
+		var notNull int
+		var defaultValue any
+		var primaryKey int
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false, fmt.Errorf("scan %s schema: %w", table, err)
+		}
+		if strings.EqualFold(name, column) {
+			return true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate %s schema: %w", table, err)
+	}
+
+	return false, nil
 }
 
 func (s *Store) Close() error {
@@ -472,7 +536,7 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 			SELECT id
 			FROM observations
 			WHERE project = ? AND scope = ? AND topic_key = ? AND deleted_at IS NULL
-			ORDER BY updated_at DESC, id DESC
+			ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
 			LIMIT 1
 		`, project, scope, strings.TrimSpace(input.TopicKey)).Scan(&existingID)
 		if err == nil {
@@ -510,9 +574,9 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO observations (
 			session_id, type, title, content, tool_name, project, scope, topic_key,
-			normalized_hash, created_at, updated_at
+			normalized_hash, created_at, updated_at, valid_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		nullIfBlank(input.SessionID),
 		observationType,
@@ -523,6 +587,7 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 		scope,
 		nullIfBlank(input.TopicKey),
 		hash,
+		timestampText,
 		timestampText,
 		timestampText,
 	)
@@ -557,9 +622,9 @@ func (s *Store) bumpDuplicateObservation(ctx context.Context, id int64) (Observa
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := s.db.ExecContext(ctx, `
 		UPDATE observations
-		SET duplicate_count = duplicate_count + 1, last_seen_at = ?, updated_at = ?
+		SET duplicate_count = duplicate_count + 1, last_seen_at = ?, updated_at = ?, valid_at = ?
 		WHERE id = ?
-	`, now, now, id); err != nil {
+	`, now, now, now, id); err != nil {
 		return Observation{}, fmt.Errorf("update duplicate observation: %w", err)
 	}
 	return s.GetObservation(ctx, id)
@@ -571,7 +636,7 @@ func (s *Store) GetObservation(ctx context.Context, id int64) (Observation, erro
 			id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
 			project, scope, COALESCE(topic_key, ''), normalized_hash,
 			revision_count, duplicate_count, COALESCE(last_seen_at, ''),
-			created_at, updated_at, COALESCE(deleted_at, '')
+			created_at, updated_at, COALESCE(valid_at, created_at), COALESCE(deleted_at, '')
 		FROM observations
 		WHERE id = ?
 	`, id)
@@ -593,6 +658,7 @@ func (s *Store) GetObservation(ctx context.Context, id int64) (Observation, erro
 		&observation.LastSeenAt,
 		&observation.CreatedAt,
 		&observation.UpdatedAt,
+		&observation.ValidAt,
 		&observation.DeletedAt,
 	); err != nil {
 		return Observation{}, fmt.Errorf("get observation %d: %w", id, err)
@@ -629,14 +695,14 @@ func (s *Store) SearchObservations(ctx context.Context, opts SearchOptions) ([]O
 				id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
 				project, scope, COALESCE(topic_key, ''), normalized_hash,
 				revision_count, duplicate_count, COALESCE(last_seen_at, ''),
-				created_at, updated_at, COALESCE(deleted_at, '')
+				created_at, updated_at, COALESCE(valid_at, created_at), COALESCE(deleted_at, '')
 			FROM observations
 			WHERE deleted_at IS NULL
 			  AND topic_key = ?
 			  AND (? = '' OR project = ? OR scope = 'global')
 			  AND (? = '' OR type = ?)
 			  AND (? = '' OR scope = ?)
-			ORDER BY updated_at DESC, id DESC
+			ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
 			LIMIT ?
 		`, rawQuery, project, project, observationType, observationType, scope, scope, limit)
 		if err != nil {
@@ -674,7 +740,7 @@ func (s *Store) searchObservationsFTS(ctx context.Context, query string, project
 			o.id, COALESCE(o.session_id, ''), o.type, o.title, o.content, COALESCE(o.tool_name, ''),
 			o.project, o.scope, COALESCE(o.topic_key, ''), o.normalized_hash,
 			o.revision_count, o.duplicate_count, COALESCE(o.last_seen_at, ''),
-			o.created_at, o.updated_at, COALESCE(o.deleted_at, '')
+			o.created_at, o.updated_at, COALESCE(o.valid_at, o.created_at), COALESCE(o.deleted_at, '')
 		FROM observations o
 		JOIN observations_fts ON observations_fts.rowid = o.id
 		WHERE observations_fts MATCH ?
@@ -682,7 +748,7 @@ func (s *Store) searchObservationsFTS(ctx context.Context, query string, project
 		  AND (? = '' OR o.project = ? OR o.scope = 'global')
 		  AND (? = '' OR o.type = ?)
 		  AND (? = '' OR o.scope = ?)
-		ORDER BY bm25(observations_fts), o.created_at DESC
+		ORDER BY COALESCE(o.valid_at, o.created_at) DESC, o.id DESC, bm25(observations_fts)
 		LIMIT ?
 	`, query, project, project, observationType, observationType, scope, scope, limit)
 	if err != nil {
@@ -709,6 +775,7 @@ func (s *Store) searchObservationsFTS(ctx context.Context, query string, project
 			&observation.LastSeenAt,
 			&observation.CreatedAt,
 			&observation.UpdatedAt,
+			&observation.ValidAt,
 			&observation.DeletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan search observation: %w", err)
@@ -745,13 +812,13 @@ func (s *Store) ListObservations(ctx context.Context, opts ListObservationOption
 			id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
 			project, scope, COALESCE(topic_key, ''), normalized_hash,
 			revision_count, duplicate_count, COALESCE(last_seen_at, ''),
-			created_at, updated_at, COALESCE(deleted_at, '')
+			created_at, updated_at, COALESCE(valid_at, created_at), COALESCE(deleted_at, '')
 		FROM observations
 		WHERE deleted_at IS NULL
 		  AND (? = '' OR project = ? OR scope = 'global')
 		  AND (? = '' OR scope = ?)
 		  AND (? = '' OR COALESCE(session_id, '') = ?)
-		ORDER BY created_at DESC, id DESC
+		ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
 		LIMIT ?
 	`, project, project, scope, scope, sessionID, sessionID, limit)
 	if err != nil {
@@ -778,6 +845,7 @@ func (s *Store) ListObservations(ctx context.Context, opts ListObservationOption
 			&observation.LastSeenAt,
 			&observation.CreatedAt,
 			&observation.UpdatedAt,
+			&observation.ValidAt,
 			&observation.DeletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan listed observation: %w", err)
@@ -914,6 +982,7 @@ func schemaStatements() []string {
 			last_seen_at TEXT,
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
+			valid_at TEXT,
 			deleted_at TEXT
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_project_created_at

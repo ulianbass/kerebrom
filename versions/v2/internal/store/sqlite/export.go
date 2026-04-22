@@ -292,12 +292,12 @@ func (s *Store) listObservationsForExport(ctx context.Context, project string, s
 		SELECT id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
 			project, scope, COALESCE(topic_key, ''), normalized_hash,
 			revision_count, duplicate_count, COALESCE(last_seen_at, ''),
-			created_at, updated_at, COALESCE(deleted_at, '')
+			created_at, updated_at, COALESCE(valid_at, created_at), COALESCE(deleted_at, '')
 		FROM observations
 		WHERE (? = '' OR project = ?)
-		  AND (? = '' OR created_at > ? OR updated_at > ? OR COALESCE(last_seen_at, '') > ? OR COALESCE(deleted_at, '') > ?)
-		ORDER BY created_at DESC, id DESC
-	`, project, project, since, since, since, since, since)
+		  AND (? = '' OR created_at > ? OR updated_at > ? OR COALESCE(valid_at, created_at) > ? OR COALESCE(last_seen_at, '') > ? OR COALESCE(deleted_at, '') > ?)
+		ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
+	`, project, project, since, since, since, since, since, since)
 	if err != nil {
 		return nil, fmt.Errorf("list observations for export: %w", err)
 	}
@@ -364,9 +364,9 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 		_, err := tx.ExecContext(ctx, `
 			INSERT INTO observations (
 				id, session_id, type, title, content, tool_name, project, scope, topic_key,
-				normalized_hash, revision_count, duplicate_count, last_seen_at, created_at, updated_at, deleted_at
+				normalized_hash, revision_count, duplicate_count, last_seen_at, created_at, updated_at, valid_at, deleted_at
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET
 				session_id = excluded.session_id,
 				type = excluded.type,
@@ -382,11 +382,13 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 				last_seen_at = excluded.last_seen_at,
 				created_at = excluded.created_at,
 				updated_at = excluded.updated_at,
+				valid_at = excluded.valid_at,
 				deleted_at = excluded.deleted_at
 		`, idToUse, nullIfBlank(sessionID), observationType, title, content, nullIfBlank(observation.ToolName), project, scope, nullIfBlank(topicKey), hash,
 			observation.RevisionCount, observation.DuplicateCount, nullIfBlank(observation.LastSeenAt),
 			defaultString(observation.CreatedAt, time.Now().UTC().Format(time.RFC3339)),
 			defaultString(observation.UpdatedAt, time.Now().UTC().Format(time.RFC3339)),
+			defaultString(observation.ValidAt, defaultString(observation.CreatedAt, time.Now().UTC().Format(time.RFC3339))),
 			nullIfBlank(observation.DeletedAt))
 		if err != nil {
 			return 0, fmt.Errorf("import observation %d: %w", observation.ID, err)
@@ -397,13 +399,14 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO observations (
 			session_id, type, title, content, tool_name, project, scope, topic_key,
-			normalized_hash, revision_count, duplicate_count, last_seen_at, created_at, updated_at, deleted_at
+			normalized_hash, revision_count, duplicate_count, last_seen_at, created_at, updated_at, valid_at, deleted_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, nullIfBlank(sessionID), observationType, title, content, nullIfBlank(observation.ToolName), project, scope, nullIfBlank(topicKey), hash,
 		observation.RevisionCount, observation.DuplicateCount, nullIfBlank(observation.LastSeenAt),
 		defaultString(observation.CreatedAt, time.Now().UTC().Format(time.RFC3339)),
 		defaultString(observation.UpdatedAt, time.Now().UTC().Format(time.RFC3339)),
+		defaultString(observation.ValidAt, defaultString(observation.CreatedAt, time.Now().UTC().Format(time.RFC3339))),
 		nullIfBlank(observation.DeletedAt))
 	if err != nil {
 		return 0, fmt.Errorf("import observation %d: %w", observation.ID, err)

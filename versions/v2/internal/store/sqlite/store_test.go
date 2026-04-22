@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestOpenAndInitCreatesSchema(t *testing.T) {
@@ -31,6 +32,81 @@ func TestOpenAndInitCreatesSchema(t *testing.T) {
 	assertTableExists(t, store.DB(), "prompts_fts")
 	assertTableExists(t, store.DB(), "sync_chunks")
 	assertTableExists(t, store.DB(), "project_aliases")
+}
+
+func TestInitMigratesLegacyObservationsWithSemanticClock(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if _, err := store.DB().ExecContext(ctx, `
+		CREATE TABLE observations (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT,
+			type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			content TEXT NOT NULL,
+			tool_name TEXT,
+			project TEXT NOT NULL,
+			scope TEXT NOT NULL DEFAULT 'project',
+			topic_key TEXT,
+			normalized_hash TEXT NOT NULL DEFAULT '',
+			revision_count INTEGER NOT NULL DEFAULT 0,
+			duplicate_count INTEGER NOT NULL DEFAULT 0,
+			last_seen_at TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			deleted_at TEXT
+		)
+	`); err != nil {
+		t.Fatalf("create legacy observations table: %v", err)
+	}
+	if _, err := store.DB().ExecContext(ctx, `
+		INSERT INTO observations (type, title, content, project, created_at, updated_at)
+		VALUES ('decision', 'Legacy note', 'Legacy content', 'legacy', '2026-01-01T00:00:00Z', '2026-04-01T00:00:00Z')
+	`); err != nil {
+		t.Fatalf("insert legacy observation: %v", err)
+	}
+	if _, err := store.DB().ExecContext(ctx, `
+		CREATE VIRTUAL TABLE observations_fts USING fts5(
+			title,
+			content,
+			tool_name,
+			type,
+			project,
+			content='observations',
+			content_rowid='id'
+		)
+	`); err != nil {
+		t.Fatalf("create legacy observations fts: %v", err)
+	}
+	if _, err := store.DB().ExecContext(ctx, `
+		INSERT INTO observations_fts(rowid, title, content, tool_name, type, project)
+		VALUES (1, 'Legacy note', 'Legacy content', '', 'decision', 'legacy')
+	`); err != nil {
+		t.Fatalf("seed legacy observations fts: %v", err)
+	}
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("migrate legacy store: %v", err)
+	}
+
+	observation, err := store.GetObservation(ctx, 1)
+	if err != nil {
+		t.Fatalf("get migrated observation: %v", err)
+	}
+	if observation.ValidAt != observation.CreatedAt {
+		t.Fatalf("legacy metadata update should not become semantic recency: %+v", observation)
+	}
 }
 
 func TestInitRepairsEndedActiveSessions(t *testing.T) {
@@ -224,6 +300,189 @@ func TestProjectAliasesResolveWritesReadsAndMerges(t *testing.T) {
 	}
 	if prompt.Project != "proyecto-kerebrom" {
 		t.Fatalf("expected prompt to resolve through merge alias, got %+v", prompt)
+	}
+}
+
+func TestRetrievalUsesSemanticValidityClock(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	oldTime := mustParseTime(t, "2026-01-01T00:00:00Z")
+	newTime := mustParseTime(t, "2026-04-01T00:00:00Z")
+
+	oldObservation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:      "decision",
+		Title:     "Falage strategy outcome",
+		Content:   "Falage strategy outcome was initially thought to be valid. Falage strategy outcome valid valid valid.",
+		Project:   "Proyecto Falage",
+		CreatedAt: oldTime,
+	})
+	if err != nil {
+		t.Fatalf("save old observation: %v", err)
+	}
+	newObservation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:      "bugfix",
+		Title:     "Falage strategy outcome corrected",
+		Content:   "Falage strategy outcome was corrected after validation; the corrected result is the source of truth.",
+		Project:   "Proyecto Falage",
+		CreatedAt: newTime,
+	})
+	if err != nil {
+		t.Fatalf("save new observation: %v", err)
+	}
+
+	results, err := store.SearchObservations(ctx, SearchOptions{
+		Query:   "Falage strategy outcome",
+		Project: "Proyecto Falage",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("search observations: %v", err)
+	}
+	if len(results) < 2 {
+		t.Fatalf("expected both observations, got %+v", results)
+	}
+	if results[0].ID != newObservation.ID {
+		t.Fatalf("expected semantically latest observation %d before old observation %d, got %+v", newObservation.ID, oldObservation.ID, results)
+	}
+
+	recent, err := store.ListObservations(ctx, ListObservationOptions{
+		Project: "Proyecto Falage",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("list observations: %v", err)
+	}
+	if len(recent) == 0 || recent[0].ID != newObservation.ID {
+		t.Fatalf("expected recent list to use valid_at and return %d first, got %+v", newObservation.ID, recent)
+	}
+}
+
+func TestTopicKeyUpdateRefreshesSemanticValidityClock(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	createdAt := mustParseTime(t, "2026-01-01T00:00:00Z")
+	original, err := store.SaveObservation(ctx, ObservationInput{
+		Type:      "decision",
+		Title:     "Claude Chat behavior",
+		Content:   "Claude Chat behavior was believed to be fully automatic.",
+		Project:   "Proyecto Kerebrom",
+		TopicKey:  "kerebrom/claude-chat/behavior",
+		CreatedAt: createdAt,
+	})
+	if err != nil {
+		t.Fatalf("save original observation: %v", err)
+	}
+	updated, err := store.SaveObservation(ctx, ObservationInput{
+		Type:     "bugfix",
+		Title:    "Claude Chat behavior corrected",
+		Content:  "Claude Chat behavior is host-bounded; Kerebrom can instruct but cannot force every tool call.",
+		Project:  "Proyecto Kerebrom",
+		TopicKey: "kerebrom/claude-chat/behavior",
+	})
+	if err != nil {
+		t.Fatalf("save updated observation: %v", err)
+	}
+
+	if updated.ID != original.ID {
+		t.Fatalf("same topic_key should update existing observation, got original=%d updated=%d", original.ID, updated.ID)
+	}
+	if updated.ValidAt == "" || updated.ValidAt == updated.CreatedAt {
+		t.Fatalf("semantic correction should refresh valid_at without changing created_at: %+v", updated)
+	}
+}
+
+func TestProjectMergeDoesNotMakeHistoricalKnowledgeSemanticallyRecent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	oldTime := mustParseTime(t, "2026-01-01T00:00:00Z")
+	newTime := mustParseTime(t, "2026-04-01T00:00:00Z")
+	oldObservation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:      "discovery",
+		Title:     "Legacy Kerebrom note",
+		Content:   "Historical Kerebrom note before project consolidation.",
+		Project:   "Kerebrom",
+		CreatedAt: oldTime,
+	})
+	if err != nil {
+		t.Fatalf("save old observation: %v", err)
+	}
+	newObservation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:      "release",
+		Title:     "Kerebrom current release",
+		Content:   "Current Kerebrom release after project consolidation.",
+		Project:   "Proyecto Kerebrom",
+		CreatedAt: newTime,
+	})
+	if err != nil {
+		t.Fatalf("save new observation: %v", err)
+	}
+
+	if _, err := store.MergeProjects(ctx, []string{"Kerebrom"}, "Proyecto Kerebrom"); err != nil {
+		t.Fatalf("merge project: %v", err)
+	}
+
+	oldAfterMerge, err := store.GetObservation(ctx, oldObservation.ID)
+	if err != nil {
+		t.Fatalf("get old observation after merge: %v", err)
+	}
+	if oldAfterMerge.ValidAt != oldObservation.ValidAt {
+		t.Fatalf("project merge should not change semantic valid_at: before=%+v after=%+v", oldObservation, oldAfterMerge)
+	}
+
+	recent, err := store.ListObservations(ctx, ListObservationOptions{
+		Project: "Proyecto Kerebrom",
+		Limit:   5,
+	})
+	if err != nil {
+		t.Fatalf("list observations: %v", err)
+	}
+	if len(recent) == 0 || recent[0].ID != newObservation.ID {
+		t.Fatalf("expected current observation %d before merged historical observation %d, got %+v", newObservation.ID, oldObservation.ID, recent)
 	}
 }
 
@@ -500,6 +759,15 @@ func TestSessionObservationSearchAndStats(t *testing.T) {
 	if stats.ActiveSessionCount != 0 {
 		t.Fatalf("expected no active sessions after idempotent restart, got %+v", stats)
 	}
+}
+
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", value, err)
+	}
+	return parsed
 }
 
 func assertTableExists(t *testing.T, db *sql.DB, name string) {

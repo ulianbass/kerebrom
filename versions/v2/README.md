@@ -67,7 +67,7 @@ kerebrom update
 | Invalidate wrong memory | `forget` |
 | Admin project consolidation and aliases | `projects` |
 
-Activation is every user message when Kerebrom tools are available. Observations are interpreted memories, not raw transcripts. Use `What / Why / Where / Learned` only when there is a durable fact to preserve. Project consolidation persists aliases so old names keep resolving to the canonical project.
+Activation is every user message when Kerebrom tools are available. Observations are interpreted memories, not raw transcripts. Use `What / Why / Where / Learned` only when there is a durable fact to preserve. Project consolidation persists aliases so old names keep resolving to the canonical project. Retrieval uses `valid_at` as the semantic chronology, so newer corrections and revalidated facts outrank stale memories without erasing history.
 
 ## Architecture
 

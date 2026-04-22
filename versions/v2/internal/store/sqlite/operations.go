@@ -95,13 +95,23 @@ func (s *Store) UpdateObservation(ctx context.Context, input UpdateObservationIn
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	hash := normalizedHash(observationType, project, scope, title, content, topicKey)
+	validAt := current.ValidAt
+	if strings.TrimSpace(validAt) == "" {
+		validAt = current.CreatedAt
+	}
+	if observationType != current.Type ||
+		title != current.Title ||
+		content != current.Content ||
+		topicKey != current.TopicKey {
+		validAt = now
+	}
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE observations
 		SET type = ?, title = ?, content = ?, tool_name = ?, project = ?, scope = ?,
 			topic_key = ?, normalized_hash = ?, revision_count = revision_count + 1,
-			updated_at = ?
+			updated_at = ?, valid_at = ?
 		WHERE id = ? AND deleted_at IS NULL
-	`, observationType, title, content, nullIfBlank(toolName), project, scope, nullIfBlank(topicKey), hash, now, input.ID)
+	`, observationType, title, content, nullIfBlank(toolName), project, scope, nullIfBlank(topicKey), hash, now, validAt, input.ID)
 	if err != nil {
 		return Observation{}, fmt.Errorf("update observation: %w", err)
 	}
@@ -256,14 +266,14 @@ func (s *Store) TimelineAroundObservation(ctx context.Context, observationID int
 		SELECT id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
 			project, scope, COALESCE(topic_key, ''), normalized_hash,
 			revision_count, duplicate_count, COALESCE(last_seen_at, ''),
-			created_at, updated_at, COALESCE(deleted_at, '')
+			created_at, updated_at, COALESCE(valid_at, created_at), COALESCE(deleted_at, '')
 		FROM observations
 		WHERE deleted_at IS NULL
 		  AND COALESCE(session_id, '') = ?
-		  AND (created_at < ? OR (created_at = ? AND id < ?))
-		ORDER BY created_at DESC, id DESC
+		  AND (COALESCE(valid_at, created_at) < ? OR (COALESCE(valid_at, created_at) = ? AND id < ?))
+		ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
 		LIMIT ?
-	`, center.SessionID, center.CreatedAt, center.CreatedAt, center.ID, before)
+	`, center.SessionID, center.ValidAt, center.ValidAt, center.ID, before)
 	if err != nil {
 		return nil, fmt.Errorf("timeline before: %w", err)
 	}
@@ -277,14 +287,14 @@ func (s *Store) TimelineAroundObservation(ctx context.Context, observationID int
 		SELECT id, COALESCE(session_id, ''), type, title, content, COALESCE(tool_name, ''),
 			project, scope, COALESCE(topic_key, ''), normalized_hash,
 			revision_count, duplicate_count, COALESCE(last_seen_at, ''),
-			created_at, updated_at, COALESCE(deleted_at, '')
+			created_at, updated_at, COALESCE(valid_at, created_at), COALESCE(deleted_at, '')
 		FROM observations
 		WHERE deleted_at IS NULL
 		  AND COALESCE(session_id, '') = ?
-		  AND (created_at > ? OR (created_at = ? AND id > ?))
-		ORDER BY created_at ASC, id ASC
+		  AND (COALESCE(valid_at, created_at) > ? OR (COALESCE(valid_at, created_at) = ? AND id > ?))
+		ORDER BY COALESCE(valid_at, created_at) ASC, id ASC
 		LIMIT ?
-	`, center.SessionID, center.CreatedAt, center.CreatedAt, center.ID, after)
+	`, center.SessionID, center.ValidAt, center.ValidAt, center.ID, after)
 	if err != nil {
 		return nil, fmt.Errorf("timeline after: %w", err)
 	}
@@ -509,6 +519,7 @@ func scanObservations(rows *sql.Rows) ([]Observation, error) {
 			&observation.LastSeenAt,
 			&observation.CreatedAt,
 			&observation.UpdatedAt,
+			&observation.ValidAt,
 			&observation.DeletedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan observation: %w", err)
