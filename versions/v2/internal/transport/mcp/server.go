@@ -12,6 +12,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/ulianbass/kerebrom/internal/config"
+	"github.com/ulianbass/kerebrom/internal/contextgov"
 	projectmeta "github.com/ulianbass/kerebrom/internal/project"
 	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
@@ -368,7 +369,7 @@ func (s *Server) addTool(name string, tool mcp.Tool, handler mcpserver.ToolHandl
 func (s *Server) registerTools() {
 	s.addTool("context",
 		mcp.NewTool("context",
-			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering EVERY user message when this tool is available, including short or ambiguous prompts. Opens or resumes the session, saves only substantive prompts, returns prior observations ordered by semantic valid_at so newer corrections outrank stale facts."),
+			mcp.WithDescription("Load Kerebrom memory. ALWAYS call BEFORE answering EVERY user message when this tool is available, including short or ambiguous prompts. Opens or resumes the session, saves only substantive prompts, and returns a context_governor plus prior observations ordered by semantic valid_at so newer corrections outrank stale facts."),
 			mcp.WithToolAnnotation(writeTool),
 			mcp.WithString("prompt",
 				mcp.Description("Current user prompt. Kerebrom saves it as prompt history when substantive."),
@@ -394,7 +395,7 @@ func (s *Server) registerTools() {
 
 	s.addTool("recall",
 		mcp.NewTool("recall",
-			mcp.WithDescription("Search Kerebrom memory. ALWAYS call BEFORE answering questions about the user, their projects, preferences, history, or prior decisions. Results prioritize semantic valid_at; when memories conflict, prefer the latest corrected/validated observation."),
+			mcp.WithDescription("Search Kerebrom memory. ALWAYS call BEFORE answering questions about the user, their projects, preferences, history, or prior decisions. Results include context_governor guidance and prioritize semantic valid_at; when memories conflict, prefer the latest corrected/validated observation."),
 			mcp.WithToolAnnotation(readOnlyTool),
 			mcp.WithString("query",
 				mcp.Required(),
@@ -545,6 +546,8 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary with goals, decisions, changes, risks, files, next steps.
 
 5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of the memory. When two memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory is still authoritative. If you are saving a correction, reuse the same topic_key whenever possible so the old fact is updated instead of stored as an equal contradiction.
+
+6. CONTEXT GOVERNOR: Every context/recall payload includes context_governor. Follow its sequence exactly: think -> search -> analyze -> answer. If it reports conflict_candidates, call timeline or recall again before making a claim that depends on those memories.
 
 HOW TO SAVE — the What / Why / Where / Learned framework:
 
@@ -971,6 +974,7 @@ func (s *Server) contextPayload(ctx context.Context, project string, lookupProje
 		"project_filter":         strings.TrimSpace(lookupProject),
 		"query":                  query,
 		"project_filter_relaxed": projectFilterRelaxed,
+		"context_governor":       contextgov.Build(recent, matches, lookupProject, projectFilterRelaxed),
 		"chronology_policy":      "Use valid_at as the semantic memory timestamp. If observations conflict, prefer the newest corrected/validated observation and use timeline when uncertainty remains.",
 		"stats":                  stats,
 		"recent_sessions":        sessions,

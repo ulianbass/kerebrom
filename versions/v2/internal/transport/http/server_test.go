@@ -207,6 +207,7 @@ func TestServerLifecycleAndSearch(t *testing.T) {
 
 	var contextPayload struct {
 		Query              string               `json:"query"`
+		ContextGovernor    map[string]any       `json:"context_governor"`
 		Stats              sqlite.Stats         `json:"stats"`
 		RecentObservations []sqlite.Observation `json:"recent_observations"`
 		Matches            []sqlite.Observation `json:"matches"`
@@ -216,6 +217,9 @@ func TestServerLifecycleAndSearch(t *testing.T) {
 	}
 	if contextPayload.Query != "shared local store" || len(contextPayload.Matches) != 1 || len(contextPayload.RecentObservations) != 1 {
 		t.Fatalf("unexpected context payload: %+v", contextPayload)
+	}
+	if contextPayload.ContextGovernor["primary_clock"] != "valid_at" {
+		t.Fatalf("context governor missing valid_at policy: %+v", contextPayload.ContextGovernor)
 	}
 
 	rec = httptest.NewRecorder()
@@ -259,7 +263,7 @@ func TestServerLifecycleAndSearch(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &exportPayload); err != nil {
 		t.Fatalf("decode export payload: %v", err)
 	}
-	if len(exportPayload.Observations) != 1 || len(exportPayload.Prompts) != 1 {
+	if len(exportPayload.Observations) != 1 || len(exportPayload.ObservationEvents) == 0 || len(exportPayload.Prompts) != 1 {
 		t.Fatalf("unexpected export payload: %+v", exportPayload)
 	}
 

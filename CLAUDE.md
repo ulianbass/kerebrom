@@ -18,6 +18,7 @@ Verify:
 ```bash
 kerebrom version
 kerebrom stats
+kerebrom doctor --deep
 ```
 
 Then tell the user to fully restart Claude Desktop, Claude Code, Codex, Cursor, or any other open AI client so the new MCP server and instruction files are loaded.
@@ -40,6 +41,7 @@ When Kerebrom is installed in an AI client, the agent should treat it as the dur
 - Call `summary` before ending substantial work or after compaction.
 - Use `forget` only when the user says memory is wrong or obsolete.
 - Treat `valid_at` as the semantic memory clock. When observations conflict, prefer the newest corrected or revalidated observation unless the user explicitly says an older memory is still authoritative.
+- Follow `context_governor` when it appears in context/recall payloads: think, search, analyze, then answer; use `timeline` before claiming anything that depends on conflict candidates.
 
 The saved observation format should be concise and interpreted:
 

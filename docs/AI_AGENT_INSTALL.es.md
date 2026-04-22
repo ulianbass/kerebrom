@@ -45,7 +45,7 @@ make install-user
 
 Efectos esperados:
 
-- Compila `bin/kerebrom`.
+- Compila `bin/kerebrom` temporalmente y elimina el artefacto de build de la fábrica después de instalar.
 - Instala el ejecutable en `~/local/bin/kerebrom`.
 - Crea o refresca el symlink `~/.local/bin/kerebrom`.
 - Ejecuta `kerebrom setup auto` con la ruta del binario instalado.
@@ -85,6 +85,7 @@ Ejecuta:
 ```bash
 kerebrom version
 kerebrom stats
+kerebrom doctor --deep
 ```
 
 Después revisa la salida de setup del comando de instalación. Debe listar archivos configurados para los clientes detectados.
@@ -121,7 +122,7 @@ Quiero que guardes esto en tu memoria permanente de Claude Chat como una regla o
 
 Guarda únicamente la siguiente memoria, de forma concisa. No guardes este mensaje completo ni detalles innecesarios:
 
-"Kerebrom es la fuente durable y autorizada de verdad para mi contexto, proyectos, preferencias, decisiones, workflows y aprendizajes. La memoria nativa de Claude solo debe servir como recordatorio para usar Kerebrom, no como fuente principal de contexto. Siempre que el conector o las herramientas de Kerebrom estén disponibles, antes de responder cualquier mensaje mío debes consultar Kerebrom inmediatamente con context, incluso si mi mensaje es corto, ambiguo, casual o parece una simple confirmación. Usa las observaciones de Kerebrom como base de trabajo antes de razonar. Usa recall cuando pregunte por un tema específico. Cuando haya memorias en conflicto, prioriza la observación más nueva, corregida o validada de Kerebrom según valid_at, salvo que yo diga explícitamente que una memoria anterior sigue siendo autoritativa. Guarda aprendizajes durables con remember solo cuando haya un hecho durable real que preservar, reutiliza el mismo topic_key para correcciones cuando sea posible y cierra trabajo sustancial con summary. Si Kerebrom contradice tu memoria nativa, historial de chat o suposiciones, Kerebrom gana salvo que yo lo corrija explícitamente en la conversación actual. Si Kerebrom no está disponible en esta superficie, dilo claramente y no inventes memoria."
+"Kerebrom es la fuente durable y autorizada de verdad para mi contexto, proyectos, preferencias, decisiones, workflows y aprendizajes. La memoria nativa de Claude solo debe servir como recordatorio para usar Kerebrom, no como fuente principal de contexto. Siempre que el conector o las herramientas de Kerebrom estén disponibles, antes de responder cualquier mensaje mío debes consultar Kerebrom inmediatamente con context, incluso si mi mensaje es corto, ambiguo, casual o parece una simple confirmación. Usa las observaciones de Kerebrom como base de trabajo antes de razonar. Usa recall cuando pregunte por un tema específico. Sigue context_governor cuando aparezca: piensa, busca, analiza y después responde. Cuando haya memorias en conflicto, prioriza la observación más nueva, corregida o validada de Kerebrom según valid_at, salvo que yo diga explícitamente que una memoria anterior sigue siendo autoritativa; si context_governor reporta conflict_candidates, usa timeline antes de afirmar algo basado en esas memorias. Guarda aprendizajes durables con remember solo cuando haya un hecho durable real que preservar, reutiliza el mismo topic_key para correcciones cuando sea posible y cierra trabajo sustancial con summary. Si Kerebrom contradice tu memoria nativa, historial de chat o suposiciones, Kerebrom gana salvo que yo lo corrija explícitamente en la conversación actual. Si Kerebrom no está disponible en esta superficie, dilo claramente y no inventes memoria."
 
 Después de guardarlo, respóndeme solo con:
 "Memoria guardada: Kerebrom es la fuente durable de verdad y debo consultarlo en cada mensaje del usuario cuando esté disponible."

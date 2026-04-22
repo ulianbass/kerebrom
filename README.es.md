@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.0.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.7) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.0](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.0) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -21,6 +21,7 @@ Los clientes de IA suelen recordar en silos separados. Claude Code, Claude Deskt
 | Los agentes guardan transcripciones ruidosas | `remember` guarda observaciones destiladas, no dumps crudos de conversación. |
 | Claude y Codex saben cosas distintas | Todos los clientes configurados leen y escriben el mismo almacén SQLite local. |
 | El setup es frágil | `setup auto` detecta clientes instalados y escribe sus superficies nativas de configuración. |
+| Reaparecen hechos viejos o contradictorios | `valid_at`, `context_governor` y el trust ledger vuelven explícitos la recencia, los conflictos y la procedencia de cada memoria. |
 | La memoria cloud es riesgosa | MCP stdio local y hooks locales son el default; MCP remoto es solo opt-in. |
 
 ## Instalación
@@ -102,6 +103,8 @@ El usuario no debería tener que decir "usa Kerebrom" o "guarda esto" en cada tu
 
 Las observaciones se ordenan por `valid_at`, la fecha semántica de cuándo una memoria fue afirmada, corregida o revalidada por última vez. El mantenimiento administrativo, como consolidar proyectos, no hace que hechos viejos parezcan nuevos, y las correcciones guardadas con el mismo `topic_key` actualizan la memoria canónica en vez de dejar contradicciones con la misma prioridad.
 
+Cada respuesta de contexto también incluye `context_governor`: un contrato compacto de decisión que le indica al agente pensar, buscar, analizar y después responder; priorizar coincidencias de la consulta sobre recencia genérica; y llamar `timeline` cuando las memorias devueltas entren en conflicto. Cada observación tiene un trust ledger local con eventos de creación, actualización, reafirmación, importación y soft-delete para auditar por qué una memoria se considera vigente.
+
 ## Modelo De Seguridad Local-First
 
 Kerebrom es privado por defecto:
@@ -119,6 +122,7 @@ Kerebrom es privado por defecto:
 kerebrom version
 kerebrom update --check
 kerebrom update
+kerebrom doctor --deep
 kerebrom setup auto
 kerebrom setup all
 kerebrom stats
@@ -163,6 +167,7 @@ make build
 versions/v2/
   cmd/kerebrom/             entrada CLI
   internal/cli/             comandos, hooks, TUI
+  internal/contextgov/      contrato de gobierno de contexto
   internal/setup/           setup local de clientes IA y limpieza v1
   internal/store/sqlite/    almacén SQLite + FTS5
   internal/transport/mcp/   servidor MCP con tools semánticos

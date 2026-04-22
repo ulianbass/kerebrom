@@ -45,7 +45,7 @@ make install-user
 
 Expected side effects:
 
-- Builds `bin/kerebrom`.
+- Builds `bin/kerebrom` temporarily, then removes the factory build artifact after installation.
 - Installs the executable at `~/local/bin/kerebrom`.
 - Creates or refreshes the symlink `~/.local/bin/kerebrom`.
 - Runs `kerebrom setup auto` with the installed binary path.
@@ -85,6 +85,7 @@ Run:
 ```bash
 kerebrom version
 kerebrom stats
+kerebrom doctor --deep
 ```
 
 Then verify setup output from the install command. It should list files configured for the detected clients.
@@ -121,7 +122,7 @@ I want you to save this in your permanent Claude Chat memory as an operational r
 
 Save only the following memory, concisely. Do not save this whole message or unnecessary details:
 
-"Kerebrom is the durable and authoritative source of truth for my context, projects, preferences, decisions, workflows, and learnings. Claude's native memory should only serve as a reminder to use Kerebrom, not as the primary source of context. Whenever the Kerebrom connector or tools are available, before answering any user message you must immediately consult Kerebrom with context, even if my message is short, ambiguous, casual, or looks like an acknowledgement. Use Kerebrom's observations as working knowledge before reasoning. Use recall when I ask about a specific topic. When memories conflict, prefer the newest corrected or validated Kerebrom observation by valid_at unless I explicitly say an older memory is still authoritative. Save durable learnings with remember only when there is a real durable fact to preserve, reuse the same topic_key for corrections when possible, and close substantial work with summary. If Kerebrom contradicts your native memory, chat history, or assumptions, Kerebrom wins unless I explicitly correct it in the current conversation. If Kerebrom is not available in this surface, say so clearly and do not invent memory."
+"Kerebrom is the durable and authoritative source of truth for my context, projects, preferences, decisions, workflows, and learnings. Claude's native memory should only serve as a reminder to use Kerebrom, not as the primary source of context. Whenever the Kerebrom connector or tools are available, before answering any user message you must immediately consult Kerebrom with context, even if my message is short, ambiguous, casual, or looks like an acknowledgement. Use Kerebrom's observations as working knowledge before reasoning. Use recall when I ask about a specific topic. Follow context_governor when it appears: think, search, analyze, then answer. When memories conflict, prefer the newest corrected or validated Kerebrom observation by valid_at unless I explicitly say an older memory is still authoritative; if context_governor reports conflict_candidates, use timeline before making claims based on those memories. Save durable learnings with remember only when there is a real durable fact to preserve, reuse the same topic_key for corrections when possible, and close substantial work with summary. If Kerebrom contradicts your native memory, chat history, or assumptions, Kerebrom wins unless I explicitly correct it in the current conversation. If Kerebrom is not available in this surface, say so clearly and do not invent memory."
 
 After saving it, reply only with:
 "Memory saved: Kerebrom is the durable source of truth and I should consult it on every user message when available."

@@ -6,6 +6,8 @@ Run through this list before tagging a new v2.x release.
 
 - [ ] `go build ./...` succeeds with no warnings.
 - [ ] `go test ./...` reports `ok` for every package.
+- [ ] `go vet ./...` succeeds.
+- [ ] `kerebrom doctor --deep` reports no FAIL after installing the release candidate.
 - [ ] No new external dependencies in `go.mod` (check `git diff go.mod`).
 - [ ] No leftover `mem_*` references in user-visible strings:
   ```bash

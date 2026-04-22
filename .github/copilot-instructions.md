@@ -14,6 +14,7 @@ Verify with:
 ```bash
 kerebrom version
 kerebrom stats
+kerebrom doctor --deep
 ```
 
 Do not enable remote `mcp-http`, delete memory, import backups, or modify unrelated AI-client settings unless the user explicitly asks. Kerebrom is local-first by default and stores runtime memory in `~/.kerebrom/`.

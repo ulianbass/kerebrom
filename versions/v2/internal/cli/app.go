@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ulianbass/kerebrom/internal/config"
+	"github.com/ulianbass/kerebrom/internal/contextgov"
 	projectdetect "github.com/ulianbass/kerebrom/internal/project"
 	"github.com/ulianbass/kerebrom/internal/setup"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
@@ -52,6 +53,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runTimeline(args[1:], stdout, stderr)
 	case "stats":
 		return runStats(args[1:], stdout, stderr)
+	case "doctor":
+		return runDoctor(args[1:], stdout, stderr)
 	case "export":
 		return runExport(args[1:], stdout, stderr)
 	case "import":
@@ -305,7 +308,13 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	governor := contextgov.Build(recent, matches, lookupProject, lookupProject == "")
 	fmt.Fprintf(stdout, "project=%s project_filter=%s query=%s\n", strings.TrimSpace(*project), strings.TrimSpace(lookupProject), queryText)
+	fmt.Fprintf(stdout, "context_governor: %s canonical_topics=%d conflicts=%d\n",
+		contextgov.SummaryText(governor),
+		governor.CanonicalTopicCount,
+		len(governor.ConflictCandidates),
+	)
 	fmt.Fprintf(stdout, "stats: sessions=%d active_sessions=%d observations=%d prompts=%d projects=%d\n",
 		stats.SessionCount,
 		stats.ActiveSessionCount,
@@ -500,8 +509,8 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "exported %d aliases, %d sessions, %d observations, %d prompts to %s\n",
-		len(data.ProjectAliases), len(data.Sessions), len(data.Observations), len(data.Prompts), *output)
+	fmt.Fprintf(stdout, "exported %d aliases, %d sessions, %d observations, %d events, %d prompts to %s\n",
+		len(data.ProjectAliases), len(data.Sessions), len(data.Observations), len(data.ObservationEvents), len(data.Prompts), *output)
 	return 0
 }
 
@@ -540,7 +549,7 @@ func runImport(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "imported %d aliases, %d sessions, %d observations, %d prompts\n", summary.Aliases, summary.Sessions, summary.Observations, summary.Prompts)
+	fmt.Fprintf(stdout, "imported %d aliases, %d sessions, %d observations, %d events, %d prompts\n", summary.Aliases, summary.Sessions, summary.Observations, summary.Events, summary.Prompts)
 	return 0
 }
 
@@ -582,8 +591,8 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "sync import: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(stdout, "imported_chunks=%d skipped_chunks=%d aliases=%d sessions=%d observations=%d prompts=%d\n",
-			result.Imported, result.Skipped, result.Counts.Aliases, result.Counts.Sessions, result.Counts.Observations, result.Counts.Prompts)
+		fmt.Fprintf(stdout, "imported_chunks=%d skipped_chunks=%d aliases=%d sessions=%d observations=%d events=%d prompts=%d\n",
+			result.Imported, result.Skipped, result.Counts.Aliases, result.Counts.Sessions, result.Counts.Observations, result.Counts.Events, result.Counts.Prompts)
 		return 0
 	default:
 		result, err := syncstore.Export(context.Background(), store, opts)
@@ -1044,6 +1053,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprintln(w, "  context         Build a local context bundle")
 	fmt.Fprintln(w, "  timeline        Show recent observations")
 	fmt.Fprintln(w, "  stats           Show memory counts")
+	fmt.Fprintln(w, "  doctor          Audit local install, database, agents, and factory state")
 	fmt.Fprintln(w, "  tui             Launch terminal dashboard")
 	fmt.Fprintln(w, "  export          Export memory data as JSON")
 	fmt.Fprintln(w, "  import          Import memory data from JSON")
@@ -1138,6 +1148,12 @@ func printTimelinePayload(w io.Writer, payload map[string]any) {
 	if observation, ok := payload["observation"].(sqlite.Observation); ok {
 		fmt.Fprintln(w, "observation:")
 		printObservation(w, observation)
+	}
+	if events, ok := payload["events"].([]sqlite.ObservationEvent); ok && len(events) > 0 {
+		fmt.Fprintln(w, "trust ledger:")
+		for _, event := range events {
+			fmt.Fprintf(w, "[event:%d] observation=%d %s | %s | %s\n", event.ID, event.ObservationID, event.EventType, event.CreatedAt, oneLinePreview(event.Reason, 100))
+		}
 	}
 	if after, ok := payload["after"].([]sqlite.Observation); ok && len(after) > 0 {
 		fmt.Fprintln(w, "after:")

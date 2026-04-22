@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.0.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.0.7) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.0](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.0) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -21,6 +21,7 @@ AI clients usually remember in separate silos. Claude Code, Claude Desktop Chat,
 | Agents save noisy transcripts | `remember` stores distilled observations, not raw conversation dumps. |
 | Claude/Codex know different things | All configured clients read and write the same local SQLite store. |
 | Setup is fragile | `setup auto` detects installed clients and writes their native config surfaces. |
+| Old or contradictory facts resurface | `valid_at`, `context_governor`, and the trust ledger make recency, conflict handling, and memory provenance explicit. |
 | Cloud memory is risky | Local stdio MCP and local hooks are the default; remote MCP is opt-in only. |
 
 ## Install
@@ -102,6 +103,8 @@ The user should not have to say "use Kerebrom" or "save this" for every turn. Ac
 
 Observations are ordered by `valid_at`, the semantic timestamp for when a memory was last asserted, corrected, or revalidated. Administrative maintenance such as project consolidation does not make old facts look new, and corrections saved with the same `topic_key` update the canonical memory instead of leaving contradictory facts at equal priority.
 
+Every context response also includes `context_governor`: a compact decision contract that tells the agent to think, search, analyze, then answer; prefer query matches over generic recency; and call `timeline` when returned memories conflict. Every observation has a local trust-ledger trail of create, update, reassert, import, and soft-delete events so Kerebrom can audit why a memory is considered current.
+
 ## Local-First Security Model
 
 Kerebrom is private by default:
@@ -119,6 +122,7 @@ Kerebrom is private by default:
 kerebrom version
 kerebrom update --check
 kerebrom update
+kerebrom doctor --deep
 kerebrom setup auto
 kerebrom setup all
 kerebrom stats
@@ -163,6 +167,7 @@ make build
 versions/v2/
   cmd/kerebrom/             CLI entrypoint
   internal/cli/             commands, hooks, TUI
+  internal/contextgov/      context governance contract
   internal/setup/           local AI-client setup and v1 cleanup
   internal/store/sqlite/    SQLite + FTS5 memory store
   internal/transport/mcp/   MCP server with semantic tools

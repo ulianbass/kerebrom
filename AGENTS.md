@@ -20,6 +20,7 @@ make install-user
 ```bash
 kerebrom version
 kerebrom stats
+kerebrom doctor --deep
 ```
 
 5. Tell the user to fully restart open AI clients so they reload MCP and native instruction files.
@@ -56,6 +57,7 @@ Use `SETUP_AGENT=all` only when the user asks to configure every supported clien
 git diff --check
 cd versions/v2
 go test ./...
+kerebrom doctor --deep
 ```
 
 ## Product Promise
@@ -66,4 +68,4 @@ Kerebrom is a local-first persistent memory layer for AI agents. The intended us
 User -> AI client -> Kerebrom MCP -> local SQLite + FTS5 -> recovered project context -> AI client
 ```
 
-The user should not need to say "use Kerebrom" in every conversation. Configured agents should call `context` before answering every user message when Kerebrom tools are available, then call `recall`, `remember`, and `summary` according to the Kerebrom protocol. Activation is every turn; durable saving is only when there is something real to preserve. Retrieval uses `valid_at` as the semantic memory clock: newer corrections and revalidated observations outrank stale facts, while administrative metadata changes do not make old memories authoritative again.
+The user should not need to say "use Kerebrom" in every conversation. Configured agents should call `context` before answering every user message when Kerebrom tools are available, then call `recall`, `remember`, and `summary` according to the Kerebrom protocol. Activation is every turn; durable saving is only when there is something real to preserve. Retrieval uses `valid_at` as the semantic memory clock: newer corrections and revalidated observations outrank stale facts, while administrative metadata changes do not make old memories authoritative again. Context payloads include `context_governor`; agents should follow its think -> search -> analyze -> answer sequence and use `timeline` when it reports conflict candidates.

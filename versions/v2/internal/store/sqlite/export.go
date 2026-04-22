@@ -14,13 +14,14 @@ type ExportOptions struct {
 }
 
 type ExportData struct {
-	App            string         `json:"app"`
-	Schema         int            `json:"schema"`
-	ExportedAt     string         `json:"exported_at"`
-	ProjectAliases []ProjectAlias `json:"project_aliases"`
-	Sessions       []Session      `json:"sessions"`
-	Observations   []Observation  `json:"observations"`
-	Prompts        []Prompt       `json:"prompts"`
+	App               string             `json:"app"`
+	Schema            int                `json:"schema"`
+	ExportedAt        string             `json:"exported_at"`
+	ProjectAliases    []ProjectAlias     `json:"project_aliases"`
+	Sessions          []Session          `json:"sessions"`
+	Observations      []Observation      `json:"observations"`
+	ObservationEvents []ObservationEvent `json:"observation_events"`
+	Prompts           []Prompt           `json:"prompts"`
 }
 
 type ImportSummary struct {
@@ -28,6 +29,7 @@ type ImportSummary struct {
 	Observations int `json:"observations"`
 	Prompts      int `json:"prompts"`
 	Aliases      int `json:"aliases"`
+	Events       int `json:"events"`
 }
 
 func (s *Store) ExportData(ctx context.Context, opts ExportOptions) (ExportData, error) {
@@ -49,19 +51,24 @@ func (s *Store) ExportData(ctx context.Context, opts ExportOptions) (ExportData,
 	if err != nil {
 		return ExportData{}, err
 	}
+	events, err := s.listObservationEventsForExport(ctx, project, since)
+	if err != nil {
+		return ExportData{}, err
+	}
 	aliases, err := s.listProjectAliases(ctx, project)
 	if err != nil {
 		return ExportData{}, err
 	}
 
 	return ExportData{
-		App:            "kerebrom",
-		Schema:         1,
-		ExportedAt:     time.Now().UTC().Format(time.RFC3339),
-		ProjectAliases: aliases,
-		Sessions:       sessions,
-		Observations:   observations,
-		Prompts:        prompts,
+		App:               "kerebrom",
+		Schema:            2,
+		ExportedAt:        time.Now().UTC().Format(time.RFC3339),
+		ProjectAliases:    aliases,
+		Sessions:          sessions,
+		Observations:      observations,
+		ObservationEvents: events,
+		Prompts:           prompts,
 	}, nil
 }
 
@@ -166,14 +173,39 @@ func (s *Store) ImportData(ctx context.Context, data ExportData) (ImportSummary,
 		summary.Sessions++
 	}
 
+	importedObservationIDs := map[int64]int64{}
 	for _, observation := range data.Observations {
 		if strings.TrimSpace(observation.Title) == "" || strings.TrimSpace(observation.Content) == "" {
 			continue
 		}
-		if _, err := s.importObservation(ctx, tx, observation); err != nil {
+		importedID, err := s.importObservation(ctx, tx, observation)
+		if err != nil {
 			return ImportSummary{}, err
 		}
+		if observation.ID > 0 && importedID > 0 {
+			importedObservationIDs[observation.ID] = importedID
+		}
 		summary.Observations++
+	}
+
+	for _, event := range data.ObservationEvents {
+		observationID := event.ObservationID
+		if mappedID := importedObservationIDs[event.ObservationID]; mappedID > 0 {
+			observationID = mappedID
+		}
+		if observationID <= 0 {
+			continue
+		}
+		event.ObservationID = observationID
+		if event.RelatedObservationID > 0 {
+			if mappedID := importedObservationIDs[event.RelatedObservationID]; mappedID > 0 {
+				event.RelatedObservationID = mappedID
+			}
+		}
+		if err := insertObservationEvent(ctx, tx, event); err != nil {
+			return ImportSummary{}, err
+		}
+		summary.Events++
 	}
 
 	for _, prompt := range data.Prompts {
@@ -306,6 +338,25 @@ func (s *Store) listObservationsForExport(ctx context.Context, project string, s
 	return scanObservations(rows)
 }
 
+func (s *Store) listObservationEventsForExport(ctx context.Context, project string, since string) ([]ObservationEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			e.id, e.observation_id, e.event_type, COALESCE(e.actor, ''), COALESCE(e.reason, ''),
+			COALESCE(e.related_observation_id, 0), e.created_at
+		FROM observation_events e
+		JOIN observations o ON o.id = e.observation_id
+		WHERE (? = '' OR o.project = ?)
+		  AND (? = '' OR e.created_at > ? OR o.created_at > ? OR o.updated_at > ? OR COALESCE(o.valid_at, o.created_at) > ? OR COALESCE(o.deleted_at, '') > ?)
+		ORDER BY e.created_at DESC, e.id DESC
+	`, project, project, since, since, since, since, since, since)
+	if err != nil {
+		return nil, fmt.Errorf("list observation events for export: %w", err)
+	}
+	defer rows.Close()
+
+	return scanObservationEvents(rows)
+}
+
 func (s *Store) listPromptsForExport(ctx context.Context, project string, since string) ([]Prompt, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, COALESCE(session_id, ''), content, project, created_at
@@ -393,6 +444,13 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 		if err != nil {
 			return 0, fmt.Errorf("import observation %d: %w", observation.ID, err)
 		}
+		_ = insertObservationEvent(ctx, tx, ObservationEvent{
+			ObservationID: idToUse,
+			EventType:     "imported",
+			Actor:         "kerebrom_import",
+			Reason:        "Observation imported or refreshed from export data.",
+			CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		})
 		return idToUse, nil
 	}
 
@@ -411,7 +469,18 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 	if err != nil {
 		return 0, fmt.Errorf("import observation %d: %w", observation.ID, err)
 	}
-	return result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	_ = insertObservationEvent(ctx, tx, ObservationEvent{
+		ObservationID: id,
+		EventType:     "imported",
+		Actor:         "kerebrom_import",
+		Reason:        "Observation imported from export data.",
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+	})
+	return id, nil
 }
 
 func (s *Store) importPrompt(ctx context.Context, tx *sql.Tx, prompt Prompt) error {

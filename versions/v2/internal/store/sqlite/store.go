@@ -88,6 +88,16 @@ type Observation struct {
 	DeletedAt      string `json:"deleted_at"`
 }
 
+type ObservationEvent struct {
+	ID                   int64  `json:"id"`
+	ObservationID        int64  `json:"observation_id"`
+	EventType            string `json:"event_type"`
+	Actor                string `json:"actor"`
+	Reason               string `json:"reason"`
+	RelatedObservationID int64  `json:"related_observation_id,omitempty"`
+	CreatedAt            string `json:"created_at"`
+}
+
 type SearchOptions struct {
 	Query   string
 	Project string
@@ -169,6 +179,9 @@ func (s *Store) Init(ctx context.Context) error {
 		return err
 	}
 	if err := s.ensureObservationSemanticClock(ctx); err != nil {
+		return err
+	}
+	if err := s.ensureObservationTrustLedger(ctx); err != nil {
 		return err
 	}
 
@@ -336,6 +349,23 @@ func (s *Store) ensureObservationSemanticClock(ctx context.Context) error {
 		ON observations(project, valid_at DESC)
 	`); err != nil {
 		return fmt.Errorf("create observation valid_at index: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Store) ensureObservationTrustLedger(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT INTO observation_events (observation_id, event_type, actor, reason, created_at)
+		SELECT id, 'created', 'kerebrom_migration', 'Backfilled trust ledger event for an existing observation.', created_at
+		FROM observations
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM observation_events
+			WHERE observation_events.observation_id = observations.id
+		)
+	`); err != nil {
+		return fmt.Errorf("backfill observation trust ledger: %w", err)
 	}
 
 	return nil
@@ -614,6 +644,9 @@ func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Ob
 	if err != nil {
 		return Observation{}, err
 	}
+	if err := s.recordObservationEvent(ctx, id, "created", defaultString(input.ToolName, "kerebrom"), "Observation created from distilled durable memory.", 0); err != nil {
+		return Observation{}, err
+	}
 
 	return observation, nil
 }
@@ -626,6 +659,9 @@ func (s *Store) bumpDuplicateObservation(ctx context.Context, id int64) (Observa
 		WHERE id = ?
 	`, now, now, now, id); err != nil {
 		return Observation{}, fmt.Errorf("update duplicate observation: %w", err)
+	}
+	if err := s.recordObservationEvent(ctx, id, "reasserted", "kerebrom", "Duplicate durable memory seen; duplicate_count and valid_at refreshed.", 0); err != nil {
+		return Observation{}, err
 	}
 	return s.GetObservation(ctx, id)
 }
@@ -985,6 +1021,28 @@ func schemaStatements() []string {
 			valid_at TEXT,
 			deleted_at TEXT
 		);`,
+		`CREATE TABLE IF NOT EXISTS observation_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			observation_id INTEGER NOT NULL REFERENCES observations(id) ON DELETE CASCADE,
+			event_type TEXT NOT NULL,
+			actor TEXT,
+			reason TEXT,
+			related_observation_id INTEGER REFERENCES observations(id) ON DELETE SET NULL,
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_observation_events_observation_id_created_at
+			ON observation_events(observation_id, created_at DESC, id DESC);`,
+		`CREATE INDEX IF NOT EXISTS idx_observation_events_created_at
+			ON observation_events(created_at DESC, id DESC);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_observation_events_dedup
+			ON observation_events(
+				observation_id,
+				event_type,
+				COALESCE(actor, ''),
+				COALESCE(reason, ''),
+				COALESCE(related_observation_id, 0),
+				created_at
+			);`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_project_created_at
 			ON observations(project, created_at DESC);`,
 		`CREATE INDEX IF NOT EXISTS idx_observations_topic_key

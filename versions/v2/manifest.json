@@ -1,7 +1,7 @@
 {
   "version_line": "v2",
-  "semver": "v2.0.7",
-  "status": "v2_chronological_memory_retrieval_hardening",
+  "semver": "v2.1.0",
+  "status": "v2_trust_ledger_context_governor_doctor",
   "repo_root_is_product_root": false,
   "factory_version_root": "versions/v2",
   "release_contract": {

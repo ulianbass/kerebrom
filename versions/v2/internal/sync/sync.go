@@ -93,8 +93,9 @@ func Export(ctx context.Context, store *sqlite.Store, opts Options) (ExportResul
 		Observations: len(data.Observations),
 		Prompts:      len(data.Prompts),
 		Aliases:      len(data.ProjectAliases),
+		Events:       len(data.ObservationEvents),
 	}
-	if counts.Sessions == 0 && counts.Observations == 0 && counts.Prompts == 0 && counts.Aliases == 0 {
+	if counts.Sessions == 0 && counts.Observations == 0 && counts.Prompts == 0 && counts.Aliases == 0 && counts.Events == 0 {
 		return ExportResult{Created: false}, nil
 	}
 
@@ -167,6 +168,7 @@ func Import(ctx context.Context, store *sqlite.Store, opts Options) (ImportResul
 		result.Counts.Sessions += summary.Sessions
 		result.Counts.Observations += summary.Observations
 		result.Counts.Prompts += summary.Prompts
+		result.Counts.Events += summary.Events
 	}
 
 	return result, nil
@@ -298,6 +300,11 @@ func encodeJSONL(data sqlite.ExportData) ([]byte, error) {
 			return nil, err
 		}
 	}
+	for _, event := range data.ObservationEvents {
+		if err := encodeChunkRecord(encoder, "observation_event", event); err != nil {
+			return nil, err
+		}
+	}
 	for _, prompt := range data.Prompts {
 		if err := encodeChunkRecord(encoder, "prompt", prompt); err != nil {
 			return nil, err
@@ -355,7 +362,7 @@ func readChunk(dir string, chunk Chunk) (sqlite.ExportData, error) {
 
 	var data sqlite.ExportData
 	data.App = "kerebrom"
-	data.Schema = 1
+	data.Schema = 2
 	data.ExportedAt = chunk.CreatedAt
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
@@ -394,6 +401,12 @@ func appendRecord(data *sqlite.ExportData, record chunkRecord) error {
 			return fmt.Errorf("decode observation record: %w", err)
 		}
 		data.Observations = append(data.Observations, observation)
+	case "observation_event":
+		var event sqlite.ObservationEvent
+		if err := json.Unmarshal(record.Data, &event); err != nil {
+			return fmt.Errorf("decode observation event record: %w", err)
+		}
+		data.ObservationEvents = append(data.ObservationEvents, event)
 	case "prompt":
 		var prompt sqlite.Prompt
 		if err := json.Unmarshal(record.Data, &prompt); err != nil {

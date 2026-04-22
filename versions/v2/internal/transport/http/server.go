@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ulianbass/kerebrom/internal/contextgov"
 	projectmeta "github.com/ulianbass/kerebrom/internal/project"
 	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
@@ -545,6 +546,7 @@ func (s *Server) handleContext(w http.ResponseWriter, r *http.Request) {
 		"project_filter":         strings.TrimSpace(project),
 		"query":                  query,
 		"project_filter_relaxed": projectFilterRelaxed,
+		"context_governor":       contextgov.Build(recent, matches, project, projectFilterRelaxed),
 		"chronology_policy":      "Use valid_at as the semantic memory timestamp. If observations conflict, prefer the newest corrected/validated observation and use timeline when uncertainty remains.",
 		"stats":                  stats,
 		"recent_sessions":        sessions,

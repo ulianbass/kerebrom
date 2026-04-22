@@ -187,6 +187,10 @@ func TestCycleContextRememberRecallSummary(t *testing.T) {
 	if _, ok := contextPayload["recent_observations"]; !ok {
 		t.Fatalf("context payload missing recent_observations: %#v", contextPayload)
 	}
+	governor, ok := contextPayload["context_governor"].(map[string]any)
+	if !ok || governor["primary_clock"] != "valid_at" {
+		t.Fatalf("context payload missing context_governor valid_at policy: %#v", contextPayload)
+	}
 
 	// 2. remember: persist a durable fact.
 	rememberResult := callTool(t, ctx, mcpClient, "remember", map[string]any{

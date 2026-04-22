@@ -40,7 +40,7 @@ func TestRunVersion(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
 
-	if !strings.Contains(stdout.String(), "v2.0.7") {
+	if !strings.Contains(stdout.String(), "v2.1.0") {
 		t.Fatalf("version output missing version: %q", stdout.String())
 	}
 }
@@ -173,5 +173,20 @@ func TestRunMCPHTTPRequiresTokenForPublicAddress(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), config.RemoteTokenEnv) {
 		t.Fatalf("expected token guidance in stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunDoctor(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"doctor"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doctor failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Kerebrom doctor:") || !strings.Contains(stdout.String(), "trust ledger coverage") {
+		t.Fatalf("doctor output missing expected checks: %q", stdout.String())
 	}
 }

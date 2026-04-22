@@ -18,5 +18,6 @@ mv -f "$tmp_binary" "$INSTALLED_BINARY"
 ln -sf "$INSTALLED_BINARY" "$LINK_BIN_DIR/kerebrom"
 
 "$INSTALLED_BINARY" setup "$SETUP_AGENT" --binary-path "$INSTALLED_BINARY"
+rm -f bin/kerebrom
 "$INSTALLED_BINARY" version
 "$INSTALLED_BINARY" stats

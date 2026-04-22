@@ -116,6 +116,14 @@ func (s *Store) UpdateObservation(ctx context.Context, input UpdateObservationIn
 		return Observation{}, fmt.Errorf("update observation: %w", err)
 	}
 
+	reason := "Observation metadata updated."
+	if validAt == now {
+		reason = "Observation content corrected or revalidated; valid_at refreshed."
+	}
+	if err := s.recordObservationEvent(ctx, input.ID, "updated", defaultString(toolName, "kerebrom"), reason, 0); err != nil {
+		return Observation{}, err
+	}
+
 	return s.GetObservation(ctx, input.ID)
 }
 
@@ -136,6 +144,11 @@ func (s *Store) DeleteObservation(ctx context.Context, input DeleteObservationIn
 	}
 	if err != nil {
 		return fmt.Errorf("delete observation: %w", err)
+	}
+	if !input.Hard {
+		if err := s.recordObservationEvent(ctx, input.ID, "soft_deleted", "kerebrom", "Observation invalidated without removing audit history.", 0); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -303,9 +316,14 @@ func (s *Store) TimelineAroundObservation(ctx context.Context, observationID int
 	if err != nil {
 		return nil, err
 	}
+	events, err := s.ListObservationEvents(ctx, center.ID, 20)
+	if err != nil {
+		return nil, err
+	}
 
 	return map[string]any{
 		"observation": center,
+		"events":      events,
 		"before":      beforeItems,
 		"after":       afterItems,
 	}, nil

@@ -110,9 +110,37 @@ Retrieval uses `valid_at` as the chronology of truth. `context`, `recall`, `time
 
 When an agent saves a correction with the same `topic_key`, Kerebrom updates the canonical observation and refreshes `valid_at` while keeping `created_at` for auditability. When the same observation is saved again as a duplicate, `last_seen_at` and `valid_at` refresh because the memory has been reasserted. Project consolidation updates project metadata but does not change `valid_at`.
 
+## Context Governor
+
+v2.1.0 adds `internal/contextgov`, a small policy layer shared by MCP, HTTP, CLI context, and Claude/Codex hook context. It does not add another MCP tool; instead, every context-bearing payload includes `context_governor` with:
+
+- the required sequence: think -> search -> analyze -> answer;
+- `valid_at` as the primary clock;
+- match-vs-recency decision rules;
+- whether the project filter was strict or relaxed cross-project;
+- canonical topic counts and conflict candidates when multiple returned observations share a `topic_key`.
+
+This makes the agent's memory contract explicit in the returned data, not only in setup instructions. If `conflict_candidates` are present, the agent should call `timeline` before making a claim that depends on the corrected history.
+
+## Trust Ledger
+
+Observations are not raw transcripts, but they still need provenance. v2.1.0 adds `observation_events`, an append-only local ledger linked to each observation. Events currently include:
+
+- `created` when a distilled observation is inserted;
+- `updated` when content, type, title, topic, or metadata changes;
+- `reasserted` when a duplicate durable memory refreshes `duplicate_count` and `valid_at`;
+- `imported` when export/import or sync brings an observation into a store;
+- `soft_deleted` when `forget` invalidates a memory without removing audit history.
+
+Existing observations are backfilled with a `created` migration event on first init after upgrade. The ledger is exported and synced with memory data, but it stores lifecycle metadata only; it does not store private raw transcript.
+
 ## Session lifecycle behavior
 
 A session is active only until a client closes it through `summary`, `session-end`, or a native stop hook. Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
+
+## Deep Doctor
+
+`kerebrom doctor --deep` is the operational readiness check. It verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, stale active sessions, project alias cycles, installed binary paths, Codex/Claude config blocks, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
 
 ## Self-update flow
 
@@ -152,13 +180,15 @@ Those files are documentation surfaces, but they are part of the install contrac
 
 ## Storage
 
-`internal/store/sqlite` owns the only persistent state. Schema (unchanged from v1):
+`internal/store/sqlite` owns the only persistent state. Schema is additive across releases:
 
 ```sql
 sessions(id PK, project, directory, started_at, ended_at, summary)
 observations(id PK, session_id FK, type, title, content, project, scope,
              topic_key, tool_name, normalized_hash, created_at, updated_at,
-             deleted_at, last_seen_at, duplicate_count, revision_count)
+             valid_at, deleted_at, last_seen_at, duplicate_count, revision_count)
+observation_events(id PK, observation_id FK, event_type, actor, reason,
+                   related_observation_id, created_at)
 prompts(id PK, session_id FK, project, content, created_at)
 observations_fts (FTS5 virtual table mirroring observations content)
 prompts_fts (FTS5 virtual table mirroring prompts content)

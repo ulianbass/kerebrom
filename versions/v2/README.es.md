@@ -2,7 +2,7 @@
 
 [README raíz](../../README.es.md) · [Guía para agentes IA](../../docs/AI_AGENT_INSTALL.es.md) · [Spec de producto](docs/product-spec-v2.md) · [Arquitectura](docs/architecture-v2.md)
 
-> Línea estable actual de Kerebrom: siete tools semánticos de memoria, almacenamiento local SQLite + FTS5, setup plug-and-play para clientes IA y auto-actualización desde GitHub Releases.
+> Línea estable actual de Kerebrom: siete tools semánticos de memoria, almacenamiento local SQLite + FTS5, gobierno de contexto, trust ledger auditable, setup plug-and-play para clientes IA y auto-actualización desde GitHub Releases.
 
 ## Instalación
 
@@ -69,11 +69,14 @@ kerebrom update
 
 La activación ocurre en cada mensaje del usuario cuando las tools de Kerebrom están disponibles. Las observaciones son memorias interpretadas, no transcripciones crudas. Usa `What / Why / Where / Learned` solo cuando haya un hecho durable que preservar. La consolidación de proyectos guarda alias persistentes para que los nombres viejos sigan resolviendo al proyecto canónico. La recuperación usa `valid_at` como cronología semántica, por lo que las correcciones nuevas y los hechos revalidados tienen prioridad sobre memorias obsoletas sin borrar el historial.
 
+Cada payload de `context`/`recall` incluye `context_governor`, que le indica al agente cómo priorizar coincidencias, recencia, conflictos y cronología antes de responder. Cada observación también tiene eventos de trust ledger para auditar cambios de ciclo de vida sin guardar transcripciones crudas.
+
 ## Arquitectura
 
 ```text
 cmd/kerebrom/             entrada CLI
 internal/cli/             comandos, hooks, TUI
+internal/contextgov/      contrato de gobierno de contexto
 internal/setup/           setup local de clientes IA y limpieza v1
 internal/store/sqlite/    almacén SQLite + FTS5
 internal/transport/mcp/   servidor MCP semántico
@@ -91,6 +94,7 @@ Los datos de runtime viven en `~/.kerebrom/`.
 make test
 make build
 ./bin/kerebrom version
+./bin/kerebrom doctor --deep
 ```
 
 ## Seguridad

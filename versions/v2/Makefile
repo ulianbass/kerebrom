@@ -30,3 +30,4 @@ install-user: build
 	mv -f "$$tmp_binary" "$(INSTALL_BIN_DIR)/kerebrom"
 	ln -sf "$(INSTALL_BIN_DIR)/kerebrom" "$(LINK_BIN_DIR)/kerebrom"
 	"$(INSTALL_BIN_DIR)/kerebrom" setup "$(SETUP_AGENT)" --binary-path "$(INSTALL_BIN_DIR)/kerebrom"
+	rm -f "bin/kerebrom"

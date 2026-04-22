@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ulianbass/kerebrom/internal/contextgov"
 	projectdetect "github.com/ulianbass/kerebrom/internal/project"
 	promptfilter "github.com/ulianbass/kerebrom/internal/prompt"
 	"github.com/ulianbass/kerebrom/internal/store/sqlite"
@@ -221,6 +222,7 @@ Automatic lifecycle is enabled:
 
 The cycle:
 - Treat Kerebrom as active on every user prompt. The hook has already saved the prompt when substantive and injected current context; if you need more prior context before answering, call context again.
+- Follow the Context Governor order: think -> search -> analyze -> answer. If memories conflict, use valid_at and timeline before asserting the final answer.
 - Call recall when you need to look up a specific topic.
 - Call remember immediately after decisions, preferences, constraints, bugfixes, architecture notes, config changes, and non-obvious discoveries.
 - Use the What/Why/Where/Learned framework: one sentence describing the durable fact or change; why it matters; where it applies; the implication, gotcha, or constraint (omit if none).
@@ -252,6 +254,8 @@ func hookContextText(ctx context.Context, store *sqlite.Store, project string) (
 		b.WriteString("\nNo prior observations yet.\n")
 		return b.String(), nil
 	}
+	governor := contextgov.Build(recent, nil, lookupProject, lookupProject == "")
+	fmt.Fprintf(&b, "\nContext Governor: %s\n", contextgov.SummaryText(governor))
 	b.WriteString("\nRecent observations:\n")
 	for _, observation := range recent {
 		fmt.Fprintf(&b, "- [%d] %s (valid_at=%s): %s\n", observation.ID, observation.Title, observation.ValidAt, oneLinePreview(observation.Content, 180))

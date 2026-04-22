@@ -27,11 +27,74 @@ func TestOpenAndInitCreatesSchema(t *testing.T) {
 
 	assertTableExists(t, store.DB(), "sessions")
 	assertTableExists(t, store.DB(), "observations")
+	assertTableExists(t, store.DB(), "observation_events")
 	assertTableExists(t, store.DB(), "observations_fts")
 	assertTableExists(t, store.DB(), "user_prompts")
 	assertTableExists(t, store.DB(), "prompts_fts")
 	assertTableExists(t, store.DB(), "sync_chunks")
 	assertTableExists(t, store.DB(), "project_aliases")
+}
+
+func TestTrustLedgerRecordsObservationLifecycle(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	observation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:     "decision",
+		Title:    "Trust ledger",
+		Content:  "Kerebrom should track the lifecycle of durable memory.",
+		Project:  "Proyecto Kerebrom",
+		ToolName: "test",
+	})
+	if err != nil {
+		t.Fatalf("save observation: %v", err)
+	}
+	if _, err := store.SaveObservation(ctx, ObservationInput{
+		Type:     "decision",
+		Title:    "Trust ledger",
+		Content:  "Kerebrom should track the lifecycle of durable memory.",
+		Project:  "Proyecto Kerebrom",
+		ToolName: "test",
+	}); err != nil {
+		t.Fatalf("reassert observation: %v", err)
+	}
+	if _, err := store.UpdateObservation(ctx, UpdateObservationInput{
+		ID:      observation.ID,
+		Content: "Kerebrom should track create, reassert, update, and delete lifecycle events.",
+	}); err != nil {
+		t.Fatalf("update observation: %v", err)
+	}
+	if err := store.DeleteObservation(ctx, DeleteObservationInput{ID: observation.ID}); err != nil {
+		t.Fatalf("soft delete observation: %v", err)
+	}
+
+	events, err := store.ListObservationEvents(ctx, observation.ID, 10)
+	if err != nil {
+		t.Fatalf("list observation events: %v", err)
+	}
+	eventTypes := map[string]bool{}
+	for _, event := range events {
+		eventTypes[event.EventType] = true
+	}
+	for _, expected := range []string{"created", "reasserted", "updated", "soft_deleted"} {
+		if !eventTypes[expected] {
+			t.Fatalf("missing trust ledger event %q in %+v", expected, events)
+		}
+	}
 }
 
 func TestInitMigratesLegacyObservationsWithSemanticClock(t *testing.T) {

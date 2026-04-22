@@ -2,7 +2,7 @@
 
 [Root README](../../README.md) · [AI agent install guide](../../docs/AI_AGENT_INSTALL.md) · [Product spec](docs/product-spec-v2.md) · [Architecture](docs/architecture-v2.md)
 
-> Current stable Kerebrom line: seven semantic memory tools, local SQLite + FTS5 storage, plug-and-play setup for AI clients, and self-update from GitHub Releases.
+> Current stable Kerebrom line: seven semantic memory tools, local SQLite + FTS5 storage, context governance, trust-ledger auditability, plug-and-play setup for AI clients, and self-update from GitHub Releases.
 
 ## Install
 
@@ -69,11 +69,14 @@ kerebrom update
 
 Activation is every user message when Kerebrom tools are available. Observations are interpreted memories, not raw transcripts. Use `What / Why / Where / Learned` only when there is a durable fact to preserve. Project consolidation persists aliases so old names keep resolving to the canonical project. Retrieval uses `valid_at` as the semantic chronology, so newer corrections and revalidated facts outrank stale memories without erasing history.
 
+Every context/recall payload includes `context_governor`, which tells the agent how to prioritize matches, recency, conflicts, and chronology before answering. Every observation also has trust-ledger events so lifecycle changes are auditable without storing raw chat transcripts.
+
 ## Architecture
 
 ```text
 cmd/kerebrom/             CLI entrypoint
 internal/cli/             commands, hooks, TUI
+internal/contextgov/      context governance contract
 internal/setup/           local AI-client setup and v1 cleanup
 internal/store/sqlite/    SQLite + FTS5 memory store
 internal/transport/mcp/   semantic MCP server
@@ -91,6 +94,7 @@ Runtime data lives in `~/.kerebrom/`.
 make test
 make build
 ./bin/kerebrom version
+./bin/kerebrom doctor --deep
 ```
 
 ## Safety
