@@ -40,7 +40,7 @@ func TestRunVersion(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
 
-	if !strings.Contains(stdout.String(), "v2.1.0") {
+	if !strings.Contains(stdout.String(), "v2.1.1") {
 		t.Fatalf("version output missing version: %q", stdout.String())
 	}
 }

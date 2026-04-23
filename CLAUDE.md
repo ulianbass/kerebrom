@@ -39,6 +39,7 @@ When Kerebrom is installed in an AI client, the agent should treat it as the dur
 - Call `recall` when the user asks what is known about a topic.
 - Call `remember` only when a durable decision, preference, bugfix, configuration change, or non-obvious learning appears.
 - Call `summary` before ending substantial work or after compaction.
+- If the user says "cerramos sesión", "sesión cerrada", "close this session", or equivalent, treat it as an explicit close request: call `summary` with the current session id and do not save the bare close phrase as durable memory.
 - Use `forget` only when the user says memory is wrong or obsolete.
 - Treat `valid_at` as the semantic memory clock. When observations conflict, prefer the newest corrected or revalidated observation unless the user explicitly says an older memory is still authoritative.
 - Follow `context_governor` when it appears in context/recall payloads: think, search, analyze, then answer; use `timeline` before claiming anything that depends on conflict candidates.

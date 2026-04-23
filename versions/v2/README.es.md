@@ -62,7 +62,7 @@ kerebrom update
 | Cada mensaje del usuario | `context` |
 | Buscar un tema | `recall` |
 | Guardar aprendizaje durable | `remember` |
-| Cerrar trabajo sustancial | `summary` |
+| Cerrar trabajo sustancial o cierre explícito | `summary` |
 | Inspeccionar cronología | `timeline` |
 | Invalidar memoria incorrecta | `forget` |
 | Consolidación admin de proyectos y alias | `projects` |

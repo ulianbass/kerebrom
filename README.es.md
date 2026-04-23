@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.0](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.0) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.1](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.1) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -94,7 +94,7 @@ Kerebrom v2 expone siete tools semánticos. Los primeros seis son tools cotidian
 | Cada mensaje del usuario | `context` | Abre/reanuda sesión, guarda el prompt solo cuando corresponde y recupera observaciones útiles antes de que el agente responda. |
 | Hace falta un tema específico | `recall` | Busca memoria con lenguaje natural. |
 | Aparece un hecho durable | `remember` | Guarda una observación interpretada con `What / Why / Where / Learned`. |
-| El trabajo termina o se compacta | `summary` | Persiste objetivos, decisiones, cambios, riesgos, archivos y próximos pasos. |
+| El trabajo termina, se compacta o se cierra explícitamente | `summary` | Persiste objetivos, decisiones, cambios, riesgos, archivos y próximos pasos. |
 | Revisar cronología | `timeline` | Inspecciona sesiones y observaciones recientes. |
 | El usuario dice que algo está mal | `forget` | Invalida una observación obsoleta. |
 | Hay que consolidar nombres de proyecto | `projects` | Mueve variantes al proyecto canónico y deja alias persistentes para que no reaparezcan. |

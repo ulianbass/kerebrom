@@ -229,6 +229,151 @@ func TestCycleContextRememberRecallSummary(t *testing.T) {
 	}
 }
 
+func TestSummaryWithoutExplicitSessionIDClosesRecentNativeSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	mcpClient := newTestClient(t, ctx, store)
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:        "claude-native-session",
+		Project:   "falage",
+		Directory: "/tmp/falage",
+		StartedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("start native session: %v", err)
+	}
+	if _, err := store.SavePrompt(ctx, sqlite.PromptInput{
+		SessionID: "claude-native-session",
+		Project:   "falage",
+		Content:   "Cerramos esta sesión.",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("save native prompt: %v", err)
+	}
+
+	summaryResult := callTool(t, ctx, mcpClient, "summary", map[string]any{
+		"project": "falage",
+		"content": "Cierre validado desde el hook nativo.",
+	})
+	summaryPayload := mustStructuredMap(t, summaryResult)
+	session := mustNestedMap(t, summaryPayload, "session")
+	if session["id"] != "claude-native-session" {
+		t.Fatalf("expected summary to close native hook session, got %#v", session)
+	}
+
+	closed, err := store.GetSession(ctx, "claude-native-session")
+	if err != nil {
+		t.Fatalf("get native session: %v", err)
+	}
+	if closed.Status != "completed" {
+		t.Fatalf("expected native session completed, got %+v", closed)
+	}
+	if _, err := store.GetSession(ctx, "mcp:falage"); err == nil {
+		t.Fatalf("summary should not create a parallel mcp:falage session when a fresh native session exists")
+	}
+}
+
+func TestContextWithoutExplicitSessionIDUsesRecentNativeSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	mcpClient := newTestClient(t, ctx, store)
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:        "native-context-session",
+		Project:   "falage",
+		Directory: "/tmp/falage",
+		StartedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("start native session: %v", err)
+	}
+
+	contextResult := callTool(t, ctx, mcpClient, "context", map[string]any{
+		"project": "falage",
+		"prompt":  "Necesito retomar el cierre de sesión.",
+	})
+	contextPayload := mustStructuredMap(t, contextResult)
+	if contextPayload["session_id"] != "native-context-session" {
+		t.Fatalf("expected context to use recent native session, got %#v", contextPayload["session_id"])
+	}
+
+	promptCount, err := store.CountSessionPrompts(ctx, "native-context-session")
+	if err != nil {
+		t.Fatalf("count native prompts: %v", err)
+	}
+	if promptCount != 1 {
+		t.Fatalf("expected context prompt on native session, got %d", promptCount)
+	}
+}
+
+func TestContextWithoutExplicitSessionIDIgnoresOldNativeSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	mcpClient := newTestClient(t, ctx, store)
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:        "old-native-session",
+		Project:   "falage",
+		Directory: "/tmp/falage",
+		StartedAt: time.Now().UTC().Add(-recentNativeSessionTTL - time.Minute),
+	}); err != nil {
+		t.Fatalf("start old native session: %v", err)
+	}
+
+	contextResult := callTool(t, ctx, mcpClient, "context", map[string]any{
+		"project": "falage",
+		"prompt":  "Abramos una conversación limpia.",
+	})
+	contextPayload := mustStructuredMap(t, contextResult)
+	if contextPayload["session_id"] != "mcp:falage" {
+		t.Fatalf("expected context to fall back to mcp session, got %#v", contextPayload["session_id"])
+	}
+
+	oldPromptCount, err := store.CountSessionPrompts(ctx, "old-native-session")
+	if err != nil {
+		t.Fatalf("count old native prompts: %v", err)
+	}
+	if oldPromptCount != 0 {
+		t.Fatalf("old native session should not receive new prompts, got %d", oldPromptCount)
+	}
+}
+
+func TestSummaryWithoutContentStillClosesSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	mcpClient := newTestClient(t, ctx, store)
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:      "session-to-close",
+		Project: "kerebrom",
+	}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	callTool(t, ctx, mcpClient, "summary", map[string]any{
+		"session_id": "session-to-close",
+		"project":    "kerebrom",
+	})
+
+	session, err := store.GetSession(ctx, "session-to-close")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if session.Status != "completed" {
+		t.Fatalf("expected completed session, got %+v", session)
+	}
+	if !strings.Contains(session.Summary, "without an explicit summary") {
+		t.Fatalf("expected fallback summary, got %+v", session)
+	}
+}
+
 func TestContextFromWeakDefaultProjectSearchesAcrossProjects(t *testing.T) {
 	t.Parallel()
 

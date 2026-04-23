@@ -623,7 +623,7 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 1. ACTIVATE ON EVERY USER MESSAGE: Before answering ANY user message, call context immediately with a query derived from the prompt. This applies even when the prompt is short, ambiguous, casual, or looks like an acknowledgement. If context returns no useful memory, continue normally.
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
-4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
+4. SUMMARY AT CLOSE: Before ending substantial work, after context compaction, or when the user says "cerramos sesión", "sesión cerrada", "close this session", or equivalent, call summary with the same session_id returned by context whenever the client exposes one. Do not save the bare close phrase itself as durable memory.
 5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of memory. When memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory remains authoritative. Reuse the same topic_key for corrections whenever possible.
 6. CONTEXT GOVERNOR: Every context/recall payload can include context_governor. Follow its order: think -> search -> analyze -> answer. If it reports conflict_candidates, call timeline or recall again before making claims based on memory.
 
@@ -662,7 +662,7 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 1. ACTIVATE ON EVERY USER MESSAGE: Before answering ANY user message, call context immediately with a query derived from the prompt. This applies even when the prompt is short, ambiguous, casual, or looks like an acknowledgement. If context returns no useful memory, continue normally.
 2. SAVE ALWAYS: After EVERY user message that introduces a durable fact (a decision, a preference, a constraint, a bugfix, a configuration change, a non-obvious learning), call remember.
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
-4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary.
+4. SUMMARY AT CLOSE: Before ending substantial work, after context compaction, or when the user says "cerramos sesión", "sesión cerrada", "close this session", or equivalent, call summary with the same session_id returned by context whenever the client exposes one. Do not save the bare close phrase itself as durable memory.
 5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of memory. When memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory remains authoritative. Reuse the same topic_key for corrections whenever possible.
 6. CONTEXT GOVERNOR: Every context/recall payload can include context_governor. Follow its order: think -> search -> analyze -> answer. If it reports conflict_candidates, call timeline or recall again before making claims based on memory.
 

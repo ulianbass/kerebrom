@@ -75,14 +75,14 @@ kerebrom update
 You'll see:
 
 ```
-kerebrom update available: v1.1.0 → v2.1.0
-release notes: https://github.com/ulianbass/kerebrom/releases/tag/v2.1.0
-Install v2.1.0 now? [y/N]: y
-downloading https://github.com/ulianbass/kerebrom/archive/refs/tags/v2.1.0.tar.gz
+kerebrom update available: v1.1.0 → v2.1.1
+release notes: https://github.com/ulianbass/kerebrom/releases/tag/v2.1.1
+Install v2.1.1 now? [y/N]: y
+downloading https://github.com/ulianbass/kerebrom/archive/refs/tags/v2.1.1.tar.gz
 extracting source
 running make install-user in /tmp/kerebrom-update-XYZ/kerebrom-2.0.0/versions/v2
 ...
-kerebrom installed: v2.1.0
+kerebrom installed: v2.1.1
 restart any running clients (Claude Desktop, Code, Codex, etc.) to pick up the new MCP server.
 ```
 
@@ -108,7 +108,7 @@ Then restart any AI client.
 
 ```bash
 kerebrom version
-# → v2.1.0 (commit=..., build_date=...)
+# → v2.1.1 (commit=..., build_date=...)
 ```
 
 In Claude Desktop, open a fresh chat and ask "What do you know about my projects?". Check `~/Library/Logs/Claude/mcp-server-Kerebrom.log` — you should see a `tools/call` for `context` immediately after the user's message. If you only see `initialize`, `tools/list`, and silence, Claude Desktop is still using a cached MCP session — fully quit (⌘Q) and reopen.

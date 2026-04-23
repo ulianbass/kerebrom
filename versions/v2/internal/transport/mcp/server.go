@@ -29,6 +29,8 @@ type HTTPConfig struct {
 	AuthToken string
 }
 
+const recentNativeSessionTTL = 10 * time.Minute
+
 type Server struct {
 	store     *sqlite.Store
 	server    *mcpserver.MCPServer
@@ -543,7 +545,7 @@ MANDATORY BEHAVIORS — follow these on EVERY interaction:
 
 3. RECALL ON DEMAND: When the user asks about a specific topic, call recall before answering.
 
-4. SUMMARY AT CLOSE: Before ending substantial work or after context compaction, call summary with goals, decisions, changes, risks, files, next steps.
+4. SUMMARY AT CLOSE: Before ending substantial work, after context compaction, or when the user says "cerramos sesión", "sesión cerrada", "close this session", or equivalent, call summary with goals, decisions, changes, risks, files, next steps. Use the same session_id returned by context whenever the client exposes one. Do not save the bare close phrase itself as durable memory.
 
 5. CHRONOLOGY RULE: Treat valid_at as the semantic timestamp of the memory. When two memories conflict, prefer the newest corrected/validated observation unless the user explicitly says an older memory is still authoritative. If you are saving a correction, reuse the same topic_key whenever possible so the old fact is updated instead of stored as an equal contradiction.
 
@@ -628,7 +630,10 @@ func (s *Server) handleRemember(ctx context.Context, request mcp.CallToolRequest
 	}
 
 	project := s.projectOrDefault(request.GetString("project", ""))
-	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
+	sessionID, err := s.sessionIDOrDefault(ctx, request.GetString("session_id", ""), project)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	if err := s.ensureSession(ctx, sessionID, project, "."); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -659,7 +664,10 @@ func (s *Server) handleContext(ctx context.Context, request mcp.CallToolRequest)
 	rawProject := request.GetString("project", "")
 	project := s.projectOrDefault(rawProject)
 	lookupProject := s.lookupProjectFilter(rawProject, project)
-	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
+	sessionID, err := s.sessionIDOrDefault(ctx, request.GetString("session_id", ""), project)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	directory := strings.TrimSpace(request.GetString("directory", ""))
 	if directory == "" {
 		directory = "."
@@ -702,7 +710,10 @@ func (s *Server) handleRecall(ctx context.Context, request mcp.CallToolRequest) 
 	rawProject := request.GetString("project", "")
 	project := s.projectOrDefault(rawProject)
 	lookupProject := s.lookupProjectFilter(rawProject, project)
-	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
+	sessionID, err := s.sessionIDOrDefault(ctx, request.GetString("session_id", ""), project)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	s.activity.RecordToolCall(sessionID)
 
 	payload, err := s.contextPayload(
@@ -746,7 +757,10 @@ func (s *Server) handleTimeline(ctx context.Context, request mcp.CallToolRequest
 	rawProject := request.GetString("project", "")
 	project := s.projectOrDefault(rawProject)
 	lookupProject := s.lookupProjectFilter(rawProject, project)
-	sessionID := s.sessionIDOrDefault(request.GetString("session_id", ""), project)
+	sessionID, err := s.sessionIDOrDefault(ctx, request.GetString("session_id", ""), project)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	s.activity.RecordToolCall(sessionID)
 
 	if observationID := request.GetInt("observation_id", 0); observationID > 0 {
@@ -779,7 +793,10 @@ func (s *Server) handleSummary(ctx context.Context, request mcp.CallToolRequest)
 		id = request.GetString("session_id", "")
 	}
 	project := s.projectOrDefault(request.GetString("project", ""))
-	id = s.sessionIDOrDefault(id, project)
+	id, err := s.sessionIDOrDefault(ctx, id, project)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
 	if err := s.ensureSession(ctx, id, project, "."); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
@@ -788,27 +805,28 @@ func (s *Server) handleSummary(ctx context.Context, request mcp.CallToolRequest)
 	if strings.TrimSpace(summary) == "" {
 		summary = request.GetString("content", "")
 	}
-	if strings.TrimSpace(summary) != "" {
-		if err := s.store.EndSession(ctx, sqlite.EndSessionInput{
-			ID:      id,
-			Summary: summary,
-			EndedAt: time.Now().UTC(),
-		}); err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-		_, _ = s.store.SaveObservation(ctx, sqlite.ObservationInput{
-			SessionID: id,
-			Type:      "session_summary",
-			Title:     "Session summary " + id,
-			Content:   summary,
-			Project:   project,
-			Scope:     "project",
-			TopicKey:  "session/" + id,
-			ToolName:  "summary",
-			CreatedAt: time.Now().UTC(),
-		})
-		s.activity.RecordSave(id)
+	if strings.TrimSpace(summary) == "" {
+		summary = "Session closed by user request without an explicit summary."
 	}
+	if err := s.store.EndSession(ctx, sqlite.EndSessionInput{
+		ID:      id,
+		Summary: summary,
+		EndedAt: time.Now().UTC(),
+	}); err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	_, _ = s.store.SaveObservation(ctx, sqlite.ObservationInput{
+		SessionID: id,
+		Type:      "session_summary",
+		Title:     "Session summary " + id,
+		Content:   summary,
+		Project:   project,
+		Scope:     "project",
+		TopicKey:  "session/" + id,
+		ToolName:  "summary",
+		CreatedAt: time.Now().UTC(),
+	})
+	s.activity.ClearSession(id)
 
 	payload, err := s.sessionSummaryPayload(ctx, id, request.GetInt("limit", 10))
 	if err != nil {
@@ -855,16 +873,21 @@ func (s *Server) lookupProjectFilter(rawProject string, project string) string {
 	return projectmeta.LookupFilter(project)
 }
 
-func (s *Server) sessionIDOrDefault(sessionID string, project string) string {
+func (s *Server) sessionIDOrDefault(ctx context.Context, sessionID string, project string) (string, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID != "" {
-		return sessionID
+		return sessionID, nil
+	}
+	if session, ok, err := s.store.LatestActiveSession(ctx, project, time.Now().UTC().Add(-recentNativeSessionTTL)); err != nil {
+		return "", err
+	} else if ok {
+		return session.ID, nil
 	}
 	project = sqlite.NormalizeProject(project)
 	if project == "" {
 		project = "default"
 	}
-	return "mcp:" + project
+	return "mcp:" + project, nil
 }
 
 func (s *Server) ensureSession(ctx context.Context, sessionID string, project string, directory string) error {

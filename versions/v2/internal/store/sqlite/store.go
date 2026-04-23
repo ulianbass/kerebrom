@@ -481,6 +481,83 @@ func (s *Store) GetSession(ctx context.Context, id string) (Session, error) {
 	return session, nil
 }
 
+// LatestActiveSession returns the most recently active non-MCP session for a
+// project after cutoff. This lets MCP tools join native client hook sessions
+// when the host client does not pass a session_id through the MCP call.
+func (s *Store) LatestActiveSession(ctx context.Context, project string, cutoff time.Time) (Session, bool, error) {
+	project, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return Session{}, false, err
+	}
+	if project == "" {
+		project = "default"
+	}
+	if cutoff.IsZero() {
+		cutoff = time.Now().UTC().Add(-10 * time.Minute)
+	}
+	cutoffText := cutoff.UTC().Format(time.RFC3339)
+
+	row := s.db.QueryRowContext(ctx, `
+		SELECT
+			id, project, directory, started_at, COALESCE(ended_at, ''),
+			COALESCE(summary, ''), status
+		FROM sessions
+		WHERE status = 'active'
+		  AND project = ?
+		  AND id NOT LIKE 'mcp:%'
+		  AND (
+			started_at >= ?
+			OR EXISTS (
+				SELECT 1
+				FROM observations
+				WHERE observations.deleted_at IS NULL
+				  AND COALESCE(observations.session_id, '') = sessions.id
+				  AND observations.updated_at >= ?
+			)
+			OR EXISTS (
+				SELECT 1
+				FROM user_prompts
+				WHERE COALESCE(user_prompts.session_id, '') = sessions.id
+				  AND user_prompts.created_at >= ?
+			)
+		  )
+		ORDER BY (
+			SELECT MAX(activity_at)
+			FROM (
+				SELECT sessions.started_at AS activity_at
+				UNION ALL
+				SELECT observations.updated_at AS activity_at
+				FROM observations
+				WHERE observations.deleted_at IS NULL
+				  AND COALESCE(observations.session_id, '') = sessions.id
+				UNION ALL
+				SELECT user_prompts.created_at AS activity_at
+				FROM user_prompts
+				WHERE COALESCE(user_prompts.session_id, '') = sessions.id
+			)
+		) DESC, started_at DESC
+		LIMIT 1
+	`, project, cutoffText, cutoffText, cutoffText)
+
+	var session Session
+	if err := row.Scan(
+		&session.ID,
+		&session.Project,
+		&session.Directory,
+		&session.StartedAt,
+		&session.EndedAt,
+		&session.Summary,
+		&session.Status,
+	); err != nil {
+		if err == sql.ErrNoRows {
+			return Session{}, false, nil
+		}
+		return Session{}, false, fmt.Errorf("latest active session: %w", err)
+	}
+
+	return session, true, nil
+}
+
 func (s *Store) SessionExists(ctx context.Context, id string) (bool, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {

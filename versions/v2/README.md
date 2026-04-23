@@ -62,7 +62,7 @@ kerebrom update
 | Every user message | `context` |
 | Search a topic | `recall` |
 | Save a durable learning | `remember` |
-| Close substantial work | `summary` |
+| Close substantial work or explicit close requests | `summary` |
 | Inspect chronology | `timeline` |
 | Invalidate wrong memory | `forget` |
 | Admin project consolidation and aliases | `projects` |

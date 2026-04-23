@@ -136,7 +136,7 @@ Existing observations are backfilled with a `created` migration event on first i
 
 ## Session lifecycle behavior
 
-A session is active only until a client closes it through `summary`, `session-end`, or a native stop hook. Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
+A session is active only until a client closes it through `summary`, `session-end`, or a native stop hook. If a native client hook recently opened a session and the MCP caller omits `session_id`, Kerebrom attaches the MCP tool call to that recent native session instead of creating or closing a parallel `mcp:<project>` session. `summary` always closes the selected session, even if the agent omitted explicit summary text; in that fallback case the session row records `Session closed by user request without an explicit summary.` Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The stale-close summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
 
 ## Deep Doctor
 
