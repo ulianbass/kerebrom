@@ -101,10 +101,10 @@ Chequeo final recomendado para el usuario:
 
 | Cliente | Qué instala Kerebrom |
 |---|---|
-| Claude Code | Config MCP, hooks de ciclo de vida, tools cotidianos auto-aprobados, bloque de protocolo en instrucciones globales de Claude, scripts de hook. |
+| Claude Code | Config MCP, hooks de ciclo de vida, tools cotidianos auto-aprobados y scripts de hook. El protocolo viaja por instrucciones del servidor MCP y payloads de hooks, no escribiéndose en instrucciones globales del usuario. |
 | Claude Desktop Chat | Entrada MCP local. La memoria de cuenta de Claude Chat vive en cloud, así que Kerebrom no parchea APIs privadas ni bases internas del navegador. |
 | Claude Cowork | MCP local y semilla nativa en `memory/CLAUDE.md` cuando existe storage local de Cowork. |
-| Codex | Config MCP, auto-aprobación para tools cotidianos, bloque de protocolo en `AGENTS.md` global. |
+| Codex | Config MCP y auto-aprobación para tools cotidianos. Kerebrom no ocupa el cuadro de instrucciones personalizadas de Codex. |
 | Cursor | Config MCP y regla de memoria Kerebrom. |
 | Gemini CLI | Config MCP, prompt de sistema y flag de entorno para instrucciones de sistema. |
 | OpenCode | Config MCP y archivo de protocolo de memoria Kerebrom. |

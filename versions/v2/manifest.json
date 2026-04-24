@@ -1,7 +1,7 @@
 {
   "version_line": "v2",
-  "semver": "v2.1.1",
-  "status": "v2_session_lifecycle_hardening",
+  "semver": "v2.1.2",
+  "status": "v2_user_preferences_free_internal_protocol",
   "repo_root_is_product_root": false,
   "factory_version_root": "versions/v2",
   "release_contract": {

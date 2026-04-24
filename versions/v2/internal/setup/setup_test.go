@@ -32,7 +32,7 @@ args = ["/path/to/tradingview.js"]
 	if err != nil {
 		t.Fatalf("run codex setup: %v", err)
 	}
-	if result.Agent != "codex" || len(result.Files) != 2 {
+	if result.Agent != "codex" || len(result.Files) != 1 {
 		t.Fatalf("unexpected codex result: %+v", result)
 	}
 
@@ -57,8 +57,11 @@ args = ["/path/to/tradingview.js"]
 	if !strings.Contains(agentsContent, "# TradingView") {
 		t.Fatalf("codex setup removed existing AGENTS content: %q", agentsContent)
 	}
-	if strings.Count(agentsContent, codexMemoryBlockStart) != 1 {
-		t.Fatalf("expected one kerebrom AGENTS block, got %q", agentsContent)
+	if strings.Contains(agentsContent, codexMemoryBlockStart) {
+		t.Fatalf("codex setup should not write Kerebrom protocol into user AGENTS preferences: %q", agentsContent)
+	}
+	if !strings.Contains(agentsContent, "Existing instructions.") {
+		t.Fatalf("codex setup changed existing AGENTS preferences: %q", agentsContent)
 	}
 
 	if _, err := Run("codex", Options{
@@ -77,8 +80,49 @@ args = ["/path/to/tradingview.js"]
 	}
 
 	agentsContent = mustReadFile(t, agentsPath)
-	if strings.Count(agentsContent, codexMemoryBlockStart) != 1 {
-		t.Fatalf("codex AGENTS duplicated kerebrom block: %q", agentsContent)
+	if strings.Contains(agentsContent, codexMemoryBlockStart) {
+		t.Fatalf("codex AGENTS should remain free of Kerebrom protocol blocks: %q", agentsContent)
+	}
+}
+
+func TestRunCodexSetupRemovesLegacyUserPreferenceBlock(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+	agentsPath := filepath.Join(homeDir, ".codex", "AGENTS.md")
+
+	mustWriteFile(t, configPath, `model = "gpt-5.4"`)
+	mustWriteFile(t, agentsPath, `# My Preferences
+
+Keep this.
+
+<!-- KEREBROM:START -->
+# Kerebrom old protocol
+context remember summary
+<!-- KEREBROM:END -->
+
+Also keep this.
+`)
+
+	result, err := Run("codex", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("run codex setup: %v", err)
+	}
+	if result.Agent != "codex" || len(result.Files) != 2 {
+		t.Fatalf("unexpected codex result: %+v", result)
+	}
+
+	agentsContent := mustReadFile(t, agentsPath)
+	if strings.Contains(agentsContent, codexMemoryBlockStart) || strings.Contains(agentsContent, "Kerebrom old protocol") {
+		t.Fatalf("codex setup should remove legacy Kerebrom preference block: %q", agentsContent)
+	}
+	if !strings.Contains(agentsContent, "Keep this.") || !strings.Contains(agentsContent, "Also keep this.") {
+		t.Fatalf("codex setup removed user preferences: %q", agentsContent)
 	}
 }
 
@@ -106,7 +150,7 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run claude setup: %v", err)
 	}
-	if result.Agent != "claude" || len(result.Files) != 10 {
+	if result.Agent != "claude" || len(result.Files) != 9 {
 		t.Fatalf("unexpected claude result: %+v", result)
 	}
 
@@ -216,16 +260,53 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 		t.Fatalf("unexpected SessionStart hook count after rerun: %#v", sessionStartHooks)
 	}
 
-	claudeMD := mustReadFile(t, filepath.Join(homeDir, ".claude", "CLAUDE.md"))
-	if strings.Count(claudeMD, codexMemoryBlockStart) != 1 {
-		t.Fatalf("claude memory protocol block duplicated or missing: %q", claudeMD)
-	}
-	if !strings.Contains(claudeMD, "Before answering ANY user message") {
-		t.Fatalf("claude memory protocol should require every-turn context activation: %q", claudeMD)
+	if _, err := os.Stat(filepath.Join(homeDir, ".claude", "CLAUDE.md")); !os.IsNotExist(err) {
+		t.Fatalf("claude setup should not create global CLAUDE.md preferences, err=%v", err)
 	}
 	coworkMemory = mustReadFile(t, coworkMemoryPath)
 	if strings.Count(coworkMemory, codexMemoryBlockStart) != 1 {
 		t.Fatalf("claude Cowork global memory duplicated Kerebrom block: %q", coworkMemory)
+	}
+}
+
+func TestRunClaudeCodeSetupRemovesLegacyGlobalInstructionBlock(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+	settingsPath := filepath.Join(homeDir, ".claude", "settings.json")
+	mcpPath := filepath.Join(homeDir, ".claude", "mcp.json")
+	claudeMDPath := filepath.Join(homeDir, ".claude", "CLAUDE.md")
+
+	mustWriteFile(t, settingsPath, `{}`)
+	mustWriteFile(t, mcpPath, `{}`)
+	mustWriteFile(t, claudeMDPath, `# Personal Claude Instructions
+
+Keep my style preference.
+
+<!-- KEREBROM:START -->
+## Kerebrom old protocol
+context remember summary
+<!-- KEREBROM:END -->
+`)
+
+	result, err := Run("claude-code", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	})
+	if err != nil {
+		t.Fatalf("run claude-code setup: %v", err)
+	}
+	if result.Agent != "claude-code" || len(result.Files) != 8 {
+		t.Fatalf("unexpected claude-code result: %+v", result)
+	}
+
+	claudeMD := mustReadFile(t, claudeMDPath)
+	if strings.Contains(claudeMD, codexMemoryBlockStart) || strings.Contains(claudeMD, "Kerebrom old protocol") {
+		t.Fatalf("claude setup should remove legacy Kerebrom instruction block: %q", claudeMD)
+	}
+	if !strings.Contains(claudeMD, "Keep my style preference.") {
+		t.Fatalf("claude setup removed user instructions: %q", claudeMD)
 	}
 }
 
@@ -321,7 +402,7 @@ func TestRunAutoSetupUsesExistingAgentConfigs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run auto setup: %v", err)
 	}
-	if result.Agent != "auto" || len(result.Files) != 2 {
+	if result.Agent != "auto" || len(result.Files) != 1 {
 		t.Fatalf("unexpected auto result: %+v", result)
 	}
 
@@ -419,7 +500,7 @@ func TestRunAllSetup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run all setup: %v", err)
 	}
-	if result.Agent != "all" || len(result.Files) != 22 {
+	if result.Agent != "all" || len(result.Files) != 20 {
 		t.Fatalf("unexpected all setup result: %+v", result)
 	}
 }

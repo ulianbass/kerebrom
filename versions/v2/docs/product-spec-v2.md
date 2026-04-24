@@ -9,7 +9,7 @@ Kerebrom v2 is a single Go binary that gives AI coding agents shared persistent 
 - A cloud service. Nothing leaves the machine except the explicit GitHub Releases check during `kerebrom update`.
 - A vector database. Storage is SQLite + FTS5 — fast, durable, and operable without ML infrastructure.
 - A team-shared memory layer. v2 is single-user. Sharing across users is out of scope.
-- A replacement for project-specific configuration files. `CLAUDE.md`, `AGENTS.md`, etc. continue to hold project-specific guidance; Kerebrom adds a marked block but does not replace the file.
+- A replacement for project-specific configuration files. `CLAUDE.md`, `AGENTS.md`, etc. continue to hold project-specific guidance; Kerebrom should not occupy user-owned preference textboxes with its internal operating protocol.
 
 ## Who it is for
 
@@ -48,7 +48,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.1.1` |
+| `semver` | `v2.1.2` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

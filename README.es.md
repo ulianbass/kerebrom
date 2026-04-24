@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.1](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.1) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.2](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.2) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -75,10 +75,10 @@ No habilites memoria remota/HTTP a menos que yo lo pida explícitamente.
 
 | Cliente | Comportamiento de setup |
 |---|---|
-| Claude Code | Entrada MCP, hooks de ciclo de vida, tools cotidianos auto-aprobados, bloque global en `CLAUDE.md`, scripts de hook. |
+| Claude Code | Entrada MCP, hooks de ciclo de vida, tools cotidianos auto-aprobados y scripts de hook; el protocolo viaja por el servidor MCP y los hooks, no ocupando preferencias del usuario. |
 | Claude Desktop Chat | Entrada MCP local. La memoria de cuenta vive en cloud, así que Kerebrom no parchea APIs privadas de Claude ni bases internas del navegador. |
 | Claude Cowork | MCP local y semilla nativa en `memory/CLAUDE.md` cuando la app de escritorio tiene storage local de Cowork. |
-| Codex | Servidor MCP en config, auto-aprobación para tools cotidianos y bloque global en `AGENTS.md`. |
+| Codex | Servidor MCP en config y auto-aprobación para tools cotidianos; el protocolo viaja por el servidor MCP en vez de ocupar el cuadro de instrucciones del usuario. |
 | Cursor | Entrada MCP y regla de memoria Kerebrom. |
 | Gemini CLI | Entrada MCP, prompt de sistema y variable de entorno para instrucciones de sistema. |
 | OpenCode | Entrada MCP y archivo de protocolo de memoria Kerebrom. |

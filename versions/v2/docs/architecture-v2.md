@@ -159,9 +159,9 @@ Requirements: Git is **not** required. `make` and `go` are required (same requir
 
 `kerebrom setup auto` detects each client's local config and writes:
 
-- **Claude Code** (`~/.claude/`): MCP server entry in `mcp.json`, hooks in `settings.json`, the six agent-profile `mcp__Kerebrom__*` entries in `permissions.allow` (and removes any stale Kerebrom permissions outside the active agent surface), the protocol block in `CLAUDE.md`, and five hook scripts in `~/.kerebrom/hooks/claude-code/`.
+- **Claude Code** (`~/.claude/`): MCP server entry in `mcp.json`, hooks in `settings.json`, the six agent-profile `mcp__Kerebrom__*` entries in `permissions.allow` (and removes any stale Kerebrom permissions outside the active agent surface), five hook scripts in `~/.kerebrom/hooks/claude-code/`, and removal of any old Kerebrom block from user-owned `CLAUDE.md`.
 - **Claude Desktop** (`~/Library/Application Support/Claude/` on macOS): MCP server entry in `claude_desktop_config.json` and, when Cowork local account storage exists, an idempotent Kerebrom block in `local-agent-mode-sessions/<account>/<org>/memory/CLAUDE.md`. Claude Chat account memory is cloud-backed and is not patched through private APIs or browser databases.
-- **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, plus the protocol block in `AGENTS.md`.
+- **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, plus removal of any old Kerebrom block from user-owned `AGENTS.md`.
 - **Cursor** (`~/.cursor/`): MCP entry in `mcp.json`, protocol rule in `rules/kerebrom.mdc`.
 - **Gemini CLI** (`~/.gemini/`): MCP entry in `settings.json`, protocol in `system.md`, env var enabling system.md.
 - **OpenCode** (`~/.config/opencode/`): MCP entry in `opencode.json`, protocol in `kerebrom-memory.md`.
@@ -224,7 +224,7 @@ The updater is testable end-to-end:
 |---|---|
 | Add a new MCP tool | `internal/transport/mcp/server.go` (registerTools + handler) and add to `profileAgentTools` or `profileAdminTools` |
 | Add a new client to setup | `internal/setup/setup.go` (new `setup<Client>` function + entry in `Run`/`SupportedAgents`/`setupAll`) |
-| Change the protocol text | `memoryProtocolText` in `internal/transport/mcp/server.go` and `memoryProtocolBlock`/`codexAGENTSBlock` in `internal/setup/setup.go` |
+| Change the protocol text | `memoryProtocolText` in `internal/transport/mcp/server.go`; setup must not duplicate the full protocol into user-owned preference files |
 | Change the update behavior | `internal/updater/update.go` (Config struct + Run flow) |
 | Add a new CLI command | `internal/cli/app.go` (case in `Run` + `runFoo` function) |
 | Change end-user installation behavior | `Makefile`, `internal/setup/setup.go`, root `AGENTS.md`, root `CLAUDE.md`, and `docs/AI_AGENT_INSTALL.md` |

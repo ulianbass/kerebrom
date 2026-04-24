@@ -43,10 +43,10 @@ The seven new tools are not aliases — `mem_*` is removed entirely. If you have
 `kerebrom setup` (run automatically by `kerebrom update`) rewrites:
 
 - `~/.claude/settings.json` — adds the six default agent-profile `mcp__Kerebrom__*` entries to `permissions.allow` and **removes** leftover Kerebrom entries outside the active agent surface. Other non-Kerebrom entries you added are preserved.
-- `~/.claude/CLAUDE.md` — the `<!-- KEREBROM:START -->` block is replaced with the v2 protocol text.
+- `~/.claude/CLAUDE.md` — any old `<!-- KEREBROM:START -->` block is removed so user-owned global instructions stay free for user preferences.
 - `~/.claude/mcp.json` — the `Kerebrom` MCP server entry is updated to use the new binary path (no behavior change).
 - `~/.codex/config.toml` — the `[mcp_servers.kerebrom]` block is regenerated with auto-approval for the six agent tools instead of the eleven v1 tools.
-- `~/.codex/AGENTS.md` — Kerebrom block replaced with the v2 cycle text.
+- `~/.codex/AGENTS.md` — any old `<!-- KEREBROM:START -->` block is removed so the Codex custom-instructions textbox remains user-owned.
 - `~/Library/Application Support/Claude/claude_desktop_config.json` — MCP server entry refreshed (binary path).
 - `~/.gemini/{settings.json, system.md, .env}` — protocol and MCP entry updated.
 - `~/.config/opencode/{opencode.json, kerebrom-memory.md}` — same.
@@ -75,14 +75,14 @@ kerebrom update
 You'll see:
 
 ```
-kerebrom update available: v1.1.0 → v2.1.1
-release notes: https://github.com/ulianbass/kerebrom/releases/tag/v2.1.1
-Install v2.1.1 now? [y/N]: y
-downloading https://github.com/ulianbass/kerebrom/archive/refs/tags/v2.1.1.tar.gz
+kerebrom update available: v1.1.0 → v2.1.2
+release notes: https://github.com/ulianbass/kerebrom/releases/tag/v2.1.2
+Install v2.1.2 now? [y/N]: y
+downloading https://github.com/ulianbass/kerebrom/archive/refs/tags/v2.1.2.tar.gz
 extracting source
 running make install-user in /tmp/kerebrom-update-XYZ/kerebrom-2.0.0/versions/v2
 ...
-kerebrom installed: v2.1.1
+kerebrom installed: v2.1.2
 restart any running clients (Claude Desktop, Code, Codex, etc.) to pick up the new MCP server.
 ```
 
@@ -108,7 +108,7 @@ Then restart any AI client.
 
 ```bash
 kerebrom version
-# → v2.1.1 (commit=..., build_date=...)
+# → v2.1.2 (commit=..., build_date=...)
 ```
 
 In Claude Desktop, open a fresh chat and ask "What do you know about my projects?". Check `~/Library/Logs/Claude/mcp-server-Kerebrom.log` — you should see a `tools/call` for `context` immediately after the user's message. If you only see `initialize`, `tools/list`, and silence, Claude Desktop is still using a cached MCP session — fully quit (⌘Q) and reopen.

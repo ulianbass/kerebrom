@@ -531,6 +531,8 @@ func memoryProtocolText(allowlist map[string]bool) string {
 	return strings.TrimSpace(fmt.Sprintf(`
 Kerebrom provides persistent memory that survives across sessions and is shared across all your AI tools. It is installed and active right now. Do not wait for the user to ask for it.
 
+This MCP instructions payload is the canonical Kerebrom operating contract. Do not depend on user-owned custom-instruction or preference textboxes for Kerebrom to work; those spaces belong to the user.
+
 CORE TOOLS (always available — use without asking):
 %s
 

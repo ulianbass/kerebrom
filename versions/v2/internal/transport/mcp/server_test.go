@@ -678,6 +678,7 @@ func assertProtocolText(t *testing.T, text string) {
 		"visible chat",
 		"DEFERRED TOOL CLIENTS",
 		"tool_search",
+		"user-owned custom-instruction",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("protocol text missing %q: %s", want, text)

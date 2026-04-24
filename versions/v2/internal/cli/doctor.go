@@ -242,9 +242,9 @@ func runAgentConfigDoctorChecks(homeDir string, report *doctorReport) {
 		return
 	}
 	checkContains(report, "codex mcp config", filepath.Join(homeDir, ".codex", "config.toml"), []string{"mcp_servers.kerebrom", "kerebrom", "mcp"})
-	checkContains(report, "codex agents protocol", filepath.Join(homeDir, ".codex", "AGENTS.md"), []string{"KEREBROM:START", "context", "remember"})
+	checkNoContains(report, "codex user preferences clean", filepath.Join(homeDir, ".codex", "AGENTS.md"), []string{"KEREBROM:START"})
 	checkContains(report, "claude code settings", filepath.Join(homeDir, ".claude", "settings.json"), []string{"mcp__Kerebrom__context", "mcp__Kerebrom__remember"})
-	checkContains(report, "claude global instructions", filepath.Join(homeDir, ".claude", "CLAUDE.md"), []string{"Kerebrom", "context", "remember"})
+	checkNoContains(report, "claude global instructions clean", filepath.Join(homeDir, ".claude", "CLAUDE.md"), []string{"KEREBROM:START"})
 	checkContains(report, "claude desktop mcp config", filepath.Join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json"), []string{"Kerebrom", "kerebrom", "mcp"})
 }
 
@@ -395,6 +395,30 @@ func checkContains(report *doctorReport, name string, path string, requiredNeedl
 	}
 	if len(missing) > 0 {
 		report.add(name, "WARN", "missing: "+strings.Join(missing, ", "))
+		return
+	}
+	report.add(name, "PASS", path)
+}
+
+func checkNoContains(report *doctorReport, name string, path string, forbiddenNeedles []string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			report.add(name, "PASS", path+" not found")
+			return
+		}
+		report.add(name, "FAIL", err.Error())
+		return
+	}
+	content := string(raw)
+	hits := []string{}
+	for _, needle := range forbiddenNeedles {
+		if strings.Contains(content, needle) {
+			hits = append(hits, needle)
+		}
+	}
+	if len(hits) > 0 {
+		report.add(name, "WARN", "contains Kerebrom block in user-owned instructions: "+strings.Join(hits, ", "))
 		return
 	}
 	report.add(name, "PASS", path)
