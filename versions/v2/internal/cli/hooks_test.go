@@ -314,6 +314,48 @@ func TestHookContextTextUsesCrossProjectLookupForWeakProject(t *testing.T) {
 	}
 }
 
+func TestRunHookSessionStopPersistsSessionSummaryObservation(t *testing.T) {
+	store := newHookTestStore(t)
+	ctx := context.Background()
+
+	if err := store.StartSession(ctx, sqlite.StartSessionInput{
+		ID:        "claude-stop-session",
+		Project:   "Proyecto Kerebrom",
+		Directory: ".",
+	}); err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := runHookSessionStop(ctx, store, map[string]any{
+		"session_id": "claude-stop-session",
+		"summary":    "Claude Stop hook closed the work with durable summary.",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("hook failed: code=%d stderr=%q", code, stderr.String())
+	}
+
+	session, err := store.GetSession(ctx, "claude-stop-session")
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if session.Status != "completed" {
+		t.Fatalf("expected completed session, got %+v", session)
+	}
+	observations, err := store.ListObservations(ctx, sqlite.ListObservationOptions{
+		Project:   "Proyecto Kerebrom",
+		SessionID: "claude-stop-session",
+		Limit:     5,
+	})
+	if err != nil {
+		t.Fatalf("list observations: %v", err)
+	}
+	if len(observations) != 1 || observations[0].Type != "session_summary" {
+		t.Fatalf("expected session_summary observation, got %#v", observations)
+	}
+}
+
 func newHookTestStore(t *testing.T) *sqlite.Store {
 	t.Helper()
 

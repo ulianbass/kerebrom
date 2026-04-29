@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.2](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.2) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.3](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.3) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -113,7 +113,7 @@ Kerebrom es privado por defecto:
 - La base de memoria es SQLite + FTS5 local.
 - No hay telemetría, base cloud, cuenta hospedada ni daemon en background.
 - `kerebrom update` contacta GitHub Releases solo cuando el usuario lo ejecuta.
-- `kerebrom mcp-http` existe para flujos avanzados de conectores remotos, pero exponer fuera de loopback requiere autenticación explícita o un override inseguro explícito.
+- `kerebrom mcp-http` y `kerebrom serve` son transportes locales por defecto; exponer fuera de loopback requiere autenticación explícita o un override inseguro explícito.
 - La memoria de cuenta de Claude Chat no se modifica por APIs privadas. Si el usuario quiere una pista nativa en Claude Chat, usa el prompt listo para copiar en [docs/AI_AGENT_INSTALL.es.md](docs/AI_AGENT_INSTALL.es.md#semilla-opcional-para-memoria-nativa-de-claude-chat).
 
 ## Comandos
@@ -139,6 +139,12 @@ Transporte MCP HTTP local avanzado:
 
 ```bash
 KEREBROM_REMOTE_TOKEN="change-me" kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
+```
+
+API HTTP local avanzada:
+
+```bash
+KEREBROM_REMOTE_TOKEN="change-me" kerebrom serve --addr 127.0.0.1:7438
 ```
 
 ## Líneas Del Producto

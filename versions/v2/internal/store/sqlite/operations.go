@@ -358,7 +358,7 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 		if err != nil {
 			return nil, fmt.Errorf("merge sessions for %s: %w", source, err)
 		}
-		observationResult, err := tx.ExecContext(ctx, `UPDATE observations SET project = ?, updated_at = ? WHERE project = ?`, target, now, source)
+		observationRows, err := mergeProjectObservations(ctx, tx, source, target, now)
 		if err != nil {
 			return nil, fmt.Errorf("merge observations for %s: %w", source, err)
 		}
@@ -387,9 +387,7 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 		if rows, err := sessionResult.RowsAffected(); err == nil {
 			count += rows
 		}
-		if rows, err := observationResult.RowsAffected(); err == nil {
-			count += rows
-		}
+		count += observationRows
 		if rows, err := promptResult.RowsAffected(); err == nil {
 			count += rows
 		}
@@ -401,6 +399,135 @@ func (s *Store) MergeProjects(ctx context.Context, sources []string, target stri
 	}
 
 	return map[string]any{"target": target, "updated": updated}, nil
+}
+
+type mergeObservationRow struct {
+	id             int64
+	observationTyp string
+	title          string
+	content        string
+	scope          string
+	topicKey       string
+	toolName       string
+	deletedAt      string
+}
+
+func mergeProjectObservations(ctx context.Context, tx *sql.Tx, source string, target string, now string) (int64, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT id, type, title, content, scope, COALESCE(topic_key, ''), COALESCE(tool_name, ''), COALESCE(deleted_at, '')
+		FROM observations
+		WHERE project = ?
+		ORDER BY id ASC
+	`, source)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var observations []mergeObservationRow
+	for rows.Next() {
+		var observation mergeObservationRow
+		if err := rows.Scan(
+			&observation.id,
+			&observation.observationTyp,
+			&observation.title,
+			&observation.content,
+			&observation.scope,
+			&observation.topicKey,
+			&observation.toolName,
+			&observation.deletedAt,
+		); err != nil {
+			return 0, fmt.Errorf("scan project observation: %w", err)
+		}
+		observations = append(observations, observation)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("iterate project observations: %w", err)
+	}
+
+	var changed int64
+	for _, observation := range observations {
+		newHash := normalizedHash(observation.observationTyp, target, observation.scope, observation.title, observation.content, observation.topicKey)
+		if observation.deletedAt == "" {
+			var duplicateID int64
+			err := tx.QueryRowContext(ctx, `
+				SELECT id
+				FROM observations
+				WHERE normalized_hash = ?
+				  AND deleted_at IS NULL
+				  AND id != ?
+				ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
+				LIMIT 1
+			`, newHash, observation.id).Scan(&duplicateID)
+			if err != nil && err != sql.ErrNoRows {
+				return changed, fmt.Errorf("find project merge duplicate: %w", err)
+			}
+			if duplicateID > 0 {
+				if _, err := tx.ExecContext(ctx, `
+					UPDATE observations
+					SET duplicate_count = duplicate_count + 1,
+						last_seen_at = ?,
+						updated_at = ?
+					WHERE id = ?
+				`, now, now, duplicateID); err != nil {
+					return changed, fmt.Errorf("bump project merge duplicate: %w", err)
+				}
+				if _, err := tx.ExecContext(ctx, `
+					UPDATE observations
+					SET project = ?,
+						normalized_hash = ?,
+						deleted_at = ?,
+						updated_at = ?
+					WHERE id = ?
+				`, target, newHash, now, now, observation.id); err != nil {
+					return changed, fmt.Errorf("soft-delete project merge duplicate: %w", err)
+				}
+				if err := insertObservationEvent(ctx, tx, ObservationEvent{
+					ObservationID:        duplicateID,
+					EventType:            "project_merge_duplicate",
+					Actor:                "kerebrom",
+					Reason:               "Project consolidation found an equivalent active observation; semantic valid_at preserved.",
+					RelatedObservationID: observation.id,
+					CreatedAt:            now,
+				}); err != nil {
+					return changed, err
+				}
+				if err := insertObservationEvent(ctx, tx, ObservationEvent{
+					ObservationID:        observation.id,
+					EventType:            "soft_deleted",
+					Actor:                "kerebrom",
+					Reason:               "Soft-deleted duplicate revealed by project consolidation.",
+					RelatedObservationID: duplicateID,
+					CreatedAt:            now,
+				}); err != nil {
+					return changed, err
+				}
+				changed++
+				continue
+			}
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE observations
+			SET project = ?,
+				normalized_hash = ?,
+				updated_at = ?
+			WHERE id = ?
+		`, target, newHash, now, observation.id); err != nil {
+			return changed, fmt.Errorf("merge project observation: %w", err)
+		}
+		if err := insertObservationEvent(ctx, tx, ObservationEvent{
+			ObservationID: observation.id,
+			EventType:     "project_merged",
+			Actor:         "kerebrom",
+			Reason:        fmt.Sprintf("Project metadata changed from %s to %s; semantic valid_at preserved.", source, target),
+			CreatedAt:     now,
+		}); err != nil {
+			return changed, err
+		}
+		changed++
+	}
+	return changed, nil
 }
 
 func (s *Store) SetProjectAliases(ctx context.Context, aliases []string, target string) (map[string]any, error) {

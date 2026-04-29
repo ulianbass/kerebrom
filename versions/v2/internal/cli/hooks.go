@@ -199,7 +199,7 @@ func runHookSessionStop(ctx context.Context, store *sqlite.Store, payload map[st
 		return 0
 	}
 	summary := hookString(payload, "summary")
-	if err := store.EndSession(ctx, sqlite.EndSessionInput{ID: sessionID, Summary: summary, EndedAt: time.Now().UTC()}); err != nil {
+	if _, _, err := store.EndSessionWithSummaryObservation(ctx, sqlite.EndSessionInput{ID: sessionID, Summary: summary, EndedAt: time.Now().UTC()}, "kerebrom_hook_session_stop"); err != nil {
 		fmt.Fprintf(stderr, "end hook session: %v\n", err)
 		return 1
 	}

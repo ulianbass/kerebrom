@@ -296,8 +296,43 @@ func TestServerLifecycleAndSearch(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &summaryPayload); err != nil {
 		t.Fatalf("decode session summary payload: %v", err)
 	}
-	if summaryPayload.Session.Status != "completed" || summaryPayload.ObservationCount != 1 || len(summaryPayload.Recent) != 1 {
+	if summaryPayload.Session.Status != "completed" || summaryPayload.ObservationCount != 2 || len(summaryPayload.Recent) != 2 {
 		t.Fatalf("unexpected session summary: %+v", summaryPayload)
+	}
+	if summaryPayload.Recent[0].Type != "session_summary" {
+		t.Fatalf("HTTP session end should persist a recallable summary observation: %+v", summaryPayload.Recent)
+	}
+}
+
+func TestServerBearerAuthProtectsHTTPAPI(t *testing.T) {
+	t.Parallel()
+
+	store, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "kerebrom.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	if err := InitStore(context.Background(), store); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	server := NewServerWithAuth(store, "secret-token")
+
+	req := httptest.NewRequest(http.MethodGet, "/stats", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated API request to be rejected, got status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/stats", nil)
+	req.Header.Set("Authorization", "Bearer secret-token")
+	rec = httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected authenticated API request to pass, got status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -364,5 +399,60 @@ func TestHTTPContextAndTimelineTreatWeakProjectAsCrossProject(t *testing.T) {
 	}
 	if len(contextPayload.Matches) == 0 || contextPayload.Matches[0].ID != observation.ID {
 		t.Fatalf("weak project context should include cross-project match %d, got %+v", observation.ID, contextPayload.Matches)
+	}
+}
+
+func TestHTTPContextPrefersExactProjectBeforeRelaxedMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "kerebrom.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	if err := InitStore(ctx, store); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	kerebromObservation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:    "decision",
+		Title:   "Kerebrom routing exact match",
+		Content: "Kerebrom routing should keep exact project matches ahead of relaxed matches.",
+		Project: "Proyecto Kerebrom",
+	})
+	if err != nil {
+		t.Fatalf("save kerebrom observation: %v", err)
+	}
+	if _, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:    "decision",
+		Title:   "Falage routing relaxed match",
+		Content: "Falage routing is useful only as a relaxed cross-project match.",
+		Project: "Proyecto Falage",
+	}); err != nil {
+		t.Fatalf("save falage observation: %v", err)
+	}
+
+	server := NewServer(store)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/context?project=Proyecto+Kerebrom&q=routing+match&limit=10", nil)
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("context status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		ProjectFilterRelaxed bool                 `json:"project_filter_relaxed"`
+		Matches              []sqlite.Observation `json:"matches"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode context payload: %v", err)
+	}
+	if !payload.ProjectFilterRelaxed {
+		t.Fatalf("expected relaxed cross-project fill to be reported: %+v", payload)
+	}
+	if len(payload.Matches) < 2 || payload.Matches[0].ID != kerebromObservation.ID {
+		t.Fatalf("expected exact project match %d first, got %+v", kerebromObservation.ID, payload.Matches)
 	}
 }

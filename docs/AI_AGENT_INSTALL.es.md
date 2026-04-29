@@ -8,7 +8,7 @@ Objetivo: instalar Kerebrom como producto de usuario final, no como sandbox de d
 
 - Usa la línea estable actual: `versions/v2`.
 - Prefiere la ruta plug-and-play: `make install-user`.
-- Mantén Kerebrom local-first. No inicies ni expongas `mcp-http` salvo que el usuario pida explícitamente soporte para conectores remotos.
+- Mantén Kerebrom local-first. No inicies ni expongas `mcp-http` o `serve` fuera de loopback salvo que el usuario pida explícitamente soporte remoto y acepte el tradeoff de privacidad.
 - No importes backups legacy, no borres memoria, no resetees bases de datos y no modifiques configuración ajena de clientes IA.
 - Después de instalar o actualizar, dile al usuario que reinicie por completo cualquier cliente IA abierto.
 - Si un comando falla porque falta Go o Make, explica la dependencia faltante y detente con próximos pasos claros.
@@ -149,13 +149,15 @@ No pegues contenido privado de archivos de configuración salvo que el usuario p
 | El cliente IA muestra Kerebrom pero no lo usa | El cliente cacheó una sesión MCP vieja. | Cerrar por completo y reabrir el cliente. |
 | Claude Chat no retiene la pista nativa de memoria | La memoria de cuenta de Claude Chat vive en cloud. | Añadir la regla de autoridad Kerebrom manualmente por la UI soportada de Claude. |
 | El usuario quiere soporte remoto para ChatGPT/Claude web | Los clientes cloud no pueden lanzar MCP stdio local. | Explica el tradeoff de privacidad antes de usar `mcp-http`; exige consentimiento explícito. |
+| El usuario quiere API HTTP desde otra máquina | Loopback local es el límite de privacidad por defecto. | Exige `KEREBROM_REMOTE_TOKEN` o `--auth-token`; no uses modo público sin autenticación. |
 
 ## Límite De Privacidad
 
-Nunca expongas Kerebrom por red por defecto. Este comando es avanzado y solo debe usarse después de que el usuario acepte explícitamente el riesgo:
+Nunca expongas Kerebrom por red por defecto. Estos comandos son avanzados y solo deben usarse después de que el usuario acepte explícitamente el riesgo:
 
 ```bash
 KEREBROM_REMOTE_TOKEN="change-me" kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
+KEREBROM_REMOTE_TOKEN="change-me" kerebrom serve --addr 127.0.0.1:7438
 ```
 
 Direcciones fuera de loopback requieren token de auth o un override inseguro explícito. No sugieras modo público sin autenticación para usuarios normales.

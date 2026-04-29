@@ -39,7 +39,7 @@ tarball     Code, Codex,    Gemini, etc.)       kerebrom.db    chunks/
 download    Cursor, etc.)
 ```
 
-Everything compiles into one binary. There is no daemon, no service, no socket beyond the user-launched `mcp` (stdio) or `mcp-http` (loopback by default) processes.
+Everything compiles into one binary. There is no daemon, no service, no socket beyond user-launched processes. `mcp` uses stdio. `mcp-http` and `serve` are loopback by default, and non-loopback binds require a bearer token or an explicit unsafe override.
 
 ## The MCP surface
 
@@ -94,7 +94,7 @@ The protocol text encodes a four-step rhythm the model follows automatically:
 
 Project names organize memory; they must not become hard walls that hide relevant context from another AI client. v2.0.4 treats weak project identities such as `/`, `.`, `default`, `home`, or the user's home-folder name as **unknown** for read paths. When `context`, `recall`, `timeline`, HTTP context/timeline, or Claude Code hook context receive an unknown project, they use a cross-project lookup so clients launched outside a workspace still see the latest durable memories.
 
-When a strong project is supplied explicitly, Kerebrom still searches that project first, but `context` and `recall` also merge broad cross-project matches. This prevents generic local hits from hiding a more relevant observation in another project, while preserving project metadata for organization, summaries, prompts, and explicit project filters.
+When a strong project is supplied explicitly, Kerebrom still searches that project first, but `context` and `recall` also merge broad cross-project matches after the exact project results. This lets strong project matches keep priority while broad matches can still fill remaining slots when another project contains relevant context. Project metadata remains preserved for organization, summaries, prompts, and explicit project filters.
 
 v2.0.6 adds persistent project aliases. `kerebrom projects consolidate --target proyecto-falage --sources falage` now does two things: it moves existing sessions, observations, and prompts to the canonical project, and it stores `falage -> proyecto-falage` so future writes through the old name resolve to the canonical project instead of recreating the fragment. `kerebrom projects alias` can add alias rules without moving historical rows.
 
@@ -130,17 +130,19 @@ Observations are not raw transcripts, but they still need provenance. v2.1.0 add
 - `updated` when content, type, title, topic, or metadata changes;
 - `reasserted` when a duplicate durable memory refreshes `duplicate_count` and `valid_at`;
 - `imported` when export/import or sync brings an observation into a store;
+- `project_merged` when project consolidation changes only project metadata while preserving `valid_at`;
+- `project_merge_duplicate` when consolidation reveals equivalent active observations and keeps one canonical row;
 - `soft_deleted` when `forget` invalidates a memory without removing audit history.
 
 Existing observations are backfilled with a `created` migration event on first init after upgrade. The ledger is exported and synced with memory data, but it stores lifecycle metadata only; it does not store private raw transcript.
 
 ## Session lifecycle behavior
 
-A session is active only until a client closes it through `summary`, `session-end`, or a native stop hook. If a native client hook recently opened a session and the MCP caller omits `session_id`, Kerebrom attaches the MCP tool call to that recent native session instead of creating or closing a parallel `mcp:<project>` session. `summary` always closes the selected session, even if the agent omitted explicit summary text; in that fallback case the session row records `Session closed by user request without an explicit summary.` Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The stale-close summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
+A session is active only until a client closes it through `summary`, `session-end`, the HTTP session end route, or a native stop hook. All close paths persist a recallable `session_summary` observation, not just a session-row summary field. If a native client hook recently opened a session and the MCP caller omits `session_id`, Kerebrom attaches the MCP tool call to that recent native session instead of creating or closing a parallel `mcp:<project>` session. `summary` always closes the selected session, even if the agent omitted explicit summary text; in that fallback case the session row and the summary observation record `Session closed by user request without an explicit summary.` Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The stale-close summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
 
 ## Deep Doctor
 
-`kerebrom doctor --deep` is the operational readiness check. It verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, stale active sessions, project alias cycles, installed binary paths, Codex/Claude config blocks, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
+`kerebrom doctor --deep` is the operational readiness check. It verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, stale active sessions before and after runtime repair, project alias cycles, installed binary paths, Codex/Claude config blocks, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
 
 ## Self-update flow
 
@@ -224,7 +226,7 @@ The updater is testable end-to-end:
 |---|---|
 | Add a new MCP tool | `internal/transport/mcp/server.go` (registerTools + handler) and add to `profileAgentTools` or `profileAdminTools` |
 | Add a new client to setup | `internal/setup/setup.go` (new `setup<Client>` function + entry in `Run`/`SupportedAgents`/`setupAll`) |
-| Change the protocol text | `memoryProtocolText` in `internal/transport/mcp/server.go`; setup must not duplicate the full protocol into user-owned preference files |
+| Change the protocol text | `memoryProtocolText` in `internal/transport/mcp/server.go`; setup must not duplicate the full protocol into Codex/Claude user-owned preference textboxes. Client rule files may carry only the supported bootstrap for that client. |
 | Change the update behavior | `internal/updater/update.go` (Config struct + Run flow) |
 | Add a new CLI command | `internal/cli/app.go` (case in `Run` + `runFoo` function) |
 | Change end-user installation behavior | `Makefile`, `internal/setup/setup.go`, root `AGENTS.md`, root `CLAUDE.md`, and `docs/AI_AGENT_INSTALL.md` |

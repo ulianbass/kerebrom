@@ -810,24 +810,13 @@ func (s *Server) handleSummary(ctx context.Context, request mcp.CallToolRequest)
 	if strings.TrimSpace(summary) == "" {
 		summary = "Session closed by user request without an explicit summary."
 	}
-	if err := s.store.EndSession(ctx, sqlite.EndSessionInput{
+	if _, _, err := s.store.EndSessionWithSummaryObservation(ctx, sqlite.EndSessionInput{
 		ID:      id,
 		Summary: summary,
 		EndedAt: time.Now().UTC(),
-	}); err != nil {
+	}, "summary"); err != nil {
 		return mcp.NewToolResultError(err.Error()), nil
 	}
-	_, _ = s.store.SaveObservation(ctx, sqlite.ObservationInput{
-		SessionID: id,
-		Type:      "session_summary",
-		Title:     "Session summary " + id,
-		Content:   summary,
-		Project:   project,
-		Scope:     "project",
-		TopicKey:  "session/" + id,
-		ToolName:  "summary",
-		CreatedAt: time.Now().UTC(),
-	})
 	s.activity.ClearSession(id)
 
 	payload, err := s.sessionSummaryPayload(ctx, id, request.GetInt("limit", 10))
@@ -1022,23 +1011,23 @@ func mergeBroadMatches(primary []sqlite.Observation, broad []sqlite.Observation,
 	relaxedAdded := false
 	project = sqlite.NormalizeProject(project)
 
-	for _, observation := range broad {
+	for _, observation := range primary {
 		if len(merged) >= limit {
 			break
-		}
-		if sqlite.NormalizeProject(observation.Project) != project && observation.Scope != "global" {
-			relaxedAdded = true
 		}
 		seen[observation.ID] = true
 		merged = append(merged, observation)
 	}
 
-	for _, observation := range primary {
+	for _, observation := range broad {
 		if len(merged) >= limit {
 			break
 		}
 		if seen[observation.ID] {
 			continue
+		}
+		if sqlite.NormalizeProject(observation.Project) != project && observation.Scope != "global" {
+			relaxedAdded = true
 		}
 		seen[observation.ID] = true
 		merged = append(merged, observation)

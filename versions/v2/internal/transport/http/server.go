@@ -17,8 +17,9 @@ import (
 )
 
 type Server struct {
-	store *sqlite.Store
-	mux   *http.ServeMux
+	store     *sqlite.Store
+	mux       *http.ServeMux
+	authToken string
 }
 
 type sessionRequest struct {
@@ -55,9 +56,14 @@ type healthResponse struct {
 }
 
 func NewServer(store *sqlite.Store) *Server {
+	return NewServerWithAuth(store, "")
+}
+
+func NewServerWithAuth(store *sqlite.Store, authToken string) *Server {
 	server := &Server{
-		store: store,
-		mux:   http.NewServeMux(),
+		store:     store,
+		mux:       http.NewServeMux(),
+		authToken: strings.TrimSpace(authToken),
 	}
 
 	server.routes()
@@ -65,6 +71,15 @@ func NewServer(store *sqlite.Store) *Server {
 }
 
 func (s *Server) Handler() http.Handler {
+	if s.authToken != "" {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer "+s.authToken && r.Header.Get("X-Kerebrom-Token") != s.authToken {
+				writeError(w, http.StatusUnauthorized, fmt.Errorf("unauthorized"))
+				return
+			}
+			s.mux.ServeHTTP(w, r)
+		})
+	}
 	return s.mux
 }
 
@@ -165,19 +180,24 @@ func (s *Server) handleEndSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.EndSession(r.Context(), sqlite.EndSessionInput{
+	observation, saved, err := s.store.EndSessionWithSummaryObservation(r.Context(), sqlite.EndSessionInput{
 		ID:      sessionID,
 		Summary: payload.Summary,
 		EndedAt: time.Now().UTC(),
-	}); err != nil {
+	}, "http_session_end")
+	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	summary := strings.TrimSpace(payload.Summary)
+	if saved {
+		summary = observation.Content
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":      sessionID,
 		"status":  "completed",
-		"summary": payload.Summary,
+		"summary": summary,
 	})
 }
 
@@ -569,23 +589,23 @@ func mergeBroadMatches(primary []sqlite.Observation, broad []sqlite.Observation,
 	relaxedAdded := false
 	project = sqlite.NormalizeProject(project)
 
-	for _, observation := range broad {
+	for _, observation := range primary {
 		if len(merged) >= limit {
 			break
-		}
-		if sqlite.NormalizeProject(observation.Project) != project && observation.Scope != "global" {
-			relaxedAdded = true
 		}
 		seen[observation.ID] = true
 		merged = append(merged, observation)
 	}
 
-	for _, observation := range primary {
+	for _, observation := range broad {
 		if len(merged) >= limit {
 			break
 		}
 		if seen[observation.ID] {
 			continue
+		}
+		if sqlite.NormalizeProject(observation.Project) != project && observation.Scope != "global" {
+			relaxedAdded = true
 		}
 		seen[observation.ID] = true
 		merged = append(merged, observation)

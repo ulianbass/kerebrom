@@ -450,6 +450,58 @@ func TestRecallFromStrongProjectAlsoSurfacesBetterCrossProjectMatches(t *testing
 	assertObservationInPayload(t, payload, "matches", falageObservation.ID)
 }
 
+func TestRecallFromStrongProjectPrefersExactProjectBeforeRelaxedMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	kerebromObservation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:      "decision",
+		Title:     "Kerebrom audit memory routing",
+		Content:   "**What**: Kerebrom audit memory routing must keep exact project matches first.",
+		Project:   "Proyecto Kerebrom",
+		Scope:     "project",
+		CreatedAt: time.Now().UTC().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("save kerebrom observation: %v", err)
+	}
+	falageObservation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:      "decision",
+		Title:     "Falage audit memory routing",
+		Content:   "**What**: Falage audit memory routing is a related but different project match.",
+		Project:   "Proyecto Falage",
+		Scope:     "project",
+		CreatedAt: time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("save falage observation: %v", err)
+	}
+
+	mcpClient := newTestClient(t, ctx, store)
+	recallResult := callTool(t, ctx, mcpClient, "recall", map[string]any{
+		"query":   "audit memory routing",
+		"project": "Proyecto Kerebrom",
+		"limit":   10,
+	})
+	payload := mustStructuredMap(t, recallResult)
+	if payload["project_filter_relaxed"] != true {
+		t.Fatalf("expected relaxed cross-project fill to be reported: %#v", payload)
+	}
+	matches, ok := payload["matches"].([]any)
+	if !ok || len(matches) < 2 {
+		t.Fatalf("expected exact and relaxed matches, got %#v", payload["matches"])
+	}
+	first, ok := matches[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first match map, got %#v", matches[0])
+	}
+	if int64(first["id"].(float64)) != kerebromObservation.ID {
+		t.Fatalf("expected exact project observation %d first before relaxed %d, got %#v", kerebromObservation.ID, falageObservation.ID, matches)
+	}
+	assertObservationInPayload(t, payload, "matches", falageObservation.ID)
+}
+
 // ----- Forget -----
 
 func TestForgetSoftDeleteHidesObservation(t *testing.T) {

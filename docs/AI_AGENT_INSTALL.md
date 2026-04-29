@@ -8,7 +8,7 @@ Goal: install Kerebrom as an end-user product, not as a development sandbox.
 
 - Use the current stable product line: `versions/v2`.
 - Prefer the plug-and-play path: `make install-user`.
-- Keep Kerebrom local-first. Do not start or expose `mcp-http` unless the user explicitly asks for remote connector support.
+- Keep Kerebrom local-first. Do not start or expose `mcp-http` or `serve` beyond loopback unless the user explicitly asks for remote connector support and accepts the privacy tradeoff.
 - Do not import legacy backups, delete memory, reset databases, or modify unrelated AI-client configuration.
 - After install or update, tell the user to fully restart any open AI client.
 - If a command fails because Go or Make is missing, explain the missing dependency and stop with clear next steps.
@@ -149,13 +149,15 @@ Do not paste private config file contents unless the user asks for debugging.
 | AI client shows Kerebrom but does not use it | Client cached the old MCP session. | Fully quit and reopen the client. |
 | Claude Chat does not retain the native memory hint | Claude Chat account memory is cloud-backed. | Add the Kerebrom authority hint manually through Claude's supported memory UI. |
 | User wants remote ChatGPT/Claude web connector support | Local stdio MCP cannot be launched by cloud clients. | Explain the privacy tradeoff before using `mcp-http`; require explicit user consent. |
+| User wants HTTP API access from another machine | Local loopback is the default privacy boundary. | Require `KEREBROM_REMOTE_TOKEN` or `--auth-token`; do not use public unauthenticated mode. |
 
 ## Privacy Boundary
 
-Never expose Kerebrom over the network by default. The command below is advanced and should only be used after the user explicitly accepts the risk:
+Never expose Kerebrom over the network by default. The commands below are advanced and should only be used after the user explicitly accepts the risk:
 
 ```bash
 KEREBROM_REMOTE_TOKEN="change-me" kerebrom mcp-http --addr 127.0.0.1:7437 --path /mcp
+KEREBROM_REMOTE_TOKEN="change-me" kerebrom serve --addr 127.0.0.1:7438
 ```
 
 Non-loopback addresses require an auth token or an explicit unsafe override. Do not suggest unsafe public unauthenticated mode for normal users.

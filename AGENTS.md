@@ -38,7 +38,7 @@ Use `SETUP_AGENT=all` only when the user asks to configure every supported clien
 
 ## Safety Rules
 
-- Do not enable `mcp-http` or expose memory over a network unless the user explicitly asks for remote connector support and accepts the privacy tradeoff.
+- Do not enable `mcp-http` or expose `serve`/memory over a network unless the user explicitly asks for remote connector support and accepts the privacy tradeoff.
 - Do not delete, reset, import, or migrate user memory unless the user explicitly asks.
 - Do not patch Claude Chat account memory through private APIs or browser databases. If the user wants a native Claude Chat memory hint, point them to the copy-paste prompt in [docs/AI_AGENT_INSTALL.md](docs/AI_AGENT_INSTALL.md#optional-claude-chat-native-memory-seed).
 - Do not copy private machine paths, config contents, tokens, memories, or backups into public docs, commits, issues, or release notes.

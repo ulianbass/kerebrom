@@ -40,8 +40,49 @@ func TestRunVersion(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
 
-	if !strings.Contains(stdout.String(), "v2.1.2") {
+	if !strings.Contains(stdout.String(), "v2.1.3") {
 		t.Fatalf("version output missing version: %q", stdout.String())
+	}
+}
+
+func TestRunSessionEndPersistsSessionSummaryObservation(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"session-start",
+		"--id", "cli-session-summary",
+		"--project", "Proyecto Kerebrom",
+		"--directory", ".",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("session-start failed: code=%d stderr=%q", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{
+		"session-end",
+		"--id", "cli-session-summary",
+		"--summary", "CLI closed a maintenance session with a durable summary.",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("session-end failed: code=%d stderr=%q", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{
+		"search",
+		"--project", "Proyecto Kerebrom",
+		"--query", "durable summary",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("search failed: code=%d stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Session summary cli-session-summary") {
+		t.Fatalf("session summary observation not found: %q", stdout.String())
 	}
 }
 
@@ -166,6 +207,24 @@ func TestRunMCPHTTPRequiresTokenForPublicAddress(t *testing.T) {
 
 	code := Run([]string{
 		"mcp-http",
+		"--addr", "0.0.0.0:7437",
+	}, &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("expected config error exit code 2, got %d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), config.RemoteTokenEnv) {
+		t.Fatalf("expected token guidance in stderr, got %q", stderr.String())
+	}
+}
+
+func TestRunServeRequiresTokenForPublicAddress(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{
+		"serve",
 		"--addr", "0.0.0.0:7437",
 	}, &stdout, &stderr)
 	if code != 2 {

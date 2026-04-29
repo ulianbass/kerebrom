@@ -8,13 +8,15 @@ Run through this list before tagging a new v2.x release.
 - [ ] `go test ./...` reports `ok` for every package.
 - [ ] `go vet ./...` succeeds.
 - [ ] `kerebrom doctor --deep` reports no FAIL after installing the release candidate.
-- [ ] No new external dependencies in `go.mod` (check `git diff go.mod`).
-- [ ] No leftover `mem_*` references in user-visible strings:
+- [ ] Any `go.mod` or `go.sum` change is deliberate: review the diff, record dependency scope in release notes, run `go mod verify`, and run `govulncheck ./...`.
+- [ ] No active v2 surface exposes legacy `mem_*` tools. Intentional references are allowed only in migration/ADR docs, cleanup tests, or explicit v1 compatibility text:
   ```bash
-  grep -rn 'mem_' versions/v2/ --include='*.go' --include='*.md' \
-    | grep -v 'memory\|memories\|moremem\|remember'
+  rg -n 'mcp__Kerebrom__mem_|\bmem_(bootstrap|context|save|save_prompt|search|session_start|session_end|session_summary|capture_passive|get_observation|stats|suggest_topic_key|update|delete|timeline|merge_projects)\b' \
+    versions/v2/internal versions/v2/cmd \
+    --glob '*.go' \
+    --glob '!versions/v2/internal/setup/setup_test.go'
   ```
-  Should print nothing.
+  Review any remaining hit; it must not be a registered v2 tool or an active setup instruction.
 
 ## 2. Manifest is current
 

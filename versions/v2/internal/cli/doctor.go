@@ -73,13 +73,17 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	defer func() {
 		_ = store.Close()
 	}()
+	preRepairStaleSessions := -1
+	if count, ok := preInitStaleSessionCount(ctx, store.DB()); ok {
+		preRepairStaleSessions = count
+	}
 	if err := store.Init(ctx); err != nil {
 		report.add("sqlite init", "FAIL", err.Error())
 		return finishDoctor(report, *jsonOutput, stdout)
 	}
 	report.add("sqlite init", "PASS", "schema loaded and runtime migrations applied")
 
-	runStoreDoctorChecks(ctx, store, &report)
+	runStoreDoctorChecks(ctx, store, &report, preRepairStaleSessions)
 	if *deep {
 		runVehicleDoctorChecks(strings.TrimSpace(*homeDir), &report)
 		runAgentConfigDoctorChecks(strings.TrimSpace(*homeDir), &report)
@@ -89,7 +93,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	return finishDoctor(report, *jsonOutput, stdout)
 }
 
-func runStoreDoctorChecks(ctx context.Context, store *sqlite.Store, report *doctorReport) {
+func runStoreDoctorChecks(ctx context.Context, store *sqlite.Store, report *doctorReport, preRepairStaleSessions int) {
 	if value, err := scalarString(ctx, store.DB(), `PRAGMA integrity_check`); err != nil {
 		report.add("sqlite integrity", "FAIL", err.Error())
 	} else if value != "ok" {
@@ -173,6 +177,12 @@ func runStoreDoctorChecks(ctx context.Context, store *sqlite.Store, report *doct
 		report.add("observations fts", "PASS", fmt.Sprintf("fts_rows=%d", count))
 	}
 
+	if preRepairStaleSessions > 0 {
+		report.add("stale active sessions pre-repair", "WARN", fmt.Sprintf("%d stale active session(s) were auto-closed during sqlite init", preRepairStaleSessions))
+	} else if preRepairStaleSessions == 0 {
+		report.add("stale active sessions pre-repair", "PASS", "no stale active sessions before repair")
+	}
+
 	cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
 	if count, err := scalarInt(ctx, store.DB(), `
 		SELECT COUNT(*)
@@ -215,6 +225,38 @@ func runStoreDoctorChecks(ctx context.Context, store *sqlite.Store, report *doct
 		}
 		report.add("project aliases", status, detail)
 	}
+}
+
+func preInitStaleSessionCount(ctx context.Context, db *sql.DB) (int, bool) {
+	exists, err := tableExists(ctx, db, "sessions")
+	if err != nil || !exists {
+		return 0, false
+	}
+	cutoff := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	count, err := scalarInt(ctx, db, `
+		SELECT COUNT(*)
+		FROM sessions
+		WHERE status = 'active'
+		  AND (
+			SELECT MAX(activity_at)
+			FROM (
+				SELECT sessions.started_at AS activity_at
+				UNION ALL
+				SELECT observations.updated_at AS activity_at
+				FROM observations
+				WHERE observations.deleted_at IS NULL
+				  AND COALESCE(observations.session_id, '') = sessions.id
+				UNION ALL
+				SELECT user_prompts.created_at AS activity_at
+				FROM user_prompts
+				WHERE COALESCE(user_prompts.session_id, '') = sessions.id
+			)
+		  ) < ?
+	`, cutoff)
+	if err != nil {
+		return 0, false
+	}
+	return count, true
 }
 
 func runVehicleDoctorChecks(homeDir string, report *doctorReport) {

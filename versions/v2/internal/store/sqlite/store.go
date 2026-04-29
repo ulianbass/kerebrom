@@ -17,6 +17,7 @@ import (
 
 const defaultBusyTimeout = 5 * time.Second
 const defaultStaleSessionTTL = 24 * time.Hour
+const defaultSessionCloseSummary = "Session closed without an explicit summary."
 
 var privateTagPattern = regexp.MustCompile(`(?is)<private>.*?</private>`)
 
@@ -607,6 +608,131 @@ func (s *Store) EndSession(ctx context.Context, input EndSessionInput) error {
 	}
 
 	return nil
+}
+
+func (s *Store) EndSessionWithSummaryObservation(ctx context.Context, input EndSessionInput, toolName string) (Observation, bool, error) {
+	id := strings.TrimSpace(input.ID)
+	if id == "" {
+		return Observation{}, false, fmt.Errorf("session id is required")
+	}
+
+	exists, err := s.SessionExists(ctx, id)
+	if err != nil {
+		return Observation{}, false, err
+	}
+	if !exists {
+		if err := s.EndSession(ctx, input); err != nil {
+			return Observation{}, false, err
+		}
+		return Observation{}, false, nil
+	}
+
+	session, err := s.GetSession(ctx, id)
+	if err != nil {
+		return Observation{}, false, err
+	}
+	summary := strings.TrimSpace(input.Summary)
+	if summary == "" {
+		summary = defaultSessionCloseSummary
+	}
+	if session.Status == "completed" && strings.TrimSpace(session.Summary) != "" && isGeneratedSessionCloseSummary(input.Summary) {
+		observation, found, err := s.sessionSummaryObservation(ctx, session.Project, id)
+		if err != nil {
+			return Observation{}, false, err
+		}
+		if found {
+			return observation, true, nil
+		}
+		observation, err = s.saveSessionSummaryObservation(ctx, id, session.Project, session.Summary, toolName, input.EndedAt)
+		if err != nil {
+			return Observation{}, false, err
+		}
+		return observation, true, nil
+	}
+	if session.Status == "completed" && strings.TrimSpace(session.Summary) == summary {
+		observation, found, err := s.sessionSummaryObservation(ctx, session.Project, id)
+		if err != nil {
+			return Observation{}, false, err
+		}
+		if found {
+			return observation, true, nil
+		}
+	}
+	input.ID = id
+	input.Summary = summary
+	if err := s.EndSession(ctx, input); err != nil {
+		return Observation{}, false, err
+	}
+
+	session, err = s.GetSession(ctx, id)
+	if err != nil {
+		return Observation{}, false, err
+	}
+	observation, err := s.saveSessionSummaryObservation(ctx, id, session.Project, summary, toolName, input.EndedAt)
+	if err != nil {
+		return Observation{}, false, err
+	}
+
+	return observation, true, nil
+}
+
+func (s *Store) saveSessionSummaryObservation(ctx context.Context, id string, project string, summary string, toolName string, createdAt time.Time) (Observation, error) {
+	if strings.TrimSpace(project) == "" {
+		project = "default"
+	}
+	return s.SaveObservation(ctx, ObservationInput{
+		SessionID: id,
+		Type:      "session_summary",
+		Title:     "Session summary " + id,
+		Content:   summary,
+		Project:   project,
+		Scope:     "project",
+		TopicKey:  "session/" + id,
+		ToolName:  toolName,
+		CreatedAt: createdAt,
+	})
+}
+
+func (s *Store) sessionSummaryObservation(ctx context.Context, project string, id string) (Observation, bool, error) {
+	project, err := s.ResolveProject(ctx, project)
+	if err != nil {
+		return Observation{}, false, err
+	}
+	if strings.TrimSpace(project) == "" {
+		project = "default"
+	}
+	var observationID int64
+	err = s.db.QueryRowContext(ctx, `
+		SELECT id
+		FROM observations
+		WHERE project = ?
+		  AND scope = 'project'
+		  AND topic_key = ?
+		  AND deleted_at IS NULL
+		ORDER BY COALESCE(valid_at, created_at) DESC, id DESC
+		LIMIT 1
+	`, project, "session/"+id).Scan(&observationID)
+	if err == sql.ErrNoRows {
+		return Observation{}, false, nil
+	}
+	if err != nil {
+		return Observation{}, false, fmt.Errorf("find session summary observation: %w", err)
+	}
+
+	observation, err := s.GetObservation(ctx, observationID)
+	if err != nil {
+		return Observation{}, false, err
+	}
+	return observation, true, nil
+}
+
+func isGeneratedSessionCloseSummary(summary string) bool {
+	switch strings.TrimSpace(summary) {
+	case "", defaultSessionCloseSummary, "Session closed by user request without an explicit summary.":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Store) SaveObservation(ctx context.Context, input ObservationInput) (Observation, error) {

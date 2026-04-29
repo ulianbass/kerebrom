@@ -832,11 +832,11 @@ func runSessionEnd(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
-	if err := store.EndSession(context.Background(), sqlite.EndSessionInput{
+	if _, _, err := store.EndSessionWithSummaryObservation(context.Background(), sqlite.EndSessionInput{
 		ID:      *id,
 		Summary: *summary,
 		EndedAt: time.Now().UTC(),
-	}); err != nil {
+	}, "session-end"); err != nil {
 		fmt.Fprintf(stderr, "end session: %v\n", err)
 		return 1
 	}
@@ -848,7 +848,9 @@ func runSessionEnd(args []string, stdout, stderr io.Writer) int {
 func runServe(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("serve", stderr)
 	addr := fs.String("addr", config.DefaultListenAddr(), "Listen address")
-	if err := fs.Parse(reorderFlagArgs(args, nil)); err != nil {
+	authToken := fs.String("auth-token", "", "Bearer token required by remote clients; defaults to KEREBROM_REMOTE_TOKEN")
+	allowPublicUnauthenticated := fs.Bool("allow-public-unauthenticated", false, "Allow non-loopback HTTP without an auth token")
+	if err := fs.Parse(reorderFlagArgs(args, map[string]bool{"allow-public-unauthenticated": true})); err != nil {
 		return 2
 	}
 	if len(fs.Args()) > 0 {
@@ -860,6 +862,15 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
+	token := strings.TrimSpace(*authToken)
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv(config.RemoteTokenEnv))
+	}
+	if token == "" && !*allowPublicUnauthenticated && !isLoopbackListenAddr(*addr) {
+		fmt.Fprintf(stderr, "serve auth token required for non-loopback address %q; set --auth-token, %s, or --allow-public-unauthenticated\n", *addr, config.RemoteTokenEnv)
+		return 2
+	}
+
 	store, closeFn, err := openStore(context.Background())
 	if err != nil {
 		fmt.Fprintf(stderr, "open store: %v\n", err)
@@ -867,8 +878,13 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	}
 	defer closeFn()
 
-	server := httptransport.NewServer(store)
+	server := httptransport.NewServerWithAuth(store, token)
 	fmt.Fprintf(stdout, "kerebrom HTTP server listening on %s\n", *addr)
+	if token != "" {
+		fmt.Fprintln(stdout, "auth: bearer token enabled")
+	} else {
+		fmt.Fprintln(stdout, "auth: disabled")
+	}
 	if err := server.ListenAndServe(*addr); err != nil {
 		fmt.Fprintf(stderr, "serve error: %v\n", err)
 		return 1
@@ -911,7 +927,7 @@ func runMCPHTTP(args []string, stdout, stderr io.Writer) int {
 	project := fs.String("project", "", "Default project name for MCP clients that omit project")
 	authToken := fs.String("auth-token", "", "Bearer token required by remote clients; defaults to KEREBROM_REMOTE_TOKEN")
 	allowPublicUnauthenticated := fs.Bool("allow-public-unauthenticated", false, "Allow non-loopback HTTP without an auth token")
-	if err := fs.Parse(reorderFlagArgs(args, nil)); err != nil {
+	if err := fs.Parse(reorderFlagArgs(args, map[string]bool{"allow-public-unauthenticated": true})); err != nil {
 		return 2
 	}
 	if len(fs.Args()) > 0 {
