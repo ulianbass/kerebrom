@@ -147,8 +147,8 @@ A session is active only until a client closes it through `summary`, `session-en
 - `kerebrom doctor --deep` keeps the legacy operational readiness check.
 - `kerebrom doctor status` runs the deep check with capitalized Doctor output.
 - `kerebrom doctor report` emits the deep check as JSON for audits and scripts.
-- `kerebrom doctor heal` runs Health Mode once: acquire a single-writer lock, create a private SQLite snapshot backup with `VACUUM INTO`, run deterministic runtime repairs, rebuild FTS5 indexes from source tables, repair detected AI-client setup through the idempotent setup engine, and verify with a deep report.
-- `kerebrom doctor watch --interval 30m` repeats Health Mode in the foreground for supervised local maintenance.
+- `kerebrom doctor heal` runs Health Mode once: acquire a single-writer lock with stale-lock recovery, create a private SQLite snapshot backup with `VACUUM INTO`, prune old health backups with retention and byte limits, run deterministic runtime repairs, rebuild FTS5 indexes from source tables, repair detected AI-client setup through the idempotent setup engine, and verify with a deep report.
+- `kerebrom doctor watch --interval 30m` repeats Health Mode in the foreground for supervised local maintenance while preserving the same backup retention policy.
 
 The deep report verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, FTS5 `integrity-check`, stale active sessions before and after runtime repair, project alias cycles, installed binary paths, Codex/Claude config blocks, Codex/Claude hook status messages, Codex quiet hook mode, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
 

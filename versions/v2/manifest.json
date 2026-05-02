@@ -1,7 +1,7 @@
 {
   "version_line": "v2",
-  "semver": "v2.1.5",
-  "status": "v2_doctor_health_mode",
+  "semver": "v2.1.6",
+  "status": "v2_doctor_health_mode_hardening",
   "repo_root_is_product_root": false,
   "factory_version_root": "versions/v2",
   "release_contract": {

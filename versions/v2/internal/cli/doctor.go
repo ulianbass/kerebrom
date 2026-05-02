@@ -4,11 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ulianbass/kerebrom/internal/config"
@@ -51,6 +55,22 @@ type doctorHealAction struct {
 type requiredCodexHookCommand struct {
 	Event  string
 	Script string
+}
+
+const (
+	defaultDoctorBackupRetentionCount = 24
+	defaultDoctorBackupMaxBytes       = int64(1 << 30)
+	defaultDoctorLockStaleAfter       = 6 * time.Hour
+)
+
+type doctorBackupPolicy struct {
+	RetentionCount int
+	MaxBytes       int64
+}
+
+type doctorLockOwner struct {
+	PID       int
+	StartedAt time.Time
 }
 
 var requiredCodexHookStatusMessages = []string{
@@ -184,7 +204,17 @@ func runDoctorHeal(args []string, stdout, stderr io.Writer) int {
 	binaryPath := fs.String("binary-path", "", "Binary path written into repaired agent configs")
 	skipSetup := fs.Bool("skip-setup", false, "Skip AI-client setup repair")
 	skipBackup := fs.Bool("skip-backup", false, "Skip the pre-heal SQLite backup")
+	backupRetention := fs.Int("backup-retention", defaultDoctorBackupRetentionCount, "Number of Health Mode SQLite backups to retain")
+	backupMaxBytes := fs.Int64("backup-max-bytes", defaultDoctorBackupMaxBytes, "Maximum total bytes for retained Health Mode backups; 0 disables the byte cap")
 	if err := fs.Parse(reorderFlagArgs(args, map[string]bool{"json": true, "skip-setup": true, "skip-backup": true})); err != nil {
+		return 2
+	}
+	if *backupRetention < 1 {
+		fmt.Fprintln(stderr, "doctor heal backup-retention must be at least 1")
+		return 2
+	}
+	if *backupMaxBytes < 0 {
+		fmt.Fprintln(stderr, "doctor heal backup-max-bytes must be 0 or greater")
 		return 2
 	}
 
@@ -208,7 +238,10 @@ func runDoctorHeal(args []string, stdout, stderr io.Writer) int {
 	if *skipBackup {
 		result.addAction("sqlite backup", "SKIP", "disabled by --skip-backup")
 	} else {
-		backupPath, err := createDoctorSQLiteBackup(ctx, resolvedDB)
+		backupPath, pruned, err := createDoctorSQLiteBackup(ctx, resolvedDB, doctorBackupPolicy{
+			RetentionCount: *backupRetention,
+			MaxBytes:       *backupMaxBytes,
+		})
 		if err != nil {
 			result.addAction("sqlite backup", "FAIL", err.Error())
 			return finishDoctorHeal(result, *jsonOutput, stdout)
@@ -217,7 +250,11 @@ func runDoctorHeal(args []string, stdout, stderr io.Writer) int {
 			result.addAction("sqlite backup", "SKIP", "runtime database does not exist yet")
 		} else {
 			result.BackupPath = backupPath
-			result.addAction("sqlite backup", "PASS", backupPath)
+			detail := backupPath
+			if pruned > 0 {
+				detail = fmt.Sprintf("%s (pruned %d old backup(s))", backupPath, pruned)
+			}
+			result.addAction("sqlite backup", "PASS", detail)
 		}
 	}
 
@@ -262,11 +299,21 @@ func runDoctorWatch(args []string, stdout, stderr io.Writer) int {
 	binaryPath := fs.String("binary-path", "", "Binary path written into repaired agent configs")
 	skipSetup := fs.Bool("skip-setup", false, "Skip AI-client setup repair")
 	skipBackup := fs.Bool("skip-backup", false, "Skip the pre-heal SQLite backup")
+	backupRetention := fs.Int("backup-retention", defaultDoctorBackupRetentionCount, "Number of Health Mode SQLite backups to retain")
+	backupMaxBytes := fs.Int64("backup-max-bytes", defaultDoctorBackupMaxBytes, "Maximum total bytes for retained Health Mode backups; 0 disables the byte cap")
 	if err := fs.Parse(reorderFlagArgs(args, map[string]bool{"once": true, "json": true, "skip-setup": true, "skip-backup": true})); err != nil {
 		return 2
 	}
 	if !*once && *interval < time.Minute {
 		fmt.Fprintln(stderr, "doctor watch interval must be at least 1m")
+		return 2
+	}
+	if *backupRetention < 1 {
+		fmt.Fprintln(stderr, "doctor watch backup-retention must be at least 1")
+		return 2
+	}
+	if *backupMaxBytes < 0 {
+		fmt.Fprintln(stderr, "doctor watch backup-max-bytes must be 0 or greater")
 		return 2
 	}
 
@@ -294,6 +341,9 @@ func runDoctorWatch(args []string, stdout, stderr io.Writer) int {
 	}
 	if *skipBackup {
 		healArgs = append(healArgs, "--skip-backup")
+	} else {
+		healArgs = append(healArgs, "--backup-retention", strconv.Itoa(*backupRetention))
+		healArgs = append(healArgs, "--backup-max-bytes", strconv.FormatInt(*backupMaxBytes, 10))
 	}
 
 	for {
@@ -335,7 +385,7 @@ func writeDoctorHelp(w io.Writer) {
 	fmt.Fprintln(w, "usage: kerebrom doctor [--deep] [--json] [--home PATH] [--project-dir PATH] [--db PATH]")
 	fmt.Fprintln(w, "       kerebrom doctor status [--json] [--home PATH] [--project-dir PATH] [--db PATH]")
 	fmt.Fprintln(w, "       kerebrom doctor report [--json] [--home PATH] [--project-dir PATH] [--db PATH]")
-	fmt.Fprintf(w, "       kerebrom doctor heal [--json] [--home PATH] [--project-dir PATH] [--db PATH] [--setup-agent %s] [--binary-path PATH] [--skip-setup]\n", strings.Join(setup.SupportedAgents(), "|"))
+	fmt.Fprintf(w, "       kerebrom doctor heal [--json] [--home PATH] [--project-dir PATH] [--db PATH] [--setup-agent %s] [--binary-path PATH] [--skip-setup] [--skip-backup] [--backup-retention N] [--backup-max-bytes N]\n", strings.Join(setup.SupportedAgents(), "|"))
 	fmt.Fprintln(w, "       kerebrom doctor watch [--interval 30m] [--once] [heal flags]")
 }
 
@@ -350,9 +400,22 @@ func acquireDoctorLock(dbPath string) (string, func(), error) {
 	lockPath := filepath.Join(baseDir, "doctor.lock")
 	if err := os.Mkdir(lockPath, 0o700); err != nil {
 		if os.IsExist(err) {
-			return "", func() {}, fmt.Errorf("another Kerebrom Doctor Health Mode run is active: %s", lockPath)
+			recovered, detail, recoverErr := recoverStaleDoctorLock(lockPath, time.Now().UTC())
+			if recoverErr != nil {
+				return "", func() {}, recoverErr
+			}
+			if !recovered {
+				return "", func() {}, fmt.Errorf("another Kerebrom Doctor Health Mode run is active: %s (%s)", lockPath, detail)
+			}
+			if err := os.Mkdir(lockPath, 0o700); err != nil {
+				if os.IsExist(err) {
+					return "", func() {}, fmt.Errorf("another Kerebrom Doctor Health Mode run became active: %s", lockPath)
+				}
+				return "", func() {}, fmt.Errorf("create doctor lock after stale recovery: %w", err)
+			}
+		} else {
+			return "", func() {}, fmt.Errorf("create doctor lock: %w", err)
 		}
-		return "", func() {}, fmt.Errorf("create doctor lock: %w", err)
 	}
 	meta := []byte(fmt.Sprintf("pid=%d\nstarted_at=%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339)))
 	_ = os.WriteFile(filepath.Join(lockPath, "owner"), meta, 0o600)
@@ -363,43 +426,159 @@ func acquireDoctorLock(dbPath string) (string, func(), error) {
 	return lockPath, unlock, nil
 }
 
-func createDoctorSQLiteBackup(ctx context.Context, dbPath string) (string, error) {
+func recoverStaleDoctorLock(lockPath string, now time.Time) (bool, string, error) {
+	recoverable, detail := doctorLockRecoverable(lockPath, now)
+	if !recoverable {
+		return false, detail, nil
+	}
+	stalePath := fmt.Sprintf("%s.stale-%s-%d", lockPath, now.Format("20060102T150405Z"), os.Getpid())
+	if err := os.Rename(lockPath, stalePath); err != nil {
+		if os.IsNotExist(err) {
+			return true, detail, nil
+		}
+		return false, detail, fmt.Errorf("recover stale doctor lock: %w", err)
+	}
+	if err := os.RemoveAll(stalePath); err != nil {
+		return false, detail, fmt.Errorf("remove stale doctor lock: %w", err)
+	}
+	return true, detail, nil
+}
+
+func doctorLockRecoverable(lockPath string, now time.Time) (bool, string) {
+	owner, err := readDoctorLockOwner(lockPath)
+	if err == nil {
+		if !owner.StartedAt.IsZero() {
+			age := now.Sub(owner.StartedAt)
+			if age >= defaultDoctorLockStaleAfter {
+				return true, fmt.Sprintf("owner age %s exceeds %s", age.Round(time.Second), defaultDoctorLockStaleAfter)
+			}
+			if age < 0 {
+				return false, "owner started_at is in the future"
+			}
+		}
+		if owner.PID > 0 {
+			alive, known := doctorProcessAlive(owner.PID)
+			if known && !alive {
+				return true, fmt.Sprintf("owner pid %d is not running", owner.PID)
+			}
+			if known && alive {
+				return false, fmt.Sprintf("owner pid %d is still running", owner.PID)
+			}
+		}
+		if !owner.StartedAt.IsZero() {
+			age := now.Sub(owner.StartedAt)
+			return false, fmt.Sprintf("owner age %s is below stale threshold %s", age.Round(time.Second), defaultDoctorLockStaleAfter)
+		}
+	}
+
+	info, statErr := os.Stat(lockPath)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return true, "lock disappeared before recovery"
+		}
+		return false, fmt.Sprintf("lock metadata unavailable: %v", statErr)
+	}
+	age := now.Sub(info.ModTime())
+	if age >= defaultDoctorLockStaleAfter {
+		return true, fmt.Sprintf("lock directory age %s exceeds %s", age.Round(time.Second), defaultDoctorLockStaleAfter)
+	}
+	if err != nil {
+		return false, fmt.Sprintf("owner metadata unavailable and lock age %s is below stale threshold %s: %v", age.Round(time.Second), defaultDoctorLockStaleAfter, err)
+	}
+	return false, fmt.Sprintf("lock age %s is below stale threshold %s", age.Round(time.Second), defaultDoctorLockStaleAfter)
+}
+
+func readDoctorLockOwner(lockPath string) (doctorLockOwner, error) {
+	raw, err := os.ReadFile(filepath.Join(lockPath, "owner"))
+	if err != nil {
+		return doctorLockOwner{}, err
+	}
+	var owner doctorLockOwner
+	for _, line := range strings.Split(string(raw), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "pid":
+			pid, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil {
+				return doctorLockOwner{}, fmt.Errorf("parse doctor lock pid: %w", err)
+			}
+			owner.PID = pid
+		case "started_at":
+			startedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(value))
+			if err != nil {
+				return doctorLockOwner{}, fmt.Errorf("parse doctor lock started_at: %w", err)
+			}
+			owner.StartedAt = startedAt.UTC()
+		}
+	}
+	return owner, nil
+}
+
+func doctorProcessAlive(pid int) (bool, bool) {
+	if pid <= 0 {
+		return false, false
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false, false
+	}
+	err = process.Signal(syscall.Signal(0))
+	if err == nil {
+		return true, true
+	}
+	if errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ESRCH) {
+		return false, true
+	}
+	if errors.Is(err, syscall.EPERM) {
+		return true, true
+	}
+	return false, false
+}
+
+func createDoctorSQLiteBackup(ctx context.Context, dbPath string, policy doctorBackupPolicy) (string, int, error) {
 	if strings.TrimSpace(dbPath) == "" {
-		return "", fmt.Errorf("db path is required")
+		return "", 0, fmt.Errorf("db path is required")
 	}
 	if _, err := os.Stat(dbPath); err != nil {
 		if os.IsNotExist(err) {
-			return "", nil
+			return "", 0, nil
 		}
-		return "", fmt.Errorf("inspect runtime database: %w", err)
+		return "", 0, fmt.Errorf("inspect runtime database: %w", err)
 	}
 	backupDir := filepath.Join(sqliteDataDirForDoctor(dbPath), "backups", "health")
 	if err := os.MkdirAll(backupDir, 0o700); err != nil {
-		return "", fmt.Errorf("create backup directory: %w", err)
+		return "", 0, fmt.Errorf("create backup directory: %w", err)
 	}
 	if err := os.Chmod(backupDir, 0o700); err != nil {
-		return "", fmt.Errorf("secure backup directory: %w", err)
+		return "", 0, fmt.Errorf("secure backup directory: %w", err)
 	}
 
 	backupPath, err := nextDoctorBackupPath(backupDir)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	store, err := sqlite.Open(sqlite.Config{Path: dbPath})
 	if err != nil {
-		return "", fmt.Errorf("open runtime database for backup: %w", err)
+		return "", 0, fmt.Errorf("open runtime database for backup: %w", err)
 	}
 	defer func() {
 		_ = store.Close()
 	}()
 	if _, err := store.DB().ExecContext(ctx, "VACUUM INTO "+sqliteStringLiteral(backupPath)); err != nil {
 		_ = os.Remove(backupPath)
-		return "", fmt.Errorf("create SQLite snapshot backup: %w", err)
+		return "", 0, fmt.Errorf("create SQLite snapshot backup: %w", err)
 	}
 	if err := os.Chmod(backupPath, 0o600); err != nil {
-		return "", fmt.Errorf("secure backup file: %w", err)
+		return "", 0, fmt.Errorf("secure backup file: %w", err)
 	}
-	return backupPath, nil
+	pruned, err := pruneDoctorBackups(backupDir, backupPath, policy)
+	if err != nil {
+		return "", 0, err
+	}
+	return backupPath, pruned, nil
 }
 
 func nextDoctorBackupPath(backupDir string) (string, error) {
@@ -417,6 +596,80 @@ func nextDoctorBackupPath(backupDir string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("could not allocate unique backup path in %s", backupDir)
+}
+
+func pruneDoctorBackups(backupDir string, currentPath string, policy doctorBackupPolicy) (int, error) {
+	if policy.RetentionCount < 1 {
+		policy.RetentionCount = defaultDoctorBackupRetentionCount
+	}
+	if policy.MaxBytes < 0 {
+		policy.MaxBytes = defaultDoctorBackupMaxBytes
+	}
+
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		return 0, fmt.Errorf("list health backups: %w", err)
+	}
+	type backupFile struct {
+		Path    string
+		ModTime time.Time
+		Size    int64
+	}
+	backups := make([]backupFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, "kerebrom-health-") || !strings.HasSuffix(name, ".db") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return 0, fmt.Errorf("inspect health backup %s: %w", name, err)
+		}
+		backups = append(backups, backupFile{
+			Path:    filepath.Join(backupDir, name),
+			ModTime: info.ModTime(),
+			Size:    info.Size(),
+		})
+	}
+
+	currentPath = filepath.Clean(currentPath)
+	sort.Slice(backups, func(i, j int) bool {
+		left := filepath.Clean(backups[i].Path)
+		right := filepath.Clean(backups[j].Path)
+		if left == currentPath {
+			return true
+		}
+		if right == currentPath {
+			return false
+		}
+		if backups[i].ModTime.Equal(backups[j].ModTime) {
+			return backups[i].Path > backups[j].Path
+		}
+		return backups[i].ModTime.After(backups[j].ModTime)
+	})
+
+	var kept int
+	var totalBytes int64
+	var pruned int
+	for _, backup := range backups {
+		keep := kept < policy.RetentionCount
+		if keep && policy.MaxBytes > 0 && kept > 0 && totalBytes+backup.Size > policy.MaxBytes {
+			keep = false
+		}
+		if keep {
+			kept++
+			totalBytes += backup.Size
+			continue
+		}
+		if err := os.Remove(backup.Path); err != nil && !os.IsNotExist(err) {
+			return pruned, fmt.Errorf("prune health backup %s: %w", backup.Path, err)
+		}
+		pruned++
+	}
+	return pruned, nil
 }
 
 func sqliteStringLiteral(value string) string {

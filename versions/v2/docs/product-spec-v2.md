@@ -31,7 +31,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 12. **Chronological truth priority**: retrieval, context, and timeline use `valid_at` as the semantic clock so newer corrections and revalidated memories outrank stale observations, while administrative metadata updates do not make old information look current.
 13. **Context Governor**: every `context`/`recall` payload includes an explicit decision contract telling the agent to think, search, analyze, then answer; prefer query matches over generic recency; and use `timeline` when conflicts appear.
 14. **Trust Ledger**: every observation has local lifecycle events for creation, update/correction, duplicate reassertion, import, and soft deletion so memory provenance can be audited without storing raw transcripts.
-15. **Doctor Health Mode**: `kerebrom doctor --deep` remains the compatibility audit; `doctor status` and `doctor report` expose the same deep health contract for humans and automation; `doctor heal` backs up the SQLite database, repairs deterministic runtime/setup/FTS drift, and verifies the result; `doctor watch` repeats Health Mode in a single foreground loop.
+15. **Doctor Health Mode**: `kerebrom doctor --deep` remains the compatibility audit; `doctor status` and `doctor report` expose the same deep health contract for humans and automation; `doctor heal` backs up the SQLite database with bounded retention, recovers stale single-authority locks, repairs deterministic runtime/setup/FTS drift, and verifies the result; `doctor watch` repeats Health Mode in a single foreground loop.
 
 ## Non-goals
 
@@ -48,7 +48,7 @@ Captured in `manifest.json`:
 | Field | Value |
 |---|---|
 | `version_line` | `v2` |
-| `semver` | `v2.1.5` |
+| `semver` | `v2.1.6` |
 | `binary_name` | `kerebrom` |
 | `storage_mode` | `local-first` |
 | `store` | `sqlite+fts5` |

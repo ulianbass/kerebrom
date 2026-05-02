@@ -88,7 +88,7 @@ kerebrom stats
 kerebrom doctor --deep
 ```
 
-If the deep check reports setup or runtime drift, run `kerebrom doctor heal` once before restarting clients. Health Mode creates a private SQLite backup first, repairs deterministic local invariants, refreshes managed AI-client setup, and verifies again.
+If the deep check reports setup or runtime drift, run `kerebrom doctor heal` once before restarting clients. Health Mode creates a private SQLite backup first, prunes old health backups under its retention policy, repairs deterministic local invariants, refreshes managed AI-client setup, and verifies again.
 
 Then verify setup output from the install command. It should list files configured for the detected clients.
 
