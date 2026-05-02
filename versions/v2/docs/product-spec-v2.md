@@ -18,7 +18,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 ## Success criteria
 
 1. **Plug-and-play in Claude Desktop**: when the client exposes Kerebrom tools, any user message in a fresh chat should trigger an automatic `context` call before the model answers, without the user mentioning Kerebrom.
-2. **Plug-and-play in Claude Code**: hooks fire on session start, prompt submit, subagent stop, stop, and post-compaction without manual intervention; the agent never asks permission to call memory tools.
+2. **Plug-and-play native hooks**: Claude Code hooks fire on session start, prompt submit, subagent stop, stop, and post-compaction; Codex hooks fire on session start, prompt submit, and stop with human status messages instead of raw event names; the agent never asks permission to call memory tools.
 3. **Cowork native bootstrap**: when Claude Desktop has local Cowork account storage, setup seeds Cowork's native `memory/CLAUDE.md` with an idempotent Kerebrom authority block.
 4. **Self-update**: `kerebrom update` brings the user from any older release to the latest with one command and a single confirmation.
 5. **No data loss across upgrades**: schema changes are additive and existing sessions, observations, prompts, and sync chunks continue to import.

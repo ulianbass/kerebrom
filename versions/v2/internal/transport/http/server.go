@@ -344,6 +344,10 @@ func (s *Server) handleDeleteObservation(w http.ResponseWriter, r *http.Request)
 	}
 
 	hard := strings.EqualFold(r.URL.Query().Get("hard"), "true")
+	if hard {
+		writeError(w, http.StatusForbidden, fmt.Errorf("hard delete is not available through the HTTP API; use local admin tooling for permanent deletion"))
+		return
+	}
 	if err := s.store.DeleteObservation(r.Context(), sqlite.DeleteObservationInput{ID: observationID, Hard: hard}); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

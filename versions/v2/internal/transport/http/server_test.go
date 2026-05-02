@@ -336,6 +336,49 @@ func TestServerBearerAuthProtectsHTTPAPI(t *testing.T) {
 	}
 }
 
+func TestHTTPHardDeleteIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := sqlite.Open(sqlite.Config{Path: filepath.Join(t.TempDir(), "kerebrom.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	if err := InitStore(ctx, store); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	observation, err := store.SaveObservation(ctx, sqlite.ObservationInput{
+		Type:    "decision",
+		Title:   "HTTP hard delete boundary",
+		Content: "HTTP API must not permanently delete local memory.",
+		Project: "Proyecto Kerebrom",
+		Scope:   "project",
+	})
+	if err != nil {
+		t.Fatalf("save observation: %v", err)
+	}
+
+	server := NewServer(store)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/observations/"+strconv.FormatInt(observation.ID, 10)+"?hard=true", nil)
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected hard delete to be forbidden, got status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	fetched, err := store.GetObservation(ctx, observation.ID)
+	if err != nil {
+		t.Fatalf("hard delete rejection should leave observation intact: %v", err)
+	}
+	if fetched.ID != observation.ID {
+		t.Fatalf("unexpected fetched observation after rejected hard delete: %+v", fetched)
+	}
+}
+
 func TestHTTPContextAndTimelineTreatWeakProjectAsCrossProject(t *testing.T) {
 	t.Parallel()
 

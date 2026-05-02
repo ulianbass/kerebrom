@@ -55,6 +55,10 @@ func (s *Store) ExportData(ctx context.Context, opts ExportOptions) (ExportData,
 	if err != nil {
 		return ExportData{}, err
 	}
+	observations, err = s.appendEventParentObservations(ctx, observations, events)
+	if err != nil {
+		return ExportData{}, err
+	}
 	aliases, err := s.listProjectAliases(ctx, project)
 	if err != nil {
 		return ExportData{}, err
@@ -192,6 +196,14 @@ func (s *Store) ImportData(ctx context.Context, data ExportData) (ImportSummary,
 		observationID := event.ObservationID
 		if mappedID := importedObservationIDs[event.ObservationID]; mappedID > 0 {
 			observationID = mappedID
+		} else {
+			exists, err := observationExists(ctx, tx, observationID)
+			if err != nil {
+				return ImportSummary{}, err
+			}
+			if !exists {
+				continue
+			}
 		}
 		if observationID <= 0 {
 			continue
@@ -200,6 +212,14 @@ func (s *Store) ImportData(ctx context.Context, data ExportData) (ImportSummary,
 		if event.RelatedObservationID > 0 {
 			if mappedID := importedObservationIDs[event.RelatedObservationID]; mappedID > 0 {
 				event.RelatedObservationID = mappedID
+			} else {
+				exists, err := observationExists(ctx, tx, event.RelatedObservationID)
+				if err != nil {
+					return ImportSummary{}, err
+				}
+				if !exists {
+					event.RelatedObservationID = 0
+				}
 			}
 		}
 		if err := insertObservationEvent(ctx, tx, event); err != nil {
@@ -357,6 +377,29 @@ func (s *Store) listObservationEventsForExport(ctx context.Context, project stri
 	return scanObservationEvents(rows)
 }
 
+func (s *Store) appendEventParentObservations(ctx context.Context, observations []Observation, events []ObservationEvent) ([]Observation, error) {
+	seen := map[int64]bool{}
+	for _, observation := range observations {
+		if observation.ID > 0 {
+			seen[observation.ID] = true
+		}
+	}
+
+	for _, event := range events {
+		if event.ObservationID <= 0 || seen[event.ObservationID] {
+			continue
+		}
+		observation, err := s.GetObservation(ctx, event.ObservationID)
+		if err != nil {
+			return nil, fmt.Errorf("load event parent observation %d: %w", event.ObservationID, err)
+		}
+		observations = append(observations, observation)
+		seen[event.ObservationID] = true
+	}
+
+	return observations, nil
+}
+
 func (s *Store) listPromptsForExport(ctx context.Context, project string, since string) ([]Prompt, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, COALESCE(session_id, ''), content, project, created_at
@@ -408,6 +451,19 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 		}
 		if existing != "" && existing != hash {
 			idToUse = 0
+		}
+	}
+
+	if strings.TrimSpace(observation.DeletedAt) == "" && hash != "" {
+		duplicateID, err := activeObservationIDByHash(ctx, tx, hash)
+		if err != nil {
+			return 0, err
+		}
+		if duplicateID > 0 && duplicateID != idToUse {
+			if err := bumpImportedDuplicateObservation(ctx, tx, duplicateID); err != nil {
+				return 0, err
+			}
+			return duplicateID, nil
 		}
 	}
 
@@ -483,6 +539,46 @@ func (s *Store) importObservation(ctx context.Context, tx *sql.Tx, observation O
 	return id, nil
 }
 
+func activeObservationIDByHash(ctx context.Context, tx *sql.Tx, hash string) (int64, error) {
+	hash = strings.TrimSpace(hash)
+	if hash == "" {
+		return 0, nil
+	}
+	var id int64
+	err := tx.QueryRowContext(ctx, `
+		SELECT id
+		FROM observations
+		WHERE normalized_hash = ? AND deleted_at IS NULL
+		ORDER BY updated_at DESC, id DESC
+		LIMIT 1
+	`, hash).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return 0, fmt.Errorf("find duplicate import observation: %w", err)
+}
+
+func bumpImportedDuplicateObservation(ctx context.Context, tx *sql.Tx, id int64) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE observations
+		SET duplicate_count = duplicate_count + 1, last_seen_at = ?, updated_at = ?, valid_at = ?
+		WHERE id = ? AND deleted_at IS NULL
+	`, now, now, now, id); err != nil {
+		return fmt.Errorf("update duplicate import observation: %w", err)
+	}
+	return insertObservationEvent(ctx, tx, ObservationEvent{
+		ObservationID: id,
+		EventType:     "reasserted",
+		Actor:         "kerebrom_import",
+		Reason:        "Imported durable memory matched an existing active normalized_hash; duplicate_count and valid_at refreshed.",
+		CreatedAt:     now,
+	})
+}
+
 func (s *Store) importPrompt(ctx context.Context, tx *sql.Tx, prompt Prompt) error {
 	project, err := resolveProject(ctx, tx, prompt.Project)
 	if err != nil {
@@ -524,6 +620,21 @@ func (s *Store) importPrompt(ctx context.Context, tx *sql.Tx, prompt Prompt) err
 		return fmt.Errorf("import prompt: %w", err)
 	}
 	return nil
+}
+
+func observationExists(ctx context.Context, tx *sql.Tx, observationID int64) (bool, error) {
+	if observationID <= 0 {
+		return false, nil
+	}
+	var id int64
+	err := tx.QueryRowContext(ctx, `SELECT id FROM observations WHERE id = ?`, observationID).Scan(&id)
+	if err == nil {
+		return true, nil
+	}
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	return false, fmt.Errorf("check observation %d: %w", observationID, err)
 }
 
 func sessionExists(ctx context.Context, tx *sql.Tx, sessionID string) (bool, error) {

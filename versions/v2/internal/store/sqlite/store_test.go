@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,7 +12,11 @@ import (
 func TestOpenAndInitCreatesSchema(t *testing.T) {
 	t.Parallel()
 
-	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+	dbDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dbDir, 0o755); err != nil {
+		t.Fatalf("precreate data dir: %v", err)
+	}
+	dbPath := filepath.Join(dbDir, "kerebrom.db")
 
 	store, err := Open(Config{Path: dbPath})
 	if err != nil {
@@ -33,6 +38,20 @@ func TestOpenAndInitCreatesSchema(t *testing.T) {
 	assertTableExists(t, store.DB(), "prompts_fts")
 	assertTableExists(t, store.DB(), "sync_chunks")
 	assertTableExists(t, store.DB(), "project_aliases")
+
+	assertMode(t, filepath.Dir(dbPath), 0o700)
+	assertMode(t, dbPath, 0o600)
+}
+
+func TestSQLiteDataDirSkipsWorkingDirectory(t *testing.T) {
+	t.Parallel()
+
+	if got := sqliteDataDir("kerebrom.db"); got != "" {
+		t.Fatalf("relative db in current directory should not chmod cwd, got %q", got)
+	}
+	if got := sqliteDataDir(filepath.Join("data", "kerebrom.db")); got != "data" {
+		t.Fatalf("relative db in child directory should return child dir, got %q", got)
+	}
 }
 
 func TestTrustLedgerRecordsObservationLifecycle(t *testing.T) {
@@ -678,6 +697,154 @@ func TestProjectMergeDeduplicatesEquivalentActiveObservations(t *testing.T) {
 	}
 }
 
+func TestExportIncludesParentObservationForNewerEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "kerebrom.db")
+
+	store, err := Open(Config{Path: dbPath})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	if err := store.Init(ctx); err != nil {
+		t.Fatalf("init store: %v", err)
+	}
+
+	observation, err := store.SaveObservation(ctx, ObservationInput{
+		Type:      "decision",
+		Title:     "Old imported memory",
+		Content:   "Old imported memory still needs its newer ledger event parent.",
+		Project:   "Proyecto Kerebrom",
+		CreatedAt: mustParseTime(t, "2026-01-01T00:00:00Z"),
+	})
+	if err != nil {
+		t.Fatalf("save old observation: %v", err)
+	}
+
+	data, err := store.ExportData(ctx, ExportOptions{
+		Project: "Proyecto Kerebrom",
+		Since:   "2026-02-01T00:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("export data: %v", err)
+	}
+	if len(data.ObservationEvents) == 0 {
+		t.Fatalf("expected newer event in incremental export: %+v", data)
+	}
+	foundParent := false
+	for _, exported := range data.Observations {
+		if exported.ID == observation.ID {
+			foundParent = true
+			break
+		}
+	}
+	if !foundParent {
+		t.Fatalf("incremental event export should include parent observation %d: %+v", observation.ID, data.Observations)
+	}
+}
+
+func TestImportMergesDuplicateNormalizedHashWithDifferentID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	source, closeSource := openSQLiteTestStore(t, ctx)
+	defer closeSource()
+	target, closeTarget := openSQLiteTestStore(t, ctx)
+	defer closeTarget()
+
+	sourceObservation, err := source.SaveObservation(ctx, ObservationInput{
+		Type:    "decision",
+		Title:   "Duplicate imported fact",
+		Content: "The same imported durable memory should merge by normalized hash.",
+		Project: "Proyecto Kerebrom",
+	})
+	if err != nil {
+		t.Fatalf("save source observation: %v", err)
+	}
+
+	if _, err := target.SaveObservation(ctx, ObservationInput{
+		Type:    "decision",
+		Title:   "Target filler",
+		Content: "This row forces the incoming source id to collide with a different hash.",
+		Project: "Proyecto Kerebrom",
+	}); err != nil {
+		t.Fatalf("save target filler: %v", err)
+	}
+	targetObservation, err := target.SaveObservation(ctx, ObservationInput{
+		Type:    "decision",
+		Title:   "Duplicate imported fact",
+		Content: "The same imported durable memory should merge by normalized hash.",
+		Project: "Proyecto Kerebrom",
+	})
+	if err != nil {
+		t.Fatalf("save target duplicate: %v", err)
+	}
+	if sourceObservation.ID == targetObservation.ID {
+		t.Fatalf("test requires different source and target ids: source=%d target=%d", sourceObservation.ID, targetObservation.ID)
+	}
+
+	data, err := source.ExportData(ctx, ExportOptions{Project: "Proyecto Kerebrom"})
+	if err != nil {
+		t.Fatalf("export source: %v", err)
+	}
+	summary, err := target.ImportData(ctx, data)
+	if err != nil {
+		t.Fatalf("import duplicate hash: %v", err)
+	}
+	if summary.Observations != 1 || summary.Events == 0 {
+		t.Fatalf("unexpected import summary: %+v", summary)
+	}
+
+	merged, err := target.GetObservation(ctx, targetObservation.ID)
+	if err != nil {
+		t.Fatalf("get merged target observation: %v", err)
+	}
+	if merged.DuplicateCount == 0 {
+		t.Fatalf("expected duplicate import to bump target observation: %+v", merged)
+	}
+
+	stats, err := target.Stats(ctx, "Proyecto Kerebrom")
+	if err != nil {
+		t.Fatalf("target stats: %v", err)
+	}
+	if stats.ObservationCount != 2 {
+		t.Fatalf("expected filler plus merged duplicate only, got %+v", stats)
+	}
+}
+
+func TestImportSkipsOrphanObservationEvents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, closeStore := openSQLiteTestStore(t, ctx)
+	defer closeStore()
+
+	summary, err := store.ImportData(ctx, ExportData{
+		App:        "kerebrom",
+		Schema:     2,
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
+		ObservationEvents: []ObservationEvent{
+			{
+				ObservationID: 42,
+				EventType:     "imported",
+				Actor:         "test",
+				Reason:        "orphan event should not abort import",
+				CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("import orphan event should not fail: %v", err)
+	}
+	if summary.Events != 0 {
+		t.Fatalf("orphan event should be skipped, got %+v", summary)
+	}
+}
+
 func TestSessionObservationSearchAndStats(t *testing.T) {
 	t.Parallel()
 
@@ -1085,5 +1252,33 @@ func assertTableExists(t *testing.T, db *sql.DB, name string) {
 
 	if actual != name {
 		t.Fatalf("expected table %s, got %s", name, actual)
+	}
+}
+
+func openSQLiteTestStore(t *testing.T, ctx context.Context) (*Store, func()) {
+	t.Helper()
+
+	store, err := Open(Config{Path: filepath.Join(t.TempDir(), "kerebrom.db")})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	if err := store.Init(ctx); err != nil {
+		_ = store.Close()
+		t.Fatalf("init store: %v", err)
+	}
+	return store, func() {
+		_ = store.Close()
+	}
+}
+
+func assertMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode=%#o, want %#o", path, got, want)
 	}
 }

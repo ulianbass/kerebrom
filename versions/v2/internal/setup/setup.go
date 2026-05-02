@@ -232,6 +232,8 @@ func setupAll(opts Options) (Result, error) {
 func setupCodex(opts Options) (Result, error) {
 	configPath := filepath.Join(opts.HomeDir, ".codex", "config.toml")
 	agentsPath := filepath.Join(opts.HomeDir, ".codex", "AGENTS.md")
+	hooksPath := filepath.Join(opts.HomeDir, ".codex", "hooks.json")
+	hookDir := filepath.Join(opts.HomeDir, ".kerebrom", "hooks", "codex")
 	files := []string{configPath}
 
 	configContent, err := readTextFile(configPath)
@@ -241,9 +243,26 @@ func setupCodex(opts Options) (Result, error) {
 
 	configBlock := codexConfigBlock(opts.BinaryPath)
 	configContent = upsertCodexConfig(configContent, configBlock)
+	configContent = upsertCodexHooksFeature(configContent)
 	if err := writeTextFile(configPath, configContent); err != nil {
 		return Result{}, err
 	}
+
+	hooks, err := readJSONMap(hooksPath)
+	if err != nil {
+		return Result{}, err
+	}
+	if err := upsertCodexHooks(hooks, hookDir); err != nil {
+		return Result{}, err
+	}
+	if err := writeJSONFile(hooksPath, hooks); err != nil {
+		return Result{}, err
+	}
+	hookFiles, err := writeCodexHookScripts(hookDir, opts.BinaryPath)
+	if err != nil {
+		return Result{}, err
+	}
+	files = append(files, hooksPath)
 
 	changed, err := removeTextBlockFileIfExists(agentsPath)
 	if err != nil {
@@ -252,6 +271,7 @@ func setupCodex(opts Options) (Result, error) {
 	if changed {
 		files = append(files, agentsPath)
 	}
+	files = append(files, hookFiles...)
 
 	return Result{
 		Agent: "codex",
@@ -562,6 +582,57 @@ approval_mode = "auto"
 	return builder.String()
 }
 
+func upsertCodexHooksFeature(existing string) string {
+	lines := strings.Split(existing, "\n")
+	if len(lines) == 0 {
+		return "[features]\ncodex_hooks = true\n"
+	}
+
+	var output []string
+	inFeatures := false
+	featuresFound := false
+	codexHooksSet := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && trimmed != "[features]" {
+			if inFeatures && !codexHooksSet {
+				output = append(output, "codex_hooks = true")
+				codexHooksSet = true
+			}
+			inFeatures = false
+		}
+		if trimmed == "[features]" {
+			featuresFound = true
+			inFeatures = true
+			codexHooksSet = false
+			output = append(output, line)
+			continue
+		}
+		if inFeatures {
+			key := strings.TrimSpace(strings.SplitN(trimmed, "=", 2)[0])
+			if key == "codex_hooks" {
+				output = append(output, "codex_hooks = true")
+				codexHooksSet = true
+				continue
+			}
+		}
+		output = append(output, line)
+	}
+
+	if featuresFound {
+		if inFeatures && !codexHooksSet {
+			output = append(output, "codex_hooks = true")
+		}
+		return strings.TrimRight(strings.Join(output, "\n"), "\n") + "\n"
+	}
+
+	existing = strings.TrimRight(strings.Join(output, "\n"), "\n")
+	if existing == "" {
+		return "[features]\ncodex_hooks = true\n"
+	}
+	return existing + "\n\n[features]\ncodex_hooks = true\n"
+}
+
 func mcpAgentArgs() []string {
 	return []string{"mcp", "--tools=agent"}
 }
@@ -694,9 +765,10 @@ func upsertClaudeHooks(settings map[string]any, hookDir string) error {
 		map[string]any{
 			"hooks": []any{
 				map[string]any{
-					"type":    "command",
-					"command": filepath.Join(hookDir, "user-prompt-submit.sh"),
-					"timeout": 2,
+					"type":          "command",
+					"command":       filepath.Join(hookDir, "user-prompt-submit.sh"),
+					"timeout":       2,
+					"statusMessage": "Updating Kerebrom memory...",
 				},
 			},
 		},
@@ -705,10 +777,11 @@ func upsertClaudeHooks(settings map[string]any, hookDir string) error {
 		map[string]any{
 			"hooks": []any{
 				map[string]any{
-					"type":    "command",
-					"command": filepath.Join(hookDir, "subagent-stop.sh"),
-					"timeout": 10,
-					"async":   true,
+					"type":          "command",
+					"command":       filepath.Join(hookDir, "subagent-stop.sh"),
+					"timeout":       10,
+					"async":         true,
+					"statusMessage": "Saving Kerebrom learnings...",
 				},
 			},
 		},
@@ -717,15 +790,66 @@ func upsertClaudeHooks(settings map[string]any, hookDir string) error {
 		map[string]any{
 			"hooks": []any{
 				map[string]any{
-					"type":    "command",
-					"command": filepath.Join(hookDir, "session-stop.sh"),
-					"timeout": 5,
-					"async":   true,
+					"type":          "command",
+					"command":       filepath.Join(hookDir, "session-stop.sh"),
+					"timeout":       5,
+					"async":         true,
+					"statusMessage": "Closing Kerebrom session...",
 				},
 			},
 		},
 	})
 	settings["hooks"] = hooks
+	return nil
+}
+
+func upsertCodexHooks(config map[string]any, hookDir string) error {
+	rawHooks, ok := config["hooks"]
+	if !ok || rawHooks == nil {
+		rawHooks = map[string]any{}
+	}
+	hooks, ok := rawHooks.(map[string]any)
+	if !ok {
+		return fmt.Errorf("unexpected hooks shape in Codex hooks config")
+	}
+	hooks["SessionStart"] = upsertHookEntries(hooks["SessionStart"], []any{
+		map[string]any{
+			"matcher": "startup|resume|clear",
+			"hooks": []any{
+				map[string]any{
+					"type":          "command",
+					"command":       filepath.Join(hookDir, "session-start.sh"),
+					"timeout":       10,
+					"statusMessage": "Loading Kerebrom memory...",
+				},
+			},
+		},
+	})
+	hooks["UserPromptSubmit"] = upsertHookEntries(hooks["UserPromptSubmit"], []any{
+		map[string]any{
+			"hooks": []any{
+				map[string]any{
+					"type":          "command",
+					"command":       filepath.Join(hookDir, "user-prompt-submit.sh"),
+					"timeout":       2,
+					"statusMessage": "Updating Kerebrom memory...",
+				},
+			},
+		},
+	})
+	hooks["Stop"] = upsertHookEntries(hooks["Stop"], []any{
+		map[string]any{
+			"hooks": []any{
+				map[string]any{
+					"type":          "command",
+					"command":       filepath.Join(hookDir, "session-stop.sh"),
+					"timeout":       5,
+					"statusMessage": "Closing Kerebrom session...",
+				},
+			},
+		},
+	})
+	config["hooks"] = hooks
 	return nil
 }
 
@@ -804,7 +928,8 @@ func hookEntryContainsKerebrom(item any) bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(raw), ".kerebrom/hooks/claude-code")
+	return strings.Contains(string(raw), ".kerebrom/hooks/claude-code") ||
+		strings.Contains(string(raw), ".kerebrom/hooks/codex")
 }
 
 func writeClaudeHookScripts(hookDir string, binaryPath string) ([]string, error) {
@@ -814,6 +939,25 @@ func writeClaudeHookScripts(hookDir string, binaryPath string) ([]string, error)
 		"subagent-stop.sh":      "subagent-stop",
 		"session-stop.sh":       "session-stop",
 		"post-compaction.sh":    "post-compaction",
+	}
+	paths := make([]string, 0, len(scripts))
+	for fileName, hookName := range scripts {
+		path := filepath.Join(hookDir, fileName)
+		content := fmt.Sprintf("#!/usr/bin/env sh\nexec %q hook %s\n", binaryPath, hookName)
+		if err := writeExecutableFile(path, content); err != nil {
+			return nil, err
+		}
+		paths = append(paths, path)
+	}
+	slices.Sort(paths)
+	return paths, nil
+}
+
+func writeCodexHookScripts(hookDir string, binaryPath string) ([]string, error) {
+	scripts := map[string]string{
+		"session-start.sh":      "session-start",
+		"user-prompt-submit.sh": "user-prompt-submit",
+		"session-stop.sh":       "session-stop",
 	}
 	paths := make([]string, 0, len(scripts))
 	for fileName, hookName := range scripts {

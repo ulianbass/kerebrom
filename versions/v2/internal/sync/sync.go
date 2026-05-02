@@ -107,8 +107,12 @@ func Export(ctx context.Context, store *sqlite.Store, opts Options) (ExportResul
 	chunkID := hex.EncodeToString(hash[:])[:16]
 	chunkFile := filepath.ToSlash(filepath.Join(ChunksDir, chunkID+".jsonl.gz"))
 
-	if err := os.MkdirAll(filepath.Join(opts.Dir, ChunksDir), 0o755); err != nil {
+	chunkDir := filepath.Join(opts.Dir, ChunksDir)
+	if err := os.MkdirAll(chunkDir, 0o700); err != nil {
 		return ExportResult{}, fmt.Errorf("create sync chunks dir: %w", err)
+	}
+	if err := os.Chmod(chunkDir, 0o700); err != nil {
+		return ExportResult{}, fmt.Errorf("secure sync chunks dir: %w", err)
 	}
 	if err := writeGzip(filepath.Join(opts.Dir, chunkFile), raw); err != nil {
 		return ExportResult{}, err
@@ -143,7 +147,12 @@ func Import(ctx context.Context, store *sqlite.Store, opts Options) (ImportResul
 
 	var result ImportResult
 	for _, chunk := range manifest.Chunks {
-		imported, err := store.SyncChunkImported(ctx, chunk.ID)
+		if !chunkMatchesProject(chunk, opts.Project) {
+			result.Skipped++
+			continue
+		}
+		importKey := chunkImportKey(chunk, opts.Project)
+		imported, err := store.SyncChunkImported(ctx, importKey)
 		if err != nil {
 			return ImportResult{}, err
 		}
@@ -156,11 +165,19 @@ func Import(ctx context.Context, store *sqlite.Store, opts Options) (ImportResul
 		if err != nil {
 			return ImportResult{}, err
 		}
+		data = filterDataForProject(data, opts.Project)
+		if isEmptyExportData(data) {
+			if err := store.MarkSyncChunkImported(ctx, importKey); err != nil {
+				return ImportResult{}, err
+			}
+			result.Skipped++
+			continue
+		}
 		summary, err := store.ImportData(ctx, data)
 		if err != nil {
 			return ImportResult{}, err
 		}
-		if err := store.MarkSyncChunkImported(ctx, chunk.ID); err != nil {
+		if err := store.MarkSyncChunkImported(ctx, importKey); err != nil {
 			return ImportResult{}, err
 		}
 		result.Imported++
@@ -227,15 +244,22 @@ func SaveManifest(dir string, manifest Manifest) error {
 	manifest.Schema = 1
 	manifest.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create sync dir: %w", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return fmt.Errorf("secure sync dir: %w", err)
 	}
 	content, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode sync manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ManifestFile), append(content, '\n'), 0o644); err != nil {
+	manifestPath := filepath.Join(dir, ManifestFile)
+	if err := os.WriteFile(manifestPath, append(content, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write sync manifest: %w", err)
+	}
+	if err := os.Chmod(manifestPath, 0o600); err != nil {
+		return fmt.Errorf("secure sync manifest: %w", err)
 	}
 	return nil
 }
@@ -282,6 +306,89 @@ func upsertChunk(manifest Manifest, chunk Chunk) Manifest {
 	return manifest
 }
 
+func chunkMatchesProject(chunk Chunk, project string) bool {
+	project = sqlite.NormalizeProject(project)
+	if project == "" {
+		return true
+	}
+	chunkProject := sqlite.NormalizeProject(chunk.Project)
+	return chunk.All || chunkProject == "" || chunkProject == project
+}
+
+func shouldMarkChunkImported(chunk Chunk, project string) bool {
+	project = sqlite.NormalizeProject(project)
+	if project == "" {
+		return true
+	}
+	chunkProject := sqlite.NormalizeProject(chunk.Project)
+	return !chunk.All && chunkProject == project
+}
+
+func chunkImportKey(chunk Chunk, project string) string {
+	project = sqlite.NormalizeProject(project)
+	if project == "" || shouldMarkChunkImported(chunk, project) {
+		return chunk.ID
+	}
+	return chunk.ID + ":project:" + project
+}
+
+func filterDataForProject(data sqlite.ExportData, project string) sqlite.ExportData {
+	project = sqlite.NormalizeProject(project)
+	if project == "" {
+		return data
+	}
+
+	filtered := data
+	filtered.Sessions = nil
+	for _, session := range data.Sessions {
+		if sqlite.NormalizeProject(session.Project) == project {
+			filtered.Sessions = append(filtered.Sessions, session)
+		}
+	}
+
+	filtered.ProjectAliases = nil
+	for _, alias := range data.ProjectAliases {
+		if sqlite.NormalizeProject(alias.Alias) == project || sqlite.NormalizeProject(alias.Target) == project {
+			filtered.ProjectAliases = append(filtered.ProjectAliases, alias)
+		}
+	}
+
+	keptObservations := map[int64]bool{}
+	filtered.Observations = nil
+	for _, observation := range data.Observations {
+		if sqlite.NormalizeProject(observation.Project) == project {
+			filtered.Observations = append(filtered.Observations, observation)
+			if observation.ID > 0 {
+				keptObservations[observation.ID] = true
+			}
+		}
+	}
+
+	filtered.ObservationEvents = nil
+	for _, event := range data.ObservationEvents {
+		if keptObservations[event.ObservationID] {
+			filtered.ObservationEvents = append(filtered.ObservationEvents, event)
+		}
+	}
+
+	filtered.Prompts = nil
+	for _, prompt := range data.Prompts {
+		if sqlite.NormalizeProject(prompt.Project) == project {
+			filtered.Prompts = append(filtered.Prompts, prompt)
+		}
+	}
+
+	return filtered
+}
+
+func isEmptyExportData(data sqlite.ExportData) bool {
+	return len(data.Sessions) == 0 &&
+		len(data.ProjectAliases) == 0 &&
+		len(data.Observations) == 0 &&
+		len(data.ObservationEvents) == 0 &&
+		len(data.Prompts) == 0
+}
+
 func encodeJSONL(data sqlite.ExportData) ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
@@ -325,9 +432,13 @@ func encodeChunkRecord(encoder *json.Encoder, recordType string, payload any) er
 }
 
 func writeGzip(path string, raw []byte) error {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create sync chunk: %w", err)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("secure sync chunk: %w", err)
 	}
 	defer file.Close()
 

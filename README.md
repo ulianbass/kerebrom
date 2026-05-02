@@ -78,7 +78,7 @@ Do not enable remote/HTTP memory unless I explicitly ask for it.
 | Claude Code | MCP entry, lifecycle hooks, auto-approved everyday tools, hook scripts; protocol is delivered by the MCP server and hook payloads, not by occupying user preferences. |
 | Claude Desktop Chat | Local MCP server entry. Account memory is cloud-backed, so Kerebrom does not patch private Claude APIs or browser databases. |
 | Claude Cowork | Local MCP plus a native `memory/CLAUDE.md` authority seed when the desktop app has local Cowork account storage. |
-| Codex | MCP server in config and auto-approval for everyday memory tools; protocol is delivered by the MCP server instead of the user instructions textbox. |
+| Codex | MCP server in config, auto-approval for everyday memory tools, and lifecycle hooks with human status messages; protocol is delivered by the MCP server and hook payloads instead of the user instructions textbox. |
 | Cursor | MCP entry plus Kerebrom memory rule. |
 | Gemini CLI | MCP entry, system prompt, environment flag for system instructions. |
 | OpenCode | MCP entry plus Kerebrom memory protocol file. |

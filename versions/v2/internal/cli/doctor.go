@@ -30,6 +30,20 @@ type doctorCheck struct {
 	Detail string `json:"detail"`
 }
 
+var requiredCodexHookStatusMessages = []string{
+	"Loading Kerebrom memory...",
+	"Updating Kerebrom memory...",
+	"Closing Kerebrom session...",
+}
+
+var requiredClaudeHookStatusMessages = []string{
+	"Loading Kerebrom memory...",
+	"Recovering Kerebrom context...",
+	"Updating Kerebrom memory...",
+	"Saving Kerebrom learnings...",
+	"Closing Kerebrom session...",
+}
+
 func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fs := newFlagSet("doctor", stderr)
 	deep := fs.Bool("deep", false, "Run factory, vehicle, runtime, and agent configuration checks")
@@ -283,9 +297,14 @@ func runAgentConfigDoctorChecks(homeDir string, report *doctorReport) {
 		report.add("agent configs", "WARN", "home directory unavailable")
 		return
 	}
-	checkContains(report, "codex mcp config", filepath.Join(homeDir, ".codex", "config.toml"), []string{"mcp_servers.kerebrom", "kerebrom", "mcp"})
+	codexConfigPath := filepath.Join(homeDir, ".codex", "config.toml")
+	checkContains(report, "codex mcp config", codexConfigPath, []string{"mcp_servers.kerebrom", "kerebrom", "mcp"})
+	checkContains(report, "codex hooks enabled", codexConfigPath, []string{"codex_hooks = true"})
+	checkContains(report, "codex hook status messages", filepath.Join(homeDir, ".codex", "hooks.json"), requiredCodexHookStatusMessages)
 	checkNoContains(report, "codex user preferences clean", filepath.Join(homeDir, ".codex", "AGENTS.md"), []string{"KEREBROM:START"})
-	checkContains(report, "claude code settings", filepath.Join(homeDir, ".claude", "settings.json"), []string{"mcp__Kerebrom__context", "mcp__Kerebrom__remember"})
+	claudeSettingsPath := filepath.Join(homeDir, ".claude", "settings.json")
+	checkContains(report, "claude code settings", claudeSettingsPath, []string{"mcp__Kerebrom__context", "mcp__Kerebrom__remember"})
+	checkContains(report, "claude hook status messages", claudeSettingsPath, requiredClaudeHookStatusMessages)
 	checkNoContains(report, "claude global instructions clean", filepath.Join(homeDir, ".claude", "CLAUDE.md"), []string{"KEREBROM:START"})
 	checkContains(report, "claude desktop mcp config", filepath.Join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json"), []string{"Kerebrom", "kerebrom", "mcp"})
 }

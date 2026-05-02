@@ -45,7 +45,7 @@ The other three (`forget`, `timeline`, `projects`) are specialized and only invo
 **Positive**
 - The agent invokes memory automatically in MCP-only clients (Claude Desktop, Chat, Cowork) because tool names are intuition-friendly.
 - The protocol text is 40 % shorter and reads as a coherent rhythm rather than a list of mandatory rules.
-- The `permissions.allow` list shrinks from 17 to 7 entries.
+- The default `permissions.allow` list shrinks from 17 legacy memory entries to 6 agent-profile entries; the seventh semantic tool, `projects`, remains admin-only.
 - The Codex AGENTS.md block, the CLAUDE.md block, and every other client-facing instruction page are written in one consistent vocabulary.
 - The SQLite schema is unchanged, so v1 data is fully accessible from v2 without migration.
 

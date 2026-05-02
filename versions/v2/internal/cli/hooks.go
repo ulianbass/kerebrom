@@ -215,10 +215,10 @@ func hookProtocol(status string) string {
 Tools available: context, recall, remember, summary, forget, timeline.
 
 Automatic lifecycle is enabled:
-- SessionStart creates or refreshes the local session and injects memory context.
-- UserPromptSubmit saves user prompts and reminds you when durable memory should be saved.
-- SubagentStop passively captures learnings from subagent output.
-- Stop closes the session.
+- Session start creates or refreshes the local session and injects memory context.
+- User prompt submit saves user prompts and reminds you when durable memory should be saved.
+- Subagent stop passively captures learnings from subagent output.
+- Session stop closes the session.
 
 The cycle:
 - Treat Kerebrom as active on every user prompt. The hook has already saved the prompt when substantive and injected current context; if you need more prior context before answering, call context again.

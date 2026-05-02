@@ -134,8 +134,13 @@ func Open(cfg Config) (*Store, error) {
 		return nil, fmt.Errorf("sqlite path is required")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cfg.Path), 0o755); err != nil {
-		return nil, fmt.Errorf("create sqlite data dir: %w", err)
+	if dir := sqliteDataDir(cfg.Path); dir != "" {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("create sqlite data dir: %w", err)
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("secure sqlite data dir: %w", err)
+		}
 	}
 
 	db, err := sql.Open("sqlite", cfg.Path)
@@ -185,8 +190,36 @@ func (s *Store) Init(ctx context.Context) error {
 	if err := s.ensureObservationTrustLedger(ctx); err != nil {
 		return err
 	}
+	if err := s.secureRuntimeFiles(); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func (s *Store) secureRuntimeFiles() error {
+	if s.path == "" {
+		return nil
+	}
+	if dir := sqliteDataDir(s.path); dir != "" {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return fmt.Errorf("secure sqlite data dir: %w", err)
+		}
+	}
+	for _, path := range []string{s.path, s.path + "-wal", s.path + "-shm"} {
+		if err := os.Chmod(path, 0o600); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("secure sqlite file %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+func sqliteDataDir(path string) string {
+	dir := filepath.Dir(path)
+	if dir == "" || dir == "." || dir == string(filepath.Separator) {
+		return ""
+	}
+	return dir
 }
 
 func (s *Store) repairSessionLifecycle(ctx context.Context) error {

@@ -346,7 +346,7 @@ func runContext(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "  no recent sessions")
 	} else {
 		for _, session := range sessions {
-			fmt.Fprintf(stdout, "[session:%s] %s | %s | %s\n", session.ID, session.Project, session.Status, session.StartedAt)
+			fmt.Fprintf(stdout, "[session:%s] %s | %s | %s\n", session.ID, session.Project, displayLabel(session.Status), session.StartedAt)
 		}
 	}
 
@@ -500,12 +500,22 @@ func runExport(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	if err := os.MkdirAll(filepath.Dir(*output), 0o755); err != nil && filepath.Dir(*output) != "." {
-		fmt.Fprintf(stderr, "create export dir: %v\n", err)
+	if dir := filepath.Dir(*output); dir != "." {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			fmt.Fprintf(stderr, "create export dir: %v\n", err)
+			return 1
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			fmt.Fprintf(stderr, "secure export dir: %v\n", err)
+			return 1
+		}
+	}
+	if err := os.WriteFile(*output, content, 0o600); err != nil {
+		fmt.Fprintf(stderr, "write export: %v\n", err)
 		return 1
 	}
-	if err := os.WriteFile(*output, content, 0o644); err != nil {
-		fmt.Fprintf(stderr, "write export: %v\n", err)
+	if err := os.Chmod(*output, 0o600); err != nil {
+		fmt.Fprintf(stderr, "secure export: %v\n", err)
 		return 1
 	}
 
@@ -1150,7 +1160,7 @@ func oneLinePreview(value string, max int) string {
 }
 
 func printObservation(w io.Writer, observation sqlite.Observation) {
-	fmt.Fprintf(w, "[%d] %s | %s | %s | valid_at=%s\n", observation.ID, observation.Project, observation.Type, observation.Title, observation.ValidAt)
+	fmt.Fprintf(w, "[%d] %s | %s | %s | valid_at=%s\n", observation.ID, observation.Project, displayLabel(observation.Type), observation.Title, observation.ValidAt)
 	fmt.Fprintf(w, "    %s\n", oneLinePreview(observation.Content, 120))
 }
 
@@ -1168,7 +1178,7 @@ func printTimelinePayload(w io.Writer, payload map[string]any) {
 	if events, ok := payload["events"].([]sqlite.ObservationEvent); ok && len(events) > 0 {
 		fmt.Fprintln(w, "trust ledger:")
 		for _, event := range events {
-			fmt.Fprintf(w, "[event:%d] observation=%d %s | %s | %s\n", event.ID, event.ObservationID, event.EventType, event.CreatedAt, oneLinePreview(event.Reason, 100))
+			fmt.Fprintf(w, "[event:%d] observation=%d %s | %s | %s\n", event.ID, event.ObservationID, displayLabel(event.EventType), event.CreatedAt, oneLinePreview(event.Reason, 100))
 		}
 	}
 	if after, ok := payload["after"].([]sqlite.Observation); ok && len(after) > 0 {
@@ -1185,7 +1195,7 @@ func printPrompt(w io.Writer, prompt sqlite.Prompt) {
 }
 
 func printSession(w io.Writer, session sqlite.Session) {
-	fmt.Fprintf(w, "[session:%s] %s | %s | %s\n", session.ID, session.Project, session.Status, session.StartedAt)
+	fmt.Fprintf(w, "[session:%s] %s | %s | %s\n", session.ID, session.Project, displayLabel(session.Status), session.StartedAt)
 	if strings.TrimSpace(session.Summary) != "" {
 		fmt.Fprintf(w, "    %s\n", oneLinePreview(session.Summary, 120))
 	}

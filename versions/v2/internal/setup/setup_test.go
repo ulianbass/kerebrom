@@ -16,6 +16,7 @@ func TestRunCodexSetupIsIdempotent(t *testing.T) {
 
 	configPath := filepath.Join(homeDir, ".codex", "config.toml")
 	agentsPath := filepath.Join(homeDir, ".codex", "AGENTS.md")
+	hooksPath := filepath.Join(homeDir, ".codex", "hooks.json")
 
 	mustWriteFile(t, configPath, `model = "gpt-5.4"
 
@@ -24,6 +25,33 @@ command = "/path/to/node"
 args = ["/path/to/tradingview.js"]
 `)
 	mustWriteFile(t, agentsPath, "# TradingView\n\nExisting instructions.\n")
+	mustWriteFile(t, hooksPath, `{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/test/.kerebrom/hooks/claude-code/user-prompt-submit.sh",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/tmp/keep.sh",
+            "statusMessage": "Existing user hook"
+          }
+        ]
+      }
+    ]
+  }
+}`)
 
 	result, err := Run("codex", Options{
 		HomeDir:    homeDir,
@@ -32,7 +60,7 @@ args = ["/path/to/tradingview.js"]
 	if err != nil {
 		t.Fatalf("run codex setup: %v", err)
 	}
-	if result.Agent != "codex" || len(result.Files) != 1 {
+	if result.Agent != "codex" || len(result.Files) != 5 {
 		t.Fatalf("unexpected codex result: %+v", result)
 	}
 
@@ -51,6 +79,29 @@ args = ["/path/to/tradingview.js"]
 	}
 	if !strings.Contains(configContent, `command = "`+binaryPath+`"`) {
 		t.Fatalf("config missing binary path: %q", configContent)
+	}
+	if !strings.Contains(configContent, "[features]") || !strings.Contains(configContent, "codex_hooks = true") {
+		t.Fatalf("config missing enabled Codex hooks feature: %q", configContent)
+	}
+
+	hooksContent := mustReadFile(t, hooksPath)
+	for _, statusMessage := range []string{
+		"Loading Kerebrom memory...",
+		"Updating Kerebrom memory...",
+		"Closing Kerebrom session...",
+	} {
+		if !strings.Contains(hooksContent, statusMessage) {
+			t.Fatalf("missing friendly Codex hook status message %q in %s", statusMessage, hooksContent)
+		}
+	}
+	if strings.Contains(hooksContent, ".kerebrom/hooks/claude-code") {
+		t.Fatalf("Codex hooks should use Codex-specific Kerebrom scripts: %q", hooksContent)
+	}
+	if strings.Count(hooksContent, "user-prompt-submit.sh") != 1 {
+		t.Fatalf("Codex setup duplicated prompt hook: %q", hooksContent)
+	}
+	if !strings.Contains(hooksContent, "Existing user hook") {
+		t.Fatalf("Codex setup removed unrelated user hook: %q", hooksContent)
 	}
 
 	agentsContent := mustReadFile(t, agentsPath)
@@ -77,6 +128,10 @@ args = ["/path/to/tradingview.js"]
 	}
 	if strings.Count(configContent, "approval_mode = \"auto\"") != 6 {
 		t.Fatalf("codex config duplicated Kerebrom tool approvals: %q", configContent)
+	}
+	hooksContent = mustReadFile(t, hooksPath)
+	if strings.Count(hooksContent, "user-prompt-submit.sh") != 1 || strings.Count(hooksContent, "session-stop.sh") != 1 {
+		t.Fatalf("codex hooks duplicated Kerebrom hook entries: %q", hooksContent)
 	}
 
 	agentsContent = mustReadFile(t, agentsPath)
@@ -113,7 +168,7 @@ Also keep this.
 	if err != nil {
 		t.Fatalf("run codex setup: %v", err)
 	}
-	if result.Agent != "codex" || len(result.Files) != 2 {
+	if result.Agent != "codex" || len(result.Files) != 6 {
 		t.Fatalf("unexpected codex result: %+v", result)
 	}
 
@@ -184,6 +239,18 @@ func TestRunClaudeSetupIsIdempotent(t *testing.T) {
 	for _, hookName := range []string{"SessionStart", "UserPromptSubmit", "SubagentStop", "Stop"} {
 		if _, ok := hooks[hookName]; !ok {
 			t.Fatalf("missing %s hook in %#v", hookName, hooks)
+		}
+	}
+	settingsContent := mustReadFile(t, settingsPath)
+	for _, statusMessage := range []string{
+		"Loading Kerebrom memory...",
+		"Recovering Kerebrom context...",
+		"Updating Kerebrom memory...",
+		"Saving Kerebrom learnings...",
+		"Closing Kerebrom session...",
+	} {
+		if !strings.Contains(settingsContent, statusMessage) {
+			t.Fatalf("missing friendly hook status message %q in %s", statusMessage, settingsContent)
 		}
 	}
 	hookPath := filepath.Join(homeDir, ".kerebrom", "hooks", "claude-code", "session-start.sh")
@@ -402,13 +469,16 @@ func TestRunAutoSetupUsesExistingAgentConfigs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run auto setup: %v", err)
 	}
-	if result.Agent != "auto" || len(result.Files) != 1 {
+	if result.Agent != "auto" || len(result.Files) != 5 {
 		t.Fatalf("unexpected auto result: %+v", result)
 	}
 
 	configContent := mustReadFile(t, codexConfigPath)
 	if !strings.Contains(configContent, "[mcp_servers.kerebrom]") {
 		t.Fatalf("auto setup did not configure detected Codex: %q", configContent)
+	}
+	if !strings.Contains(configContent, "codex_hooks = true") {
+		t.Fatalf("auto setup did not enable Codex hooks: %q", configContent)
 	}
 	if _, err := os.Stat(claudeDesktopConfigPath(homeDir)); !os.IsNotExist(err) {
 		t.Fatalf("auto setup should not fall back to Claude Desktop when another client is detected, err=%v", err)
@@ -500,7 +570,7 @@ func TestRunAllSetup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run all setup: %v", err)
 	}
-	if result.Agent != "all" || len(result.Files) != 20 {
+	if result.Agent != "all" || len(result.Files) != 24 {
 		t.Fatalf("unexpected all setup result: %+v", result)
 	}
 }

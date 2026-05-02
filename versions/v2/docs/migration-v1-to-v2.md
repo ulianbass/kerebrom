@@ -45,7 +45,8 @@ The seven new tools are not aliases — `mem_*` is removed entirely. If you have
 - `~/.claude/settings.json` — adds the six default agent-profile `mcp__Kerebrom__*` entries to `permissions.allow` and **removes** leftover Kerebrom entries outside the active agent surface. Other non-Kerebrom entries you added are preserved.
 - `~/.claude/CLAUDE.md` — any old `<!-- KEREBROM:START -->` block is removed so user-owned global instructions stay free for user preferences.
 - `~/.claude/mcp.json` — the `Kerebrom` MCP server entry is updated to use the new binary path (no behavior change).
-- `~/.codex/config.toml` — the `[mcp_servers.kerebrom]` block is regenerated with auto-approval for the six agent tools instead of the eleven v1 tools.
+- `~/.codex/config.toml` — the `[mcp_servers.kerebrom]` block is regenerated with auto-approval for the six agent tools instead of the eleven v1 tools, and `codex_hooks = true` is enabled.
+- `~/.codex/hooks.json` — Kerebrom lifecycle hooks are refreshed with human `statusMessage` labels so Codex shows friendly activity text instead of raw event identifiers when hooks run.
 - `~/.codex/AGENTS.md` — any old `<!-- KEREBROM:START -->` block is removed so the Codex custom-instructions textbox remains user-owned.
 - `~/Library/Application Support/Claude/claude_desktop_config.json` — MCP server entry refreshed (binary path).
 - `~/.gemini/{settings.json, system.md, .env}` — protocol and MCP entry updated.
@@ -131,14 +132,13 @@ If you want to run **both** v1 and v2 in parallel for testing, that is supported
 `make install-user` writes the new binary atomically. If something goes wrong:
 
 ```bash
-# Check that ~/local/bin/kerebrom.bak.* exists from a previous install
-ls -lt ~/local/bin/kerebrom*
-
-# Restore the previous binary
-mv ~/local/bin/kerebrom.bak.<timestamp> ~/local/bin/kerebrom
+# Reinstall a known-good release from source
+git checkout <known-good-tag>
+cd versions/v2
+make install-user
 ```
 
-(Note: `make install-user` does not currently keep automatic backups; future versions may. To preserve a known-good binary, copy `~/local/bin/kerebrom` somewhere before running `kerebrom update`.)
+`make install-user` does not keep automatic backup binaries. To preserve a known-good local binary before testing a new release, copy `~/local/bin/kerebrom` somewhere private first.
 
 Then re-run `kerebrom setup auto` from the v1 source to revert the client config files.
 

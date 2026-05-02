@@ -142,7 +142,7 @@ A session is active only until a client closes it through `summary`, `session-en
 
 ## Deep Doctor
 
-`kerebrom doctor --deep` is the operational readiness check. It verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, stale active sessions before and after runtime repair, project alias cycles, installed binary paths, Codex/Claude config blocks, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
+`kerebrom doctor --deep` is the operational readiness check. It verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, stale active sessions before and after runtime repair, project alias cycles, installed binary paths, Codex/Claude config blocks, Codex/Claude hook status messages, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
 
 ## Self-update flow
 
@@ -163,7 +163,7 @@ Requirements: Git is **not** required. `make` and `go` are required (same requir
 
 - **Claude Code** (`~/.claude/`): MCP server entry in `mcp.json`, hooks in `settings.json`, the six agent-profile `mcp__Kerebrom__*` entries in `permissions.allow` (and removes any stale Kerebrom permissions outside the active agent surface), five hook scripts in `~/.kerebrom/hooks/claude-code/`, and removal of any old Kerebrom block from user-owned `CLAUDE.md`.
 - **Claude Desktop** (`~/Library/Application Support/Claude/` on macOS): MCP server entry in `claude_desktop_config.json` and, when Cowork local account storage exists, an idempotent Kerebrom block in `local-agent-mode-sessions/<account>/<org>/memory/CLAUDE.md`. Claude Chat account memory is cloud-backed and is not patched through private APIs or browser databases.
-- **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, plus removal of any old Kerebrom block from user-owned `AGENTS.md`.
+- **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, `codex_hooks = true`, lifecycle hooks in `hooks.json` using Kerebrom-specific wrapper scripts and human `statusMessage` labels, plus removal of any old Kerebrom block from user-owned `AGENTS.md`.
 - **Cursor** (`~/.cursor/`): MCP entry in `mcp.json`, protocol rule in `rules/kerebrom.mdc`.
 - **Gemini CLI** (`~/.gemini/`): MCP entry in `settings.json`, protocol in `system.md`, env var enabling system.md.
 - **OpenCode** (`~/.config/opencode/`): MCP entry in `opencode.json`, protocol in `kerebrom-memory.md`.
