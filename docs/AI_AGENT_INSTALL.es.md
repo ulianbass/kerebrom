@@ -8,10 +8,11 @@ Objetivo: instalar Kerebrom como producto de usuario final, no como sandbox de d
 
 - Usa la línea estable actual: `versions/v2`.
 - Prefiere la ruta plug-and-play: `make install-user`.
+- Si `make` no está disponible pero Go sí está instalado, usa `./scripts/install-user.sh --yes --agent auto` desde `versions/v2`.
 - Mantén Kerebrom local-first. No inicies ni expongas `mcp-http` o `serve` fuera de loopback salvo que el usuario pida explícitamente soporte remoto y acepte el tradeoff de privacidad.
 - No importes backups legacy, no borres memoria, no resetees bases de datos y no modifiques configuración ajena de clientes IA.
 - Después de instalar o actualizar, dile al usuario que reinicie por completo cualquier cliente IA abierto.
-- Si un comando falla porque falta Go o Make, explica la dependencia faltante y detente con próximos pasos claros.
+- Si un comando falla porque falta Go, explica la dependencia faltante y detente con próximos pasos claros.
 
 ## Targets Soportados
 
@@ -35,12 +36,20 @@ Usa `auto` por defecto. Usa un target específico solo cuando el usuario lo pida
 
 ## Instalación Limpia
 
-Ejecuta:
+Kerebrom se instala desde código fuente. El usuario necesita Git y Go 1.26 o más nuevo.
+
+Para la ruta default amigable para agentes, ejecuta:
 
 ```bash
 git clone https://github.com/ulianbass/kerebrom.git
 cd kerebrom/versions/v2
 make install-user
+```
+
+Si `make` no está disponible pero Go sí está instalado, usa el instalador shell:
+
+```bash
+./scripts/install-user.sh --yes --agent auto
 ```
 
 Efectos esperados:
@@ -63,6 +72,12 @@ Si el usuario quiere configurar todos los clientes soportados:
 
 ```bash
 make install-user SETUP_AGENT=all
+```
+
+o:
+
+```bash
+./scripts/install-user.sh --yes --all
 ```
 
 ## Actualizar Una Instalación Existente
@@ -89,6 +104,8 @@ kerebrom doctor --deep
 ```
 
 Si el chequeo profundo reporta drift de setup o runtime, ejecuta `kerebrom doctor heal` una vez antes de reiniciar clientes. Health Mode crea primero un backup SQLite privado, limpia backups de salud antiguos según su política de retención, repara invariantes locales deterministas, refresca el setup administrado de clientes IA y verifica otra vez.
+
+Trata `FAIL` como bloqueante. Trata `WARN` como usable pero digno de explicar, sobre todo cuando el warning solo indica que falta la configuración de un cliente opcional en esa máquina.
 
 Después revisa la salida de setup del comando de instalación. Debe listar archivos configurados para los clientes detectados.
 

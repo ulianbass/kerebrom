@@ -8,10 +8,11 @@ Goal: install Kerebrom as an end-user product, not as a development sandbox.
 
 - Use the current stable product line: `versions/v2`.
 - Prefer the plug-and-play path: `make install-user`.
+- If `make` is unavailable but Go is installed, use `./scripts/install-user.sh --yes --agent auto` from `versions/v2`.
 - Keep Kerebrom local-first. Do not start or expose `mcp-http` or `serve` beyond loopback unless the user explicitly asks for remote connector support and accepts the privacy tradeoff.
 - Do not import legacy backups, delete memory, reset databases, or modify unrelated AI-client configuration.
 - After install or update, tell the user to fully restart any open AI client.
-- If a command fails because Go or Make is missing, explain the missing dependency and stop with clear next steps.
+- If a command fails because Go is missing, explain the missing dependency and stop with clear next steps.
 
 ## Supported Setup Targets
 
@@ -35,12 +36,20 @@ Use `auto` by default. Use a specific target only when the user asks for one, or
 
 ## Fresh Install
 
-Run:
+Kerebrom installs from source. The user needs Git and Go 1.26 or newer.
+
+For the default agent-friendly path, run:
 
 ```bash
 git clone https://github.com/ulianbass/kerebrom.git
 cd kerebrom/versions/v2
 make install-user
+```
+
+If `make` is not available but Go is installed, run the shell installer instead:
+
+```bash
+./scripts/install-user.sh --yes --agent auto
 ```
 
 Expected side effects:
@@ -63,6 +72,12 @@ If the user wants every supported client configured, run:
 
 ```bash
 make install-user SETUP_AGENT=all
+```
+
+or:
+
+```bash
+./scripts/install-user.sh --yes --all
 ```
 
 ## Update Existing Install
@@ -89,6 +104,8 @@ kerebrom doctor --deep
 ```
 
 If the deep check reports setup or runtime drift, run `kerebrom doctor heal` once before restarting clients. Health Mode creates a private SQLite backup first, prunes old health backups under its retention policy, repairs deterministic local invariants, refreshes managed AI-client setup, and verifies again.
+
+Treat `FAIL` as a blocker. Treat `WARN` as usable but worth explaining, especially when the warning is only that an optional client config is absent on that machine.
 
 Then verify setup output from the install command. It should list files configured for the detected clients.
 

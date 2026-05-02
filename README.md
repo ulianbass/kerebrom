@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.6](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.6) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.7) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -26,13 +26,31 @@ AI clients usually remember in separate silos. Claude Code, Claude Desktop Chat,
 
 ## Install
 
+Kerebrom currently installs from source. You need Git and Go 1.26 or newer. The installer will tell you clearly if a dependency is missing.
+
+For a human-friendly install:
+
 ```bash
 git clone https://github.com/ulianbass/kerebrom.git
 cd kerebrom/versions/v2
+./scripts/install-user.sh
+```
+
+The script builds the binary, installs it to `~/local/bin/kerebrom`, links it from `~/.local/bin/kerebrom`, asks which AI clients to configure when run interactively, runs setup, prints the installed version and stats, then verifies the install with `doctor --deep`.
+
+For a non-interactive install:
+
+```bash
+./scripts/install-user.sh --yes --agent auto
+```
+
+For automation that already has `make`:
+
+```bash
 make install-user
 ```
 
-That command builds the binary, installs it to `~/local/bin/kerebrom`, links it from `~/.local/bin/kerebrom`, and runs:
+All three paths install the binary and run:
 
 ```bash
 kerebrom setup auto
@@ -43,12 +61,23 @@ kerebrom setup auto
 To force a specific target:
 
 ```bash
-make install-user SETUP_AGENT=claude-desktop
-make install-user SETUP_AGENT=codex
-make install-user SETUP_AGENT=all
+./scripts/install-user.sh --agent claude-desktop
+./scripts/install-user.sh --agent codex
+./scripts/install-user.sh --all
 ```
 
 After install, fully restart any open AI client so it reloads the MCP server and native instruction files.
+
+What success looks like:
+
+```text
+Installed version:
+v2.1.x (commit=..., build_date=...)
+
+Kerebrom doctor: PASS
+```
+
+`Kerebrom doctor: WARN` can also be usable when the warning is for an optional client that is not installed. There should be no `FAIL` lines.
 
 ## Ask An AI Agent To Install It
 

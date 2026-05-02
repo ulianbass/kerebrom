@@ -15,6 +15,12 @@ cd versions/v2
 make install-user
 ```
 
+If `make` is unavailable but Go is installed, use:
+
+```bash
+./scripts/install-user.sh --yes --agent auto
+```
+
 4. Verify:
 
 ```bash

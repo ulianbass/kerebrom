@@ -6,20 +6,36 @@
 
 ## Instalación
 
+Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo.
+
+Instalador amigable:
+
 ```bash
 git clone https://github.com/ulianbass/kerebrom.git
 cd kerebrom/versions/v2
+./scripts/install-user.sh
+```
+
+Instalador no interactivo:
+
+```bash
+./scripts/install-user.sh --yes --agent auto
+```
+
+Target Make para automatización:
+
+```bash
 make install-user
 ```
 
-El target de instalación compila el binario, lo instala en `~/local/bin/kerebrom`, lo enlaza desde `~/.local/bin/kerebrom` y ejecuta `kerebrom setup auto`.
+Todos los caminos compilan el binario, lo instalan en `~/local/bin/kerebrom`, lo enlazan desde `~/.local/bin/kerebrom` y ejecutan `kerebrom setup auto`. El script también muestra versión/stats y ejecuta `doctor --deep`.
 
 Forzar un target cuando haga falta:
 
 ```bash
-make install-user SETUP_AGENT=claude-desktop
-make install-user SETUP_AGENT=codex
-make install-user SETUP_AGENT=all
+./scripts/install-user.sh --agent claude-desktop
+./scripts/install-user.sh --agent codex
+./scripts/install-user.sh --all
 ```
 
 Targets soportados:
@@ -42,7 +58,7 @@ Si un usuario pide a Claude, Codex u otro agente de código instalar este repo, 
 La instrucción esperada para el agente es:
 
 ```text
-Usa versions/v2, ejecuta make install-user, verifica kerebrom version y stats,
+Usa versions/v2, ejecuta make install-user o ./scripts/install-user.sh --yes --agent auto, verifica kerebrom version y stats,
 reporta clientes configurados y no habilites memoria HTTP remota salvo que se pida.
 ```
 
