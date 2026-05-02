@@ -85,6 +85,16 @@ args = ["/path/to/tradingview.js"]
 	}
 
 	hooksContent := mustReadFile(t, hooksPath)
+	for _, hook := range []struct {
+		event  string
+		script string
+	}{
+		{event: "SessionStart", script: "session-start.sh"},
+		{event: "UserPromptSubmit", script: "user-prompt-submit.sh"},
+		{event: "Stop", script: "session-stop.sh"},
+	} {
+		assertHookCommandBool(t, hooksPath, hook.event, hook.script, "silent", true)
+	}
 	for _, statusMessage := range []string{
 		"Loading Kerebrom memory...",
 		"Updating Kerebrom memory...",
@@ -132,6 +142,16 @@ args = ["/path/to/tradingview.js"]
 	hooksContent = mustReadFile(t, hooksPath)
 	if strings.Count(hooksContent, "user-prompt-submit.sh") != 1 || strings.Count(hooksContent, "session-stop.sh") != 1 {
 		t.Fatalf("codex hooks duplicated Kerebrom hook entries: %q", hooksContent)
+	}
+	for _, hook := range []struct {
+		event  string
+		script string
+	}{
+		{event: "SessionStart", script: "session-start.sh"},
+		{event: "UserPromptSubmit", script: "user-prompt-submit.sh"},
+		{event: "Stop", script: "session-stop.sh"},
+	} {
+		assertHookCommandBool(t, hooksPath, hook.event, hook.script, "silent", true)
 	}
 
 	agentsContent = mustReadFile(t, agentsPath)
@@ -618,6 +638,44 @@ func assertArgs(t *testing.T, server map[string]any, want []string) {
 			t.Fatalf("args[%d] = %#v, want %q in %#v", i, raw[i], wantArg, raw)
 		}
 	}
+}
+
+func assertHookCommandBool(t *testing.T, path string, event string, script string, field string, want bool) {
+	t.Helper()
+
+	config := mustReadJSONMap(t, path)
+	rawHooks, ok := config["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing hooks map in %s: %#v", path, config)
+	}
+	rawEntries, ok := rawHooks[event].([]any)
+	if !ok {
+		t.Fatalf("missing %s hook entries in %s: %#v", event, path, rawHooks)
+	}
+	for _, rawEntry := range rawEntries {
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		rawCommands, ok := entry["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, rawCommand := range rawCommands {
+			command, ok := rawCommand.(map[string]any)
+			if !ok {
+				continue
+			}
+			commandPath, _ := command["command"].(string)
+			if strings.Contains(commandPath, script) {
+				if command[field] != want {
+					t.Fatalf("expected %s %s hook field %s=%v, got %#v", event, script, field, want, command)
+				}
+				return
+			}
+		}
+	}
+	t.Fatalf("missing %s command for %s in %s: %#v", script, event, path, rawHooks[event])
 }
 
 func containsString(items []any, want string) bool {

@@ -75,10 +75,10 @@ No habilites memoria remota/HTTP a menos que yo lo pida explícitamente.
 
 | Cliente | Comportamiento de setup |
 |---|---|
-| Claude Code | Entrada MCP, hooks de ciclo de vida, tools cotidianos auto-aprobados y scripts de hook; el protocolo viaja por el servidor MCP y los hooks, no ocupando preferencias del usuario. |
+| Claude Code | Entrada MCP, hooks de ciclo de vida, tools cotidianos auto-aprobados, scripts de hook y payloads de hook suprimibles; el protocolo viaja por el servidor MCP y los hooks, no ocupando preferencias del usuario. |
 | Claude Desktop Chat | Entrada MCP local. La memoria de cuenta vive en cloud, así que Kerebrom no parchea APIs privadas de Claude ni bases internas del navegador. |
 | Claude Cowork | MCP local y semilla nativa en `memory/CLAUDE.md` cuando la app de escritorio tiene storage local de Cowork. |
-| Codex | Servidor MCP en config y auto-aprobación para tools cotidianos; el protocolo viaja por el servidor MCP en vez de ocupar el cuadro de instrucciones del usuario. |
+| Codex | Servidor MCP en config, auto-aprobación para tools cotidianos y hooks de ciclo de vida con textos humanos más señales de modo silencioso; el protocolo viaja por el servidor MCP y los hooks en vez de ocupar el cuadro de instrucciones del usuario. |
 | Cursor | Entrada MCP y regla de memoria Kerebrom. |
 | Gemini CLI | Entrada MCP, prompt de sistema y variable de entorno para instrucciones de sistema. |
 | OpenCode | Entrada MCP y archivo de protocolo de memoria Kerebrom. |
@@ -123,6 +123,8 @@ kerebrom version
 kerebrom update --check
 kerebrom update
 kerebrom doctor --deep
+kerebrom doctor status
+kerebrom doctor heal
 kerebrom setup auto
 kerebrom setup all
 kerebrom stats

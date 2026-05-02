@@ -48,6 +48,9 @@ func TestRunHookUserPromptSubmitEnsuresSessionAndAddsContext(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &output); err != nil {
 		t.Fatalf("hook output is not JSON: %v output=%q", err, stdout.String())
 	}
+	if output["suppressOutput"] != true {
+		t.Fatalf("hook context should be suppressible in client UI: %#v", output)
+	}
 	specific, ok := output["hookSpecificOutput"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing hookSpecificOutput: %#v", output)
@@ -58,6 +61,56 @@ func TestRunHookUserPromptSubmitEnsuresSessionAndAddsContext(t *testing.T) {
 	additionalContext := specific["additionalContext"].(string)
 	if !strings.Contains(additionalContext, "FIRST ACTION REQUIRED") {
 		t.Fatalf("missing additionalContext reminder: %#v", specific)
+	}
+	if !strings.Contains(additionalContext, "Kerebrom Context") {
+		t.Fatalf("missing injected Kerebrom context: %#v", specific)
+	}
+}
+
+func TestRunHookSessionStartAddsSuppressibleContext(t *testing.T) {
+	store := newHookTestStore(t)
+	ctx := context.Background()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := runHookSessionStart(ctx, store, map[string]any{
+		"session_id": "codex-session-start",
+		"project":    "Proyecto Kerebrom",
+		"cwd":        filepath.Join("Users", "example", "Proyecto Kerebrom"),
+	}, &stdout, &stderr, false)
+	if code != 0 {
+		t.Fatalf("hook failed: code=%d stderr=%q", code, stderr.String())
+	}
+
+	session, err := store.GetSession(ctx, "codex-session-start")
+	if err != nil {
+		t.Fatalf("expected hook to create session: %v", err)
+	}
+	if session.Project != "proyecto-kerebrom" {
+		t.Fatalf("unexpected project: %#v", session)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &output); err != nil {
+		t.Fatalf("hook output is not JSON: %v output=%q", err, stdout.String())
+	}
+	if output["suppressOutput"] != true {
+		t.Fatalf("session-start context should be suppressible in client UI: %#v", output)
+	}
+	specific, ok := output["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing hookSpecificOutput: %#v", output)
+	}
+	if specific["hookEventName"] != "SessionStart" {
+		t.Fatalf("unexpected hook event name: %#v", specific)
+	}
+	additionalContext, ok := specific["additionalContext"].(string)
+	if !ok {
+		t.Fatalf("missing additionalContext: %#v", specific)
+	}
+	if !strings.Contains(additionalContext, "Kerebrom memory is active") {
+		t.Fatalf("missing session-start protocol context: %#v", specific)
 	}
 	if !strings.Contains(additionalContext, "Kerebrom Context") {
 		t.Fatalf("missing injected Kerebrom context: %#v", specific)

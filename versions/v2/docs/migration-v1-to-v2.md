@@ -46,7 +46,7 @@ The seven new tools are not aliases — `mem_*` is removed entirely. If you have
 - `~/.claude/CLAUDE.md` — any old `<!-- KEREBROM:START -->` block is removed so user-owned global instructions stay free for user preferences.
 - `~/.claude/mcp.json` — the `Kerebrom` MCP server entry is updated to use the new binary path (no behavior change).
 - `~/.codex/config.toml` — the `[mcp_servers.kerebrom]` block is regenerated with auto-approval for the six agent tools instead of the eleven v1 tools, and `codex_hooks = true` is enabled.
-- `~/.codex/hooks.json` — Kerebrom lifecycle hooks are refreshed with human `statusMessage` labels so Codex shows friendly activity text instead of raw event identifiers when hooks run.
+- `~/.codex/hooks.json` — Kerebrom lifecycle hooks are refreshed with human `statusMessage` labels and `silent` quiet-mode hints. The internal event keys still stay exact for client compatibility; visible output is suppressed or humanized where the client supports it.
 - `~/.codex/AGENTS.md` — any old `<!-- KEREBROM:START -->` block is removed so the Codex custom-instructions textbox remains user-owned.
 - `~/Library/Application Support/Claude/claude_desktop_config.json` — MCP server entry refreshed (binary path).
 - `~/.gemini/{settings.json, system.md, .env}` — protocol and MCP entry updated.

@@ -1079,7 +1079,7 @@ func writeHelp(w io.Writer) {
 	fmt.Fprintln(w, "  context         Build a local context bundle")
 	fmt.Fprintln(w, "  timeline        Show recent observations")
 	fmt.Fprintln(w, "  stats           Show memory counts")
-	fmt.Fprintln(w, "  doctor          Audit local install, database, agents, and factory state")
+	fmt.Fprintln(w, "  doctor          Doctor health checks, repair, reports, and watch mode")
 	fmt.Fprintln(w, "  tui             Launch terminal dashboard")
 	fmt.Fprintln(w, "  export          Export memory data as JSON")
 	fmt.Fprintln(w, "  import          Import memory data from JSON")

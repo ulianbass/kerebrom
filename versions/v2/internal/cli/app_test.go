@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -303,6 +304,118 @@ func TestRunDoctor(t *testing.T) {
 	}
 }
 
+func TestRunDoctorStatusUsesCapitalizedDoctor(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+	homeDir := t.TempDir()
+	v2Root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("resolve v2 root: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"doctor", "status", "--home", homeDir, "--project-dir", v2Root}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doctor status failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Kerebrom Doctor:") || !strings.Contains(stdout.String(), "codex hook silent mode") {
+		t.Fatalf("doctor status output missing expected checks: %q", stdout.String())
+	}
+}
+
+func TestRunDoctorReportDefaultsToJSON(t *testing.T) {
+	t.Setenv(config.DataDirEnv, t.TempDir())
+	homeDir := t.TempDir()
+	v2Root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("resolve v2 root: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"doctor", "report", "--home", homeDir, "--project-dir", v2Root}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doctor report failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var report doctorReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("doctor report is not JSON: %v output=%q", err, stdout.String())
+	}
+	if report.Status == "" || report.DBPath == "" {
+		t.Fatalf("doctor report missing status/db path: %+v", report)
+	}
+}
+
+func TestRunDoctorHealCreatesBackupAndRepairsCodexSetup(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv(config.DataDirEnv, dataDir)
+	homeDir := t.TempDir()
+	v2Root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("resolve v2 root: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := Run([]string{
+		"save",
+		"--title", "doctor heal seed",
+		"--content", "seed observation for doctor backup",
+		"--project", "doctor-test",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("seed save failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = Run([]string{
+		"doctor", "heal",
+		"--home", homeDir,
+		"--project-dir", v2Root,
+		"--setup-agent", "codex",
+		"--binary-path", "/tmp/kerebrom",
+	}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("doctor heal failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Kerebrom Doctor Health Mode:") || !strings.Contains(stdout.String(), "sqlite backup") {
+		t.Fatalf("doctor heal output missing expected actions: %q", stdout.String())
+	}
+	backups, err := filepath.Glob(filepath.Join(dataDir, "backups", "health", "*.db"))
+	if err != nil {
+		t.Fatalf("glob backups: %v", err)
+	}
+	if len(backups) == 0 {
+		t.Fatalf("doctor heal did not create backup in %s", dataDir)
+	}
+	hooksRaw, err := os.ReadFile(filepath.Join(homeDir, ".codex", "hooks.json"))
+	if err != nil {
+		t.Fatalf("read repaired codex hooks: %v", err)
+	}
+	if !strings.Contains(string(hooksRaw), `"silent": true`) {
+		t.Fatalf("codex hooks were not repaired with silent mode: %s", hooksRaw)
+	}
+}
+
+func TestResolveFactoryDirsAcceptsCurrentV2Dir(t *testing.T) {
+	v2Root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("resolve v2 root: %v", err)
+	}
+	t.Chdir(v2Root)
+
+	repoRoot, resolvedV2Root := resolveFactoryDirs(".")
+	if filepath.Clean(resolvedV2Root) != filepath.Clean(v2Root) {
+		t.Fatalf("expected v2 root %q, got %q", v2Root, resolvedV2Root)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "README.md")); err != nil {
+		t.Fatalf("resolved repo root %q is invalid: %v", repoRoot, err)
+	}
+}
+
 func TestDoctorDetectsMissingCodexHookStatusMessages(t *testing.T) {
 	t.Parallel()
 
@@ -342,6 +455,48 @@ args = ["mcp", "--tools=agent"]
 		}
 	}
 	t.Fatalf("missing codex hook status message check: %+v", report.Checks)
+}
+
+func TestDoctorDetectsMissingCodexHookSilentMode(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create codex dir: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`[features]
+codex_hooks = true
+
+[mcp_servers.kerebrom]
+command = "/tmp/kerebrom"
+args = ["mcp", "--tools=agent"]
+`), 0o600); err != nil {
+		t.Fatalf("write codex config: %v", err)
+	}
+	hooksPath := filepath.Join(homeDir, ".codex", "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(`{
+		"hooks": {
+			"SessionStart": [{"hooks": [{"type": "command", "command": "/tmp/session-start.sh", "statusMessage": "Loading Kerebrom memory..."}]}],
+			"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/tmp/user-prompt-submit.sh", "statusMessage": "Updating Kerebrom memory..."}]}],
+			"Stop": [{"hooks": [{"type": "command", "command": "/tmp/session-stop.sh", "statusMessage": "Closing Kerebrom session..."}]}]
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	var report doctorReport
+	runAgentConfigDoctorChecks(homeDir, &report)
+
+	for _, check := range report.Checks {
+		if check.Name == "codex hook silent mode" {
+			if check.Status != "WARN" || !strings.Contains(check.Detail, "UserPromptSubmit/user-prompt-submit.sh") {
+				t.Fatalf("unexpected hook silent mode check: %+v", check)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing codex hook silent mode check: %+v", report.Checks)
 }
 
 func TestDoctorDetectsMissingClaudeHookStatusMessages(t *testing.T) {

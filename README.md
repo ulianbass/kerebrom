@@ -75,10 +75,10 @@ Do not enable remote/HTTP memory unless I explicitly ask for it.
 
 | Client | Setup behavior |
 |---|---|
-| Claude Code | MCP entry, lifecycle hooks, auto-approved everyday tools, hook scripts; protocol is delivered by the MCP server and hook payloads, not by occupying user preferences. |
+| Claude Code | MCP entry, lifecycle hooks, auto-approved everyday tools, hook scripts, and suppressible hook payloads; protocol is delivered by the MCP server and hook payloads, not by occupying user preferences. |
 | Claude Desktop Chat | Local MCP server entry. Account memory is cloud-backed, so Kerebrom does not patch private Claude APIs or browser databases. |
 | Claude Cowork | Local MCP plus a native `memory/CLAUDE.md` authority seed when the desktop app has local Cowork account storage. |
-| Codex | MCP server in config, auto-approval for everyday memory tools, and lifecycle hooks with human status messages; protocol is delivered by the MCP server and hook payloads instead of the user instructions textbox. |
+| Codex | MCP server in config, auto-approval for everyday memory tools, and lifecycle hooks with human status messages plus quiet-mode hints; protocol is delivered by the MCP server and hook payloads instead of the user instructions textbox. |
 | Cursor | MCP entry plus Kerebrom memory rule. |
 | Gemini CLI | MCP entry, system prompt, environment flag for system instructions. |
 | OpenCode | MCP entry plus Kerebrom memory protocol file. |
@@ -123,6 +123,8 @@ kerebrom version
 kerebrom update --check
 kerebrom update
 kerebrom doctor --deep
+kerebrom doctor status
+kerebrom doctor heal
 kerebrom setup auto
 kerebrom setup all
 kerebrom stats

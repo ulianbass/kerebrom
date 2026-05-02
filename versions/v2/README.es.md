@@ -95,6 +95,7 @@ make test
 make build
 ./bin/kerebrom version
 ./bin/kerebrom doctor --deep
+./bin/kerebrom doctor heal
 ```
 
 ## Seguridad

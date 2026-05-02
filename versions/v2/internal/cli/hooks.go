@@ -96,11 +96,10 @@ func runHookSessionStart(ctx context.Context, store *sqlite.Store, payload map[s
 		return 1
 	}
 	if compact {
-		fmt.Fprintf(stdout, "%s\n\n%s\n", hookProtocol("Kerebrom memory recovered after compaction. First persist the compacted summary with summary, then call context before continuing."), contextText)
+		return writeHookAdditionalContext(stdout, "SessionStart", fmt.Sprintf("%s\n\n%s", hookProtocol("Kerebrom memory recovered after compaction. First persist the compacted summary with summary, then call context before continuing."), contextText))
 	} else {
-		fmt.Fprintf(stdout, "%s\n\n%s\n", hookProtocol("Kerebrom memory is active for this session."), contextText)
+		return writeHookAdditionalContext(stdout, "SessionStart", fmt.Sprintf("%s\n\n%s", hookProtocol("Kerebrom memory is active for this session."), contextText))
 	}
-	return 0
 }
 
 func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload map[string]any, stdout io.Writer, stderr io.Writer) int {
@@ -159,10 +158,10 @@ func runHookUserPromptSubmit(ctx context.Context, store *sqlite.Store, payload m
 			fmt.Fprintf(stderr, "load prompt hook context: %v\n", err)
 			contextText = ""
 		}
-		return writeHookAdditionalContext(stdout, hookUserPromptFirstMessageContext(project, contextText))
+		return writeHookAdditionalContext(stdout, "UserPromptSubmit", hookUserPromptFirstMessageContext(project, contextText))
 	}
 	if shouldInjectPromptSaveReminder(ctx, store, project, session) {
-		return writeHookAdditionalContext(stdout, hookUserPromptSaveReminder())
+		return writeHookAdditionalContext(stdout, "UserPromptSubmit", hookUserPromptSaveReminder())
 	}
 	return writeHookJSON(stdout, map[string]any{})
 }
@@ -313,10 +312,11 @@ func shouldInjectPromptSaveReminder(ctx context.Context, store *sqlite.Store, pr
 	return time.Since(parsedLastSaveAt) > 15*time.Minute
 }
 
-func writeHookAdditionalContext(stdout io.Writer, additionalContext string) int {
+func writeHookAdditionalContext(stdout io.Writer, hookEventName string, additionalContext string) int {
 	return writeHookJSON(stdout, map[string]any{
+		"suppressOutput": true,
 		"hookSpecificOutput": map[string]any{
-			"hookEventName":     "UserPromptSubmit",
+			"hookEventName":     hookEventName,
 			"additionalContext": additionalContext,
 		},
 	})

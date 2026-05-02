@@ -18,7 +18,7 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 ## Success criteria
 
 1. **Plug-and-play in Claude Desktop**: when the client exposes Kerebrom tools, any user message in a fresh chat should trigger an automatic `context` call before the model answers, without the user mentioning Kerebrom.
-2. **Plug-and-play native hooks**: Claude Code hooks fire on session start, prompt submit, subagent stop, stop, and post-compaction; Codex hooks fire on session start, prompt submit, and stop with human status messages instead of raw event names; the agent never asks permission to call memory tools.
+2. **Plug-and-play native hooks**: Claude Code hooks fire on session start, prompt submit, subagent stop, stop, and post-compaction; Codex hooks fire on session start, prompt submit, and stop with human status messages and quiet-mode hints instead of exposing raw event names where the client supports hiding; the agent never asks permission to call memory tools.
 3. **Cowork native bootstrap**: when Claude Desktop has local Cowork account storage, setup seeds Cowork's native `memory/CLAUDE.md` with an idempotent Kerebrom authority block.
 4. **Self-update**: `kerebrom update` brings the user from any older release to the latest with one command and a single confirmation.
 5. **No data loss across upgrades**: schema changes are additive and existing sessions, observations, prompts, and sync chunks continue to import.
@@ -31,13 +31,13 @@ A solo developer or operator who uses multiple AI clients (Claude Desktop, Claud
 12. **Chronological truth priority**: retrieval, context, and timeline use `valid_at` as the semantic clock so newer corrections and revalidated memories outrank stale observations, while administrative metadata updates do not make old information look current.
 13. **Context Governor**: every `context`/`recall` payload includes an explicit decision contract telling the agent to think, search, analyze, then answer; prefer query matches over generic recency; and use `timeline` when conflicts appear.
 14. **Trust Ledger**: every observation has local lifecycle events for creation, update/correction, duplicate reassertion, import, and soft deletion so memory provenance can be audited without storing raw transcripts.
-15. **Deep Doctor**: `kerebrom doctor --deep` audits the installed vehicle, SQLite integrity, FTS, semantic clock, trust ledger coverage, active-session hygiene, project aliases, AI client configs, and factory drift.
+15. **Doctor Health Mode**: `kerebrom doctor --deep` remains the compatibility audit; `doctor status` and `doctor report` expose the same deep health contract for humans and automation; `doctor heal` backs up the SQLite database, repairs deterministic runtime/setup/FTS drift, and verifies the result; `doctor watch` repeats Health Mode in a single foreground loop.
 
 ## Non-goals
 
 - Programmatic modification of Claude Chat account memory, Claude Personal Preferences, or cloud-backed memory controls through private APIs or browser databases.
 - Telemetry of any kind.
-- Semantic memory rewriting without explicit agent action. Kerebrom can consolidate project names, but it does not rewrite observation content by itself.
+- Semantic memory rewriting without explicit agent action. Kerebrom can consolidate project names and repair mechanical invariants through Doctor Health Mode, but it does not rewrite observation content by itself.
 - Multi-user or networked sync (v2 sync chunks are still filesystem-based).
 - Remote MCP or HTTP API exposure as the default install path. `mcp-http` and `serve` are advanced and opt-in beyond loopback because they change the privacy boundary.
 

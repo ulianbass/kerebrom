@@ -140,9 +140,19 @@ Existing observations are backfilled with a `created` migration event on first i
 
 A session is active only until a client closes it through `summary`, `session-end`, the HTTP session end route, or a native stop hook. All close paths persist a recallable `session_summary` observation, not just a session-row summary field. If a native client hook recently opened a session and the MCP caller omits `session_id`, Kerebrom attaches the MCP tool call to that recent native session instead of creating or closing a parallel `mcp:<project>` session. `summary` always closes the selected session, even if the agent omitted explicit summary text; in that fallback case the session row and the summary observation record `Session closed by user request without an explicit summary.` Clients without reliable stop events can leave rows marked active, so v2.0.6 auto-closes active sessions after 24 hours without prompts or observations. The stale-close summary is explicit: `Auto-closed by Kerebrom after 24h without activity.` This keeps `active_sessions` meaningful without deleting prompts, observations, or session history.
 
-## Deep Doctor
+## Doctor Health Mode
 
-`kerebrom doctor --deep` is the operational readiness check. It verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, stale active sessions before and after runtime repair, project alias cycles, installed binary paths, Codex/Claude config blocks, Codex/Claude hook status messages, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
+`Doctor` is Kerebrom's single health authority. It has modes, not competing protectors:
+
+- `kerebrom doctor --deep` keeps the legacy operational readiness check.
+- `kerebrom doctor status` runs the deep check with capitalized Doctor output.
+- `kerebrom doctor report` emits the deep check as JSON for audits and scripts.
+- `kerebrom doctor heal` runs Health Mode once: acquire a single-writer lock, create a private SQLite snapshot backup with `VACUUM INTO`, run deterministic runtime repairs, rebuild FTS5 indexes from source tables, repair detected AI-client setup through the idempotent setup engine, and verify with a deep report.
+- `kerebrom doctor watch --interval 30m` repeats Health Mode in the foreground for supervised local maintenance.
+
+The deep report verifies the runtime DB file, schema, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, missing `valid_at`, trust-ledger coverage, active duplicate hashes, FTS row availability, FTS5 `integrity-check`, stale active sessions before and after runtime repair, project alias cycles, installed binary paths, Codex/Claude config blocks, Codex/Claude hook status messages, Codex quiet hook mode, factory version alignment, public-doc private path leaks, and ignored binary artifacts. It exits non-zero only on FAIL; WARN means the install is usable but deserves attention.
+
+Health Mode is intentionally conservative. It may fix local invariants that are mechanically knowable: schema drift, lifecycle rows, stale sessions, duplicate active observation hashes, missing semantic clocks, missing trust-ledger events, runtime file permissions, FTS index drift, and managed agent config drift. It does not delete user memories, rewrite semantic truth, expose HTTP transports, or choose between contradictory memories without an explicit agent/user action.
 
 ## Self-update flow
 
@@ -163,7 +173,7 @@ Requirements: Git is **not** required. `make` and `go` are required (same requir
 
 - **Claude Code** (`~/.claude/`): MCP server entry in `mcp.json`, hooks in `settings.json`, the six agent-profile `mcp__Kerebrom__*` entries in `permissions.allow` (and removes any stale Kerebrom permissions outside the active agent surface), five hook scripts in `~/.kerebrom/hooks/claude-code/`, and removal of any old Kerebrom block from user-owned `CLAUDE.md`.
 - **Claude Desktop** (`~/Library/Application Support/Claude/` on macOS): MCP server entry in `claude_desktop_config.json` and, when Cowork local account storage exists, an idempotent Kerebrom block in `local-agent-mode-sessions/<account>/<org>/memory/CLAUDE.md`. Claude Chat account memory is cloud-backed and is not patched through private APIs or browser databases.
-- **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, `codex_hooks = true`, lifecycle hooks in `hooks.json` using Kerebrom-specific wrapper scripts and human `statusMessage` labels, plus removal of any old Kerebrom block from user-owned `AGENTS.md`.
+- **Codex** (`~/.codex/`): MCP server in `config.toml` with auto-approval for the six agent tools, `codex_hooks = true`, lifecycle hooks in `hooks.json` using Kerebrom-specific wrapper scripts, human `statusMessage` labels, and `silent` quiet-mode hints, plus removal of any old Kerebrom block from user-owned `AGENTS.md`.
 - **Cursor** (`~/.cursor/`): MCP entry in `mcp.json`, protocol rule in `rules/kerebrom.mdc`.
 - **Gemini CLI** (`~/.gemini/`): MCP entry in `settings.json`, protocol in `system.md`, env var enabling system.md.
 - **OpenCode** (`~/.config/opencode/`): MCP entry in `opencode.json`, protocol in `kerebrom-memory.md`.
