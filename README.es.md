@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.4](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.4) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.5](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.5) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
