@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ulianbass/kerebrom/internal/config"
+	"github.com/ulianbass/kerebrom/internal/version"
 )
 
 func TestRunHelp(t *testing.T) {
@@ -40,7 +41,7 @@ func TestRunVersion(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", code)
 	}
 
-	if !strings.Contains(stdout.String(), "v2.1.3") {
+	if !strings.Contains(stdout.String(), version.Version) {
 		t.Fatalf("version output missing version: %q", stdout.String())
 	}
 }
