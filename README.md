@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.7) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.8](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.8) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -26,7 +26,7 @@ AI clients usually remember in separate silos. Claude Code, Claude Desktop Chat,
 
 ## Install
 
-Kerebrom currently installs from source. You need Git and Go 1.26 or newer. The installer will tell you clearly if a dependency is missing.
+Kerebrom currently installs from source. You need Git and Go 1.26 or newer. The installer tells you clearly if Go is missing or too old. In interactive mode, if Homebrew is available, it asks before installing or upgrading Go; if you decline, installation stops because Kerebrom cannot build without Go.
 
 For a human-friendly install:
 
@@ -37,6 +37,8 @@ cd kerebrom/versions/v2
 ```
 
 The script builds the binary, installs it to `~/local/bin/kerebrom`, links it from `~/.local/bin/kerebrom`, asks which AI clients to configure when run interactively, runs setup, prints the installed version and stats, then verifies the install with `doctor --deep`.
+
+It does not use network transports, import memory, delete memory, or make system-level dependency changes without user consent. The only dependency it can offer to install automatically is Go through Homebrew when the user explicitly accepts.
 
 For a non-interactive install:
 

@@ -11,8 +11,9 @@ Goal: install Kerebrom as an end-user product, not as a development sandbox.
 - If `make` is unavailable but Go is installed, use `./scripts/install-user.sh --yes --agent auto` from `versions/v2`.
 - Keep Kerebrom local-first. Do not start or expose `mcp-http` or `serve` beyond loopback unless the user explicitly asks for remote connector support and accepts the privacy tradeoff.
 - Do not import legacy backups, delete memory, reset databases, or modify unrelated AI-client configuration.
+- Do not install Go, Homebrew, package-manager dependencies, or use elevated permissions without first explaining the change and getting explicit user approval.
 - After install or update, tell the user to fully restart any open AI client.
-- If a command fails because Go is missing, explain the missing dependency and stop with clear next steps.
+- If a command fails because Go is missing or older than 1.26, explain that Kerebrom cannot build without Go 1.26+, ask whether the user wants to install or upgrade Go, and stop if they decline.
 
 ## Supported Setup Targets
 
@@ -36,7 +37,7 @@ Use `auto` by default. Use a specific target only when the user asks for one, or
 
 ## Fresh Install
 
-Kerebrom installs from source. The user needs Git and Go 1.26 or newer.
+Kerebrom installs from source. The user needs Git and Go 1.26 or newer. Current v2 releases are built and tested on Go 1.26.
 
 For the default agent-friendly path, run:
 
@@ -51,6 +52,16 @@ If `make` is not available but Go is installed, run the shell installer instead:
 ```bash
 ./scripts/install-user.sh --yes --agent auto
 ```
+
+If Go is missing or too old, do not improvise. Tell the user:
+
+```text
+Kerebrom builds from source and requires Go 1.26 or newer.
+Without Go, I cannot install Kerebrom.
+Do you want me to install or upgrade Go first?
+```
+
+Only proceed with a package manager or elevated permissions after the user says yes. If the user says no, stop and explain that Kerebrom cannot be installed until Go is available. The human installer can offer Homebrew-based Go installation interactively when Homebrew exists; otherwise point the user to the official Go downloads at https://go.dev/dl/.
 
 Expected side effects:
 

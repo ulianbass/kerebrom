@@ -6,7 +6,7 @@
 
 ## Instalación
 
-Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo.
+Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo. El instalador explica si Go falta o está viejo antes de detenerse, y en modo interactivo puede ofrecer instalar o actualizar Go con Homebrew solo después de aprobación del usuario.
 
 Instalador amigable:
 
@@ -28,7 +28,7 @@ Target Make para automatización:
 make install-user
 ```
 
-Todos los caminos compilan el binario, lo instalan en `~/local/bin/kerebrom`, lo enlazan desde `~/.local/bin/kerebrom` y ejecutan `kerebrom setup auto`. El script también muestra versión/stats y ejecuta `doctor --deep`.
+Todos los caminos compilan el binario, lo instalan en `~/local/bin/kerebrom`, lo enlazan desde `~/.local/bin/kerebrom` y ejecutan `kerebrom setup auto`. El script también muestra versión/stats y ejecuta `doctor --deep`. No hace cambios de dependencias del sistema sin consentimiento del usuario.
 
 Forzar un target cuando haga falta:
 

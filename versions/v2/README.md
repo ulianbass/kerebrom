@@ -6,7 +6,7 @@
 
 ## Install
 
-Kerebrom currently installs from source. You need Git and Go 1.26 or newer.
+Kerebrom currently installs from source. You need Git and Go 1.26 or newer. The installer explains missing or old Go before stopping, and in interactive mode can offer a Homebrew-based Go install or upgrade only after user approval.
 
 Human-friendly installer:
 
@@ -28,7 +28,7 @@ Make target for automation:
 make install-user
 ```
 
-All install paths build the binary, install it at `~/local/bin/kerebrom`, link it from `~/.local/bin/kerebrom`, and run `kerebrom setup auto`. The script also prints version/stats and runs `doctor --deep`.
+All install paths build the binary, install it at `~/local/bin/kerebrom`, link it from `~/.local/bin/kerebrom`, and run `kerebrom setup auto`. The script also prints version/stats and runs `doctor --deep`. It does not make system dependency changes without user consent.
 
 Force a target when needed:
 

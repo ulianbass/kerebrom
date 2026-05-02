@@ -7,6 +7,9 @@ LINK_BIN_DIR="${KEREBROM_LINK_BIN_DIR:-"$HOME/.local/bin"}"
 SETUP_AGENT="${KEREBROM_SETUP_AGENT:-auto}"
 ASSUME_YES="${KEREBROM_ASSUME_YES:-}"
 RUN_DOCTOR=1
+REQUIRED_GO_MAJOR=1
+REQUIRED_GO_MINOR=26
+RECOMMENDED_GO_VERSION="${KEREBROM_RECOMMENDED_GO_VERSION:-go1.26.2}"
 
 usage() {
 	cat <<'EOF'
@@ -28,7 +31,7 @@ Options:
 
 Environment:
   KEREBROM_SETUP_AGENT, KEREBROM_INSTALL_BIN_DIR, KEREBROM_LINK_BIN_DIR,
-  KEREBROM_ASSUME_YES=1
+  KEREBROM_ASSUME_YES=1, KEREBROM_RECOMMENDED_GO_VERSION=go1.26.2
 
 Default:
   Install to ~/local/bin/kerebrom, link from ~/.local/bin/kerebrom, and run
@@ -41,13 +44,70 @@ die() {
 	exit 1
 }
 
-require_command() {
-	if ! command -v "$1" >/dev/null 2>&1; then
-		die "$1 is required. Install $2, then rerun this installer."
+ask_yes_no() {
+	prompt="$1"
+	default="${2:-N}"
+	if ! is_interactive; then
+		return 1
+	fi
+	if [ "$default" = "Y" ]; then
+		printf '%s [Y/n]: ' "$prompt"
+	else
+		printf '%s [y/N]: ' "$prompt"
+	fi
+	read answer
+	answer="${answer:-$default}"
+	case "$answer" in
+		y|Y|yes|YES) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+go_install_guidance() {
+	cat <<EOF
+Kerebrom builds from source and requires Go ${REQUIRED_GO_MAJOR}.${REQUIRED_GO_MINOR} or newer.
+Recommended for this release: ${RECOMMENDED_GO_VERSION}.
+Without Go, this installer cannot build or install Kerebrom.
+
+Manual options:
+  - Official Go downloads: https://go.dev/dl/
+  - macOS with Homebrew: brew install go
+
+After installing Go, rerun:
+  ./scripts/install-user.sh
+EOF
+}
+
+install_go_with_brew() {
+	if ! command -v brew >/dev/null 2>&1; then
+		return 1
+	fi
+	if command -v go >/dev/null 2>&1; then
+		brew upgrade go || brew install go
+	else
+		brew install go
 	fi
 }
 
+handle_go_requirement() {
+	reason="$1"
+	printf '\n%s\n' "$reason"
+	go_install_guidance
+	if command -v brew >/dev/null 2>&1; then
+		if ask_yes_no "Install or upgrade Go now with Homebrew?" "N"; then
+			install_go_with_brew || die "Homebrew could not install or upgrade Go. Install Go manually from https://go.dev/dl/ and rerun this installer."
+			return 0
+		fi
+		die "Go was not installed. Kerebrom cannot be installed until Go ${REQUIRED_GO_MAJOR}.${REQUIRED_GO_MINOR}+ is available."
+	fi
+	die "Go is not ready and no supported automatic installer was found. Install Go ${REQUIRED_GO_MAJOR}.${REQUIRED_GO_MINOR}+ manually, then rerun this installer."
+}
+
 require_go_version() {
+	if ! command -v go >/dev/null 2>&1; then
+		handle_go_requirement "Go was not found on PATH."
+	fi
+
 	go_version="$(go env GOVERSION 2>/dev/null || true)"
 	if [ "$go_version" = "" ]; then
 		go_version="$(go version 2>/dev/null | awk '{print $3}')"
@@ -60,8 +120,9 @@ require_go_version() {
 	set -- $major_minor
 	major="$1"
 	minor="$2"
-	if [ "$major" -lt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -lt 26 ]; }; then
-		die "Go 1.26 or newer is required. Detected $go_version."
+	if [ "$major" -lt "$REQUIRED_GO_MAJOR" ] || { [ "$major" -eq "$REQUIRED_GO_MAJOR" ] && [ "$minor" -lt "$REQUIRED_GO_MINOR" ]; }; then
+		handle_go_requirement "Go ${REQUIRED_GO_MAJOR}.${REQUIRED_GO_MINOR}+ is required. Detected $go_version."
+		require_go_version
 	fi
 }
 
@@ -181,7 +242,6 @@ while [ "$#" -gt 0 ]; do
 	esac
 done
 
-require_command go "Go 1.26 or newer"
 require_go_version
 
 if is_interactive && [ "$SETUP_AGENT" = "auto" ]; then

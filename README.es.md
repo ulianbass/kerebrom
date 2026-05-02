@@ -1,6 +1,6 @@
 # Kerebrom
 
-[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.7](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.7) · [Historial del repositorio](docs/BRANCHES.md)
+[English](README.md) · [Instalación para agentes IA](docs/AI_AGENT_INSTALL.es.md) · [Release v2.1.8](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.8) · [Historial del repositorio](docs/BRANCHES.md)
 
 > Memoria persistente local para agentes de IA.
 > Instala una vez y Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code y cualquier cliente compatible con MCP pueden compartir una sola capa de memoria durable.
@@ -26,7 +26,7 @@ Los clientes de IA suelen recordar en silos separados. Claude Code, Claude Deskt
 
 ## Instalación
 
-Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo. El instalador te dirá claramente si falta una dependencia.
+Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo. El instalador te dice claramente si Go falta o está viejo. En modo interactivo, si Homebrew está disponible, pregunta antes de instalar o actualizar Go; si rechazas, la instalación se detiene porque Kerebrom no puede compilarse sin Go.
 
 Para una instalación amigable:
 
@@ -37,6 +37,8 @@ cd kerebrom/versions/v2
 ```
 
 El script compila el binario, lo instala en `~/local/bin/kerebrom`, lo enlaza desde `~/.local/bin/kerebrom`, pregunta qué clientes IA configurar cuando se ejecuta de forma interactiva, ejecuta setup, muestra versión y stats, y verifica la instalación con `doctor --deep`.
+
+No usa transportes de red, no importa memoria, no borra memoria ni hace cambios de dependencias del sistema sin consentimiento del usuario. La única dependencia que puede ofrecer instalar automáticamente es Go mediante Homebrew cuando el usuario lo acepta explícitamente.
 
 Para una instalación no interactiva:
 

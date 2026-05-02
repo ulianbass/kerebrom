@@ -11,8 +11,9 @@ Objetivo: instalar Kerebrom como producto de usuario final, no como sandbox de d
 - Si `make` no está disponible pero Go sí está instalado, usa `./scripts/install-user.sh --yes --agent auto` desde `versions/v2`.
 - Mantén Kerebrom local-first. No inicies ni expongas `mcp-http` o `serve` fuera de loopback salvo que el usuario pida explícitamente soporte remoto y acepte el tradeoff de privacidad.
 - No importes backups legacy, no borres memoria, no resetees bases de datos y no modifiques configuración ajena de clientes IA.
+- No instales Go, Homebrew, dependencias de package manager ni uses permisos elevados sin explicar primero el cambio y obtener aprobación explícita del usuario.
 - Después de instalar o actualizar, dile al usuario que reinicie por completo cualquier cliente IA abierto.
-- Si un comando falla porque falta Go, explica la dependencia faltante y detente con próximos pasos claros.
+- Si un comando falla porque falta Go o porque la versión es anterior a 1.26, explica que Kerebrom no puede compilarse sin Go 1.26+, pregunta si el usuario quiere instalar o actualizar Go, y detente si lo rechaza.
 
 ## Targets Soportados
 
@@ -36,7 +37,7 @@ Usa `auto` por defecto. Usa un target específico solo cuando el usuario lo pida
 
 ## Instalación Limpia
 
-Kerebrom se instala desde código fuente. El usuario necesita Git y Go 1.26 o más nuevo.
+Kerebrom se instala desde código fuente. El usuario necesita Git y Go 1.26 o más nuevo. Los releases v2 actuales se compilan y prueban con Go 1.26.
 
 Para la ruta default amigable para agentes, ejecuta:
 
@@ -51,6 +52,16 @@ Si `make` no está disponible pero Go sí está instalado, usa el instalador she
 ```bash
 ./scripts/install-user.sh --yes --agent auto
 ```
+
+Si falta Go o está viejo, no improvises. Dile al usuario:
+
+```text
+Kerebrom se compila desde código fuente y requiere Go 1.26 o más nuevo.
+Sin Go no puedo instalar Kerebrom.
+¿Quieres que instale o actualice Go primero?
+```
+
+Solo procede con un package manager o permisos elevados si el usuario responde que sí. Si dice que no, detente y explica que Kerebrom no puede instalarse hasta que Go esté disponible. El instalador humano puede ofrecer instalación de Go mediante Homebrew de forma interactiva cuando Homebrew existe; si no, dirige al usuario a las descargas oficiales de Go en https://go.dev/dl/.
 
 Efectos esperados:
 
