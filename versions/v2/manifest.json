@@ -1,7 +1,7 @@
 {
   "version_line": "v2",
-  "semver": "v2.1.8",
-  "status": "v2_install_consent_onboarding",
+  "semver": "v2.1.9",
+  "status": "v2_iterative_audit_install_doctor_pass",
   "repo_root_is_product_root": false,
   "factory_version_root": "versions/v2",
   "release_contract": {

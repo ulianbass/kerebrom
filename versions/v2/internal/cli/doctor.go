@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -126,12 +127,13 @@ func runDoctorCheck(args []string, stdout, stderr io.Writer, label string) int {
 	homeDir := fs.String("home", "", "Override home directory")
 	projectDir := fs.String("project-dir", "", "Override repository/factory directory")
 	dbPath := fs.String("db", "", "Override SQLite database path")
+	setupAgent := fs.String("setup-agent", "", "Agent setup profile to verify; defaults to detected installed configs")
 	if err := fs.Parse(reorderFlagArgs(args, map[string]bool{"deep": true, "json": true})); err != nil {
 		return 2
 	}
 
 	resolvedHome, resolvedProject, resolvedDB := resolveDoctorPaths(*homeDir, *projectDir, *dbPath)
-	report := buildDoctorReport(context.Background(), *deep, resolvedHome, resolvedProject, resolvedDB)
+	report := buildDoctorReport(context.Background(), *deep, resolvedHome, resolvedProject, resolvedDB, *setupAgent)
 
 	return finishDoctor(report, *jsonOutput, stdout, label)
 }
@@ -157,7 +159,7 @@ func resolveDoctorPaths(homeDir string, projectDir string, dbPath string) (strin
 	return homeDir, projectDir, dbPath
 }
 
-func buildDoctorReport(ctx context.Context, deep bool, homeDir string, projectDir string, dbPath string) doctorReport {
+func buildDoctorReport(ctx context.Context, deep bool, homeDir string, projectDir string, dbPath string, setupAgent string) doctorReport {
 	report := doctorReport{
 		Version:    version.Full(),
 		DBPath:     strings.TrimSpace(dbPath),
@@ -187,7 +189,7 @@ func buildDoctorReport(ctx context.Context, deep bool, homeDir string, projectDi
 	runStoreDoctorChecks(ctx, store, &report, preRepairStaleSessions)
 	if deep {
 		runVehicleDoctorChecks(strings.TrimSpace(homeDir), &report)
-		runAgentConfigDoctorChecks(strings.TrimSpace(homeDir), &report)
+		runAgentConfigDoctorChecks(strings.TrimSpace(homeDir), &report, setupAgent)
 		runFactoryDoctorChecks(strings.TrimSpace(projectDir), &report)
 	}
 
@@ -281,7 +283,7 @@ func runDoctorHeal(args []string, stdout, stderr io.Writer) int {
 		result.addAction("agent setup repair", "PASS", detail)
 	}
 
-	report := buildDoctorReport(ctx, true, resolvedHome, resolvedProject, resolvedDB)
+	report := buildDoctorReport(ctx, true, resolvedHome, resolvedProject, resolvedDB, *setupAgent)
 	report.Status = report.overallStatus()
 	result.Report = report
 	return finishDoctorHeal(result, *jsonOutput, stdout)
@@ -382,9 +384,9 @@ func hasDoctorFlag(args []string, flag string) bool {
 }
 
 func writeDoctorHelp(w io.Writer) {
-	fmt.Fprintln(w, "usage: kerebrom doctor [--deep] [--json] [--home PATH] [--project-dir PATH] [--db PATH]")
-	fmt.Fprintln(w, "       kerebrom doctor status [--json] [--home PATH] [--project-dir PATH] [--db PATH]")
-	fmt.Fprintln(w, "       kerebrom doctor report [--json] [--home PATH] [--project-dir PATH] [--db PATH]")
+	fmt.Fprintf(w, "usage: kerebrom doctor [--deep] [--json] [--home PATH] [--project-dir PATH] [--db PATH] [--setup-agent %s]\n", strings.Join(setup.SupportedAgents(), "|"))
+	fmt.Fprintf(w, "       kerebrom doctor status [--json] [--home PATH] [--project-dir PATH] [--db PATH] [--setup-agent %s]\n", strings.Join(setup.SupportedAgents(), "|"))
+	fmt.Fprintf(w, "       kerebrom doctor report [--json] [--home PATH] [--project-dir PATH] [--db PATH] [--setup-agent %s]\n", strings.Join(setup.SupportedAgents(), "|"))
 	fmt.Fprintf(w, "       kerebrom doctor heal [--json] [--home PATH] [--project-dir PATH] [--db PATH] [--setup-agent %s] [--binary-path PATH] [--skip-setup] [--skip-backup] [--backup-retention N] [--backup-max-bytes N]\n", strings.Join(setup.SupportedAgents(), "|"))
 	fmt.Fprintln(w, "       kerebrom doctor watch [--interval 30m] [--once] [heal flags]")
 }
@@ -979,11 +981,59 @@ func runVehicleDoctorChecks(homeDir string, report *doctorReport) {
 	}
 }
 
-func runAgentConfigDoctorChecks(homeDir string, report *doctorReport) {
+type doctorAgentTargets struct {
+	Codex         bool
+	ClaudeCode    bool
+	ClaudeDesktop bool
+	GeminiCLI     bool
+	OpenCode      bool
+	Cursor        bool
+	Windsurf      bool
+	VSCode        bool
+}
+
+func (t doctorAgentTargets) any() bool {
+	return t.Codex || t.ClaudeCode || t.ClaudeDesktop || t.GeminiCLI || t.OpenCode || t.Cursor || t.Windsurf || t.VSCode
+}
+
+func runAgentConfigDoctorChecks(homeDir string, report *doctorReport, setupAgent string) {
 	if homeDir == "" {
 		report.add("agent configs", "WARN", "home directory unavailable")
 		return
 	}
+	targets := resolveDoctorAgentTargets(homeDir, setupAgent)
+	if !targets.any() {
+		report.add("agent configs", "SKIP", "no installed or targeted AI client configs detected")
+		return
+	}
+
+	if targets.Codex {
+		runCodexDoctorChecks(homeDir, report)
+	}
+	if targets.ClaudeCode {
+		runClaudeCodeDoctorChecks(homeDir, report)
+	}
+	if targets.ClaudeDesktop {
+		runClaudeDesktopDoctorChecks(homeDir, report)
+	}
+	if targets.GeminiCLI {
+		runGeminiDoctorChecks(homeDir, report)
+	}
+	if targets.OpenCode {
+		runOpenCodeDoctorChecks(homeDir, report)
+	}
+	if targets.Cursor {
+		runCursorDoctorChecks(homeDir, report)
+	}
+	if targets.Windsurf {
+		runWindsurfDoctorChecks(homeDir, report)
+	}
+	if targets.VSCode {
+		runVSCodeDoctorChecks(homeDir, report)
+	}
+}
+
+func runCodexDoctorChecks(homeDir string, report *doctorReport) {
 	codexConfigPath := filepath.Join(homeDir, ".codex", "config.toml")
 	checkContains(report, "codex mcp config", codexConfigPath, []string{"mcp_servers.kerebrom", "kerebrom", "mcp"})
 	checkContains(report, "codex hooks enabled", codexConfigPath, []string{"codex_hooks = true"})
@@ -991,11 +1041,131 @@ func runAgentConfigDoctorChecks(homeDir string, report *doctorReport) {
 	checkContains(report, "codex hook status messages", codexHooksPath, requiredCodexHookStatusMessages)
 	checkCodexHookSilentMode(report, "codex hook silent mode", codexHooksPath)
 	checkNoContains(report, "codex user preferences clean", filepath.Join(homeDir, ".codex", "AGENTS.md"), []string{"KEREBROM:START"})
+}
+
+func runClaudeCodeDoctorChecks(homeDir string, report *doctorReport) {
 	claudeSettingsPath := filepath.Join(homeDir, ".claude", "settings.json")
 	checkContains(report, "claude code settings", claudeSettingsPath, []string{"mcp__Kerebrom__context", "mcp__Kerebrom__remember"})
 	checkContains(report, "claude hook status messages", claudeSettingsPath, requiredClaudeHookStatusMessages)
 	checkNoContains(report, "claude global instructions clean", filepath.Join(homeDir, ".claude", "CLAUDE.md"), []string{"KEREBROM:START"})
-	checkContains(report, "claude desktop mcp config", filepath.Join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json"), []string{"Kerebrom", "kerebrom", "mcp"})
+}
+
+func runClaudeDesktopDoctorChecks(homeDir string, report *doctorReport) {
+	checkContains(report, "claude desktop mcp config", doctorClaudeDesktopConfigPath(homeDir), []string{"Kerebrom", "kerebrom", "mcp"})
+}
+
+func runGeminiDoctorChecks(homeDir string, report *doctorReport) {
+	checkContains(report, "gemini mcp config", filepath.Join(homeDir, ".gemini", "settings.json"), []string{"kerebrom", "mcpServers", "mcp"})
+	checkContains(report, "gemini system instructions", filepath.Join(homeDir, ".gemini", "system.md"), []string{"Kerebrom Memory", "ACTIVE PROTOCOL"})
+	checkContains(report, "gemini env enables system md", filepath.Join(homeDir, ".gemini", ".env"), []string{"GEMINI_SYSTEM_MD=1"})
+}
+
+func runOpenCodeDoctorChecks(homeDir string, report *doctorReport) {
+	checkContains(report, "opencode mcp config", filepath.Join(homeDir, ".config", "opencode", "opencode.json"), []string{"kerebrom", "mcp", "enabled"})
+	checkContains(report, "opencode memory instructions", filepath.Join(homeDir, ".config", "opencode", "kerebrom-memory.md"), []string{"Kerebrom Memory", "ACTIVE PROTOCOL"})
+}
+
+func runCursorDoctorChecks(homeDir string, report *doctorReport) {
+	checkContains(report, "cursor mcp config", filepath.Join(homeDir, ".cursor", "mcp.json"), []string{"kerebrom", "mcpServers", "mcp"})
+	checkContains(report, "cursor rule", filepath.Join(homeDir, ".cursor", "rules", "kerebrom.mdc"), []string{"Kerebrom", "context", "remember"})
+}
+
+func runWindsurfDoctorChecks(homeDir string, report *doctorReport) {
+	checkContains(report, "windsurf mcp config", filepath.Join(homeDir, ".codeium", "windsurf", "mcp_config.json"), []string{"kerebrom", "mcpServers", "mcp"})
+	checkContains(report, "windsurf rules", filepath.Join(homeDir, ".windsurfrules"), []string{"Kerebrom Memory", "ACTIVE PROTOCOL"})
+}
+
+func runVSCodeDoctorChecks(homeDir string, report *doctorReport) {
+	configDir := doctorVSCodeUserConfigDir(homeDir)
+	checkContains(report, "vscode mcp config", filepath.Join(configDir, "mcp.json"), []string{"kerebrom", "servers", "mcp"})
+	checkContains(report, "vscode memory instructions", filepath.Join(configDir, "prompts", "kerebrom-memory.instructions.md"), []string{"Kerebrom Memory", "ACTIVE PROTOCOL"})
+}
+
+func resolveDoctorAgentTargets(homeDir string, setupAgent string) doctorAgentTargets {
+	agent := normalizeDoctorSetupAgent(setupAgent)
+	switch agent {
+	case "all":
+		return doctorAgentTargets{Codex: true, ClaudeCode: true, ClaudeDesktop: true, GeminiCLI: true, OpenCode: true, Cursor: true, Windsurf: true, VSCode: true}
+	case "codex":
+		return doctorAgentTargets{Codex: true}
+	case "claude":
+		return doctorAgentTargets{ClaudeCode: true, ClaudeDesktop: true}
+	case "claude-code":
+		return doctorAgentTargets{ClaudeCode: true}
+	case "claude-desktop":
+		return doctorAgentTargets{ClaudeDesktop: true}
+	case "gemini-cli":
+		return doctorAgentTargets{GeminiCLI: true}
+	case "opencode":
+		return doctorAgentTargets{OpenCode: true}
+	case "cursor":
+		return doctorAgentTargets{Cursor: true}
+	case "windsurf":
+		return doctorAgentTargets{Windsurf: true}
+	case "vscode":
+		return doctorAgentTargets{VSCode: true}
+	default:
+		return detectDoctorAgentTargets(homeDir)
+	}
+}
+
+func detectDoctorAgentTargets(homeDir string) doctorAgentTargets {
+	return doctorAgentTargets{
+		Codex: pathExistsForDoctor(filepath.Join(homeDir, ".codex", "config.toml")) ||
+			pathExistsForDoctor(filepath.Join(homeDir, ".codex", "hooks.json")),
+		ClaudeCode: pathExistsForDoctor(filepath.Join(homeDir, ".claude", "settings.json")) ||
+			pathExistsForDoctor(filepath.Join(homeDir, ".claude", "mcp.json")),
+		ClaudeDesktop: pathExistsForDoctor(doctorClaudeDesktopConfigPath(homeDir)),
+		GeminiCLI: pathExistsForDoctor(filepath.Join(homeDir, ".gemini", "settings.json")) ||
+			pathExistsForDoctor(filepath.Join(homeDir, ".gemini", "system.md")),
+		OpenCode: pathExistsForDoctor(filepath.Join(homeDir, ".config", "opencode", "opencode.json")) ||
+			pathExistsForDoctor(filepath.Join(homeDir, ".config", "opencode", "kerebrom-memory.md")),
+		Cursor: pathExistsForDoctor(filepath.Join(homeDir, ".cursor", "mcp.json")) ||
+			pathExistsForDoctor(filepath.Join(homeDir, ".cursor", "rules", "kerebrom.mdc")),
+		Windsurf: pathExistsForDoctor(filepath.Join(homeDir, ".codeium", "windsurf", "mcp_config.json")) ||
+			pathExistsForDoctor(filepath.Join(homeDir, ".windsurfrules")),
+		VSCode: pathExistsForDoctor(filepath.Join(doctorVSCodeUserConfigDir(homeDir), "mcp.json")) ||
+			pathExistsForDoctor(filepath.Join(doctorVSCodeUserConfigDir(homeDir), "prompts", "kerebrom-memory.instructions.md")),
+	}
+}
+
+func normalizeDoctorSetupAgent(agent string) string {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	switch agent {
+	case "gemini":
+		return "gemini-cli"
+	case "vs-code", "code":
+		return "vscode"
+	default:
+		return agent
+	}
+}
+
+func pathExistsForDoctor(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func doctorClaudeDesktopConfigPath(homeDir string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Roaming", "Claude", "claude_desktop_config.json")
+	default:
+		return filepath.Join(homeDir, ".config", "Claude", "claude_desktop_config.json")
+	}
+}
+
+func doctorVSCodeUserConfigDir(homeDir string) string {
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(homeDir, "Library", "Application Support", "Code", "User")
+	case "windows":
+		return filepath.Join(homeDir, "AppData", "Roaming", "Code", "User")
+	default:
+		return filepath.Join(homeDir, ".config", "Code", "User")
+	}
 }
 
 func runFactoryDoctorChecks(projectDir string, report *doctorReport) {

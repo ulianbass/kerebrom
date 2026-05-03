@@ -28,6 +28,8 @@ Make target for automation:
 make install-user
 ```
 
+This target delegates to `scripts/install-user.sh --yes`, preserving the same Go dependency checks, install paths, version/stats output, and Doctor verification used by the direct installer.
+
 All install paths build the binary, install it at `~/local/bin/kerebrom`, link it from `~/.local/bin/kerebrom`, and run `kerebrom setup auto`. The script also prints version/stats and runs `doctor --deep`. It does not make system dependency changes without user consent.
 
 Force a target when needed:

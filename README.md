@@ -1,6 +1,6 @@
 # Kerebrom
 
-[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.8](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.8) · [Repository history](docs/BRANCHES.md)
+[Español](README.es.md) · [Install for AI agents](docs/AI_AGENT_INSTALL.md) · [Release v2.1.9](https://github.com/ulianbass/kerebrom/releases/tag/v2.1.9) · [Repository history](docs/BRANCHES.md)
 
 > Local-first persistent memory for AI agents.
 > Install once, then Claude, Codex, Cursor, Gemini CLI, OpenCode, Windsurf, VS Code, and any MCP-capable client can share one durable memory layer.
@@ -51,6 +51,8 @@ For automation that already has `make`:
 ```bash
 make install-user
 ```
+
+The Make target delegates to the same installer, so Go checks, dependency consent rules, version/stats output, and Doctor verification stay consistent.
 
 All three paths install the binary and run:
 

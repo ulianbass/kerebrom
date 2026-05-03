@@ -181,7 +181,7 @@ run_doctor_check() {
 	fi
 
 	printf '\nVerifying installation with Doctor...\n'
-	if "$INSTALLED_BINARY" doctor --deep --project-dir "$ROOT_DIR"; then
+	if "$INSTALLED_BINARY" doctor --deep --project-dir "$ROOT_DIR" --setup-agent "$SETUP_AGENT"; then
 		return 0
 	fi
 

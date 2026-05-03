@@ -315,7 +315,7 @@ func TestRunDoctorStatusUsesCapitalizedDoctor(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := Run([]string{"doctor", "status", "--home", homeDir, "--project-dir", v2Root}, &stdout, &stderr)
+	code := Run([]string{"doctor", "status", "--home", homeDir, "--project-dir", v2Root, "--setup-agent", "codex"}, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("doctor status failed: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
@@ -444,7 +444,7 @@ args = ["mcp", "--tools=agent"]
 	}
 
 	var report doctorReport
-	runAgentConfigDoctorChecks(homeDir, &report)
+	runAgentConfigDoctorChecks(homeDir, &report, "")
 
 	for _, check := range report.Checks {
 		if check.Name == "codex hook status messages" {
@@ -486,7 +486,7 @@ args = ["mcp", "--tools=agent"]
 	}
 
 	var report doctorReport
-	runAgentConfigDoctorChecks(homeDir, &report)
+	runAgentConfigDoctorChecks(homeDir, &report, "")
 
 	for _, check := range report.Checks {
 		if check.Name == "codex hook silent mode" {
@@ -518,7 +518,7 @@ func TestDoctorDetectsMissingClaudeHookStatusMessages(t *testing.T) {
 	}
 
 	var report doctorReport
-	runAgentConfigDoctorChecks(homeDir, &report)
+	runAgentConfigDoctorChecks(homeDir, &report, "")
 
 	for _, check := range report.Checks {
 		if check.Name == "claude hook status messages" {
@@ -529,4 +529,53 @@ func TestDoctorDetectsMissingClaudeHookStatusMessages(t *testing.T) {
 		}
 	}
 	t.Fatalf("missing claude hook status message check: %+v", report.Checks)
+}
+
+func TestDoctorAutoAgentChecksOnlyDetectedConfigs(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	desktopPath := doctorClaudeDesktopConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(desktopPath), 0o755); err != nil {
+		t.Fatalf("create claude desktop dir: %v", err)
+	}
+	if err := os.WriteFile(desktopPath, []byte(`{"mcpServers":{"Kerebrom":{"command":"/tmp/kerebrom","args":["mcp","--tools=agent"]}}}`), 0o600); err != nil {
+		t.Fatalf("write claude desktop config: %v", err)
+	}
+
+	var report doctorReport
+	runAgentConfigDoctorChecks(homeDir, &report, "auto")
+
+	if got := report.overallStatus(); got != "PASS" {
+		t.Fatalf("auto doctor checks should pass with only detected Claude Desktop config, got %s: %+v", got, report.Checks)
+	}
+	for _, check := range report.Checks {
+		if strings.HasPrefix(check.Name, "codex ") || strings.HasPrefix(check.Name, "claude code ") {
+			t.Fatalf("auto doctor should not check missing non-detected client %q: %+v", check.Name, report.Checks)
+		}
+	}
+}
+
+func TestDoctorExplicitAgentChecksRequestedTarget(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	var report doctorReport
+	runAgentConfigDoctorChecks(homeDir, &report, "codex")
+
+	foundCodex := false
+	for _, check := range report.Checks {
+		if check.Name == "codex mcp config" {
+			foundCodex = true
+			if check.Status != "WARN" || !strings.Contains(check.Detail, "not found") {
+				t.Fatalf("explicit codex check should warn on missing config, got %+v", check)
+			}
+		}
+		if strings.HasPrefix(check.Name, "claude ") {
+			t.Fatalf("explicit codex check should not inspect Claude configs: %+v", report.Checks)
+		}
+	}
+	if !foundCodex {
+		t.Fatalf("explicit codex check did not inspect Codex config: %+v", report.Checks)
+	}
 }

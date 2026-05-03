@@ -22,12 +22,8 @@ run:
 fmt:
 	$(GO) fmt ./...
 
-install-user: build
-	@mkdir -p "$(INSTALL_BIN_DIR)" "$(LINK_BIN_DIR)"
-	tmp_binary="$(INSTALL_BIN_DIR)/.kerebrom.$$$$"; \
-	cp "$(BINARY)" "$$tmp_binary"; \
-	chmod 0755 "$$tmp_binary"; \
-	mv -f "$$tmp_binary" "$(INSTALL_BIN_DIR)/kerebrom"
-	ln -sf "$(INSTALL_BIN_DIR)/kerebrom" "$(LINK_BIN_DIR)/kerebrom"
-	"$(INSTALL_BIN_DIR)/kerebrom" setup "$(SETUP_AGENT)" --binary-path "$(INSTALL_BIN_DIR)/kerebrom"
-	rm -f "bin/kerebrom"
+install-user:
+	@KEREBROM_INSTALL_BIN_DIR="$(INSTALL_BIN_DIR)" \
+	KEREBROM_LINK_BIN_DIR="$(LINK_BIN_DIR)" \
+	KEREBROM_SETUP_AGENT="$(SETUP_AGENT)" \
+	./scripts/install-user.sh --yes --agent "$(SETUP_AGENT)"

@@ -28,6 +28,8 @@ Target Make para automatización:
 make install-user
 ```
 
+Este target delega a `scripts/install-user.sh --yes`, conservando las mismas verificaciones de dependencia Go, rutas de instalación, salida de versión/stats y verificación con Doctor que usa el instalador directo.
+
 Todos los caminos compilan el binario, lo instalan en `~/local/bin/kerebrom`, lo enlazan desde `~/.local/bin/kerebrom` y ejecutan `kerebrom setup auto`. El script también muestra versión/stats y ejecuta `doctor --deep`. No hace cambios de dependencias del sistema sin consentimiento del usuario.
 
 Forzar un target cuando haga falta:
