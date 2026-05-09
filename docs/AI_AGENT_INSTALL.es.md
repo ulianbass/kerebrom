@@ -37,7 +37,7 @@ Usa `auto` por defecto. Usa un target específico solo cuando el usuario lo pida
 
 ## Instalación Limpia
 
-Kerebrom se instala desde código fuente. El usuario necesita Git y Go 1.26 o más nuevo. Los releases v2 actuales se compilan y prueban con Go 1.26.
+Kerebrom se instala desde código fuente. El usuario necesita Git y Go 1.26 o más nuevo. Los releases v2 actuales se compilan y prueban con Go 1.26; usa el parche Go 1.26 más reciente disponible, actualmente Go 1.26.3 o más nuevo.
 
 Para la ruta default amigable para agentes, ejecuta:
 

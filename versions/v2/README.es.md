@@ -6,7 +6,7 @@
 
 ## Instalación
 
-Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo. El instalador explica si Go falta o está viejo antes de detenerse, y en modo interactivo puede ofrecer instalar o actualizar Go con Homebrew solo después de aprobación del usuario.
+Kerebrom actualmente se instala desde código fuente. Necesitas Git y Go 1.26 o más nuevo; usa el parche Go 1.26 más reciente disponible. El instalador explica si Go falta o está viejo antes de detenerse, y en modo interactivo puede ofrecer instalar o actualizar Go con Homebrew solo después de aprobación del usuario.
 
 Instalador amigable:
 

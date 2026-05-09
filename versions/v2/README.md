@@ -6,7 +6,7 @@
 
 ## Install
 
-Kerebrom currently installs from source. You need Git and Go 1.26 or newer. The installer explains missing or old Go before stopping, and in interactive mode can offer a Homebrew-based Go install or upgrade only after user approval.
+Kerebrom currently installs from source. You need Git and Go 1.26 or newer; use the newest Go 1.26 patch available. The installer explains missing or old Go before stopping, and in interactive mode can offer a Homebrew-based Go install or upgrade only after user approval.
 
 Human-friendly installer:
 

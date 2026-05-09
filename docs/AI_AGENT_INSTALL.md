@@ -37,7 +37,7 @@ Use `auto` by default. Use a specific target only when the user asks for one, or
 
 ## Fresh Install
 
-Kerebrom installs from source. The user needs Git and Go 1.26 or newer. Current v2 releases are built and tested on Go 1.26.
+Kerebrom installs from source. The user needs Git and Go 1.26 or newer. Current v2 releases are built and tested on Go 1.26; use the newest Go 1.26 patch available, currently Go 1.26.3 or newer.
 
 For the default agent-friendly path, run:
 

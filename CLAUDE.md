@@ -19,7 +19,7 @@ If `make` is unavailable but Go is installed:
 ./scripts/install-user.sh --yes --agent auto
 ```
 
-If Go is missing or older than 1.26, explain that Kerebrom cannot build without Go 1.26+, ask the user whether they want Go installed or upgraded, and only proceed after explicit approval. Do not install Go, Homebrew, package-manager dependencies, or use elevated permissions without consent.
+If Go is missing or older than 1.26, explain that Kerebrom cannot build without Go 1.26+, ask the user whether they want Go installed or upgraded, and only proceed after explicit approval. Prefer the newest Go 1.26 patch available when installing or upgrading. Do not install Go, Homebrew, package-manager dependencies, or use elevated permissions without consent.
 
 Verify:
 

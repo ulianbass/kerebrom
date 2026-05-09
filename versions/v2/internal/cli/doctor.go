@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,6 +59,12 @@ type requiredCodexHookCommand struct {
 	Script string
 }
 
+type requiredCodexHookStatusMessage struct {
+	Event    string
+	Script   string
+	Messages []string
+}
+
 const (
 	defaultDoctorBackupRetentionCount = 24
 	defaultDoctorBackupMaxBytes       = int64(1 << 30)
@@ -74,10 +81,33 @@ type doctorLockOwner struct {
 	StartedAt time.Time
 }
 
-var requiredCodexHookStatusMessages = []string{
-	"Loading Kerebrom memory...",
-	"Updating Kerebrom memory...",
-	"Closing Kerebrom session...",
+var requiredCodexHookStatusMessages = []requiredCodexHookStatusMessage{
+	{
+		Event:  "SessionStart",
+		Script: "session-start.sh",
+		Messages: []string{
+			"Loading Kerebrom memory...",
+			"Cargando memoria de Kerebrom...",
+		},
+	},
+	{
+		Event:  "UserPromptSubmit",
+		Script: "user-prompt-submit.sh",
+		Messages: []string{
+			"Updating Kerebrom memory...",
+			"Actualizando memoria de Kerebrom...",
+			"Guardando prompt en Kerebrom...",
+		},
+	},
+	{
+		Event:  "Stop",
+		Script: "session-stop.sh",
+		Messages: []string{
+			"Closing Kerebrom session...",
+			"Cerrando sesion de Kerebrom...",
+			"Cerrando sesión de Kerebrom...",
+		},
+	},
 }
 
 var requiredCodexSilentHookCommands = []requiredCodexHookCommand{
@@ -1038,7 +1068,7 @@ func runCodexDoctorChecks(homeDir string, report *doctorReport) {
 	checkContains(report, "codex mcp config", codexConfigPath, []string{"mcp_servers.kerebrom", "kerebrom", "mcp"})
 	checkContains(report, "codex hooks enabled", codexConfigPath, []string{"codex_hooks = true"})
 	codexHooksPath := filepath.Join(homeDir, ".codex", "hooks.json")
-	checkContains(report, "codex hook status messages", codexHooksPath, requiredCodexHookStatusMessages)
+	checkCodexHookStatusMessages(report, "codex hook status messages", codexHooksPath)
 	checkCodexHookSilentMode(report, "codex hook silent mode", codexHooksPath)
 	checkNoContains(report, "codex user preferences clean", filepath.Join(homeDir, ".codex", "AGENTS.md"), []string{"KEREBROM:START"})
 }
@@ -1392,6 +1422,39 @@ func checkContains(report *doctorReport, name string, path string, requiredNeedl
 	report.add(name, "PASS", path)
 }
 
+func checkCodexHookStatusMessages(report *doctorReport, name string, path string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			report.add(name, "WARN", path+" not found")
+			return
+		}
+		report.add(name, "FAIL", err.Error())
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		report.add(name, "WARN", "invalid Codex hooks JSON: "+err.Error())
+		return
+	}
+	hooks, ok := payload["hooks"].(map[string]any)
+	if !ok {
+		report.add(name, "WARN", "missing hooks map")
+		return
+	}
+	missing := []string{}
+	for _, required := range requiredCodexHookStatusMessages {
+		if !codexHookCommandHasAllowedString(hooks, required.Event, required.Script, "statusMessage", required.Messages) {
+			missing = append(missing, required.Event+"/"+required.Script)
+		}
+	}
+	if len(missing) > 0 {
+		report.add(name, "WARN", "missing localized statusMessage for: "+strings.Join(missing, ", "))
+		return
+	}
+	report.add(name, "PASS", path)
+}
+
 func checkCodexHookSilentMode(report *doctorReport, name string, path string) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1423,6 +1486,35 @@ func checkCodexHookSilentMode(report *doctorReport, name string, path string) {
 		return
 	}
 	report.add(name, "PASS", path)
+}
+
+func codexHookCommandHasAllowedString(hooks map[string]any, event string, script string, field string, allowed []string) bool {
+	rawEntries, ok := hooks[event].([]any)
+	if !ok {
+		return false
+	}
+	for _, rawEntry := range rawEntries {
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			continue
+		}
+		rawCommands, ok := entry["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, rawCommand := range rawCommands {
+			command, ok := rawCommand.(map[string]any)
+			if !ok {
+				continue
+			}
+			commandPath, _ := command["command"].(string)
+			value, _ := command[field].(string)
+			if strings.HasSuffix(commandPath, script) && slices.Contains(allowed, value) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func codexHookCommandHasBool(hooks map[string]any, event string, script string, field string, want bool) bool {

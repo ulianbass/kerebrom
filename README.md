@@ -26,7 +26,7 @@ AI clients usually remember in separate silos. Claude Code, Claude Desktop Chat,
 
 ## Install
 
-Kerebrom currently installs from source. You need Git and Go 1.26 or newer. The installer tells you clearly if Go is missing or too old. In interactive mode, if Homebrew is available, it asks before installing or upgrading Go; if you decline, installation stops because Kerebrom cannot build without Go.
+Kerebrom currently installs from source. You need Git and Go 1.26 or newer; use the newest Go 1.26 patch available. The installer tells you clearly if Go is missing or too old. In interactive mode, if Homebrew is available, it asks before installing or upgrading Go; if you decline, installation stops because Kerebrom cannot build without Go.
 
 For a human-friendly install:
 

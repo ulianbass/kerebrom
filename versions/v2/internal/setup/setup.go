@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -252,7 +253,7 @@ func setupCodex(opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if err := upsertCodexHooks(hooks, hookDir); err != nil {
+	if err := upsertCodexHooks(hooks, hookDir, codexHookStatusMessages(opts.HomeDir)); err != nil {
 		return Result{}, err
 	}
 	if err := writeJSONFile(hooksPath, hooks); err != nil {
@@ -803,7 +804,59 @@ func upsertClaudeHooks(settings map[string]any, hookDir string) error {
 	return nil
 }
 
-func upsertCodexHooks(config map[string]any, hookDir string) error {
+type codexStatusMessages struct {
+	sessionStart     string
+	userPromptSubmit string
+	stop             string
+}
+
+func codexHookStatusMessages(homeDir string) codexStatusMessages {
+	if isSpanishLocale(codexPreferredLocale(homeDir)) {
+		return codexStatusMessages{
+			sessionStart:     "Cargando memoria de Kerebrom...",
+			userPromptSubmit: "Guardando prompt en Kerebrom...",
+			stop:             "Cerrando sesión de Kerebrom...",
+		}
+	}
+	return codexStatusMessages{
+		sessionStart:     "Loading Kerebrom memory...",
+		userPromptSubmit: "Updating Kerebrom memory...",
+		stop:             "Closing Kerebrom session...",
+	}
+}
+
+func codexPreferredLocale(homeDir string) string {
+	for _, key := range []string{"KEREBROM_HOOK_LANGUAGE", "KEREBROM_LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" && value != "C" && value != "C.UTF-8" {
+			return value
+		}
+	}
+
+	globalStatePath := filepath.Join(homeDir, ".codex", ".codex-global-state.json")
+	if state, err := readJSONMap(globalStatePath); err == nil {
+		if locale, ok := state["localeOverride"].(string); ok && strings.TrimSpace(locale) != "" {
+			return locale
+		}
+	}
+
+	if runtime.GOOS == "darwin" {
+		if output, err := exec.Command("defaults", "read", "-g", "AppleLanguages").Output(); err == nil {
+			return string(output)
+		}
+	}
+
+	return ""
+}
+
+func isSpanishLocale(locale string) bool {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+	return strings.HasPrefix(locale, "es") ||
+		strings.Contains(locale, "\"es") ||
+		strings.Contains(locale, "\nes") ||
+		strings.Contains(locale, "(es")
+}
+
+func upsertCodexHooks(config map[string]any, hookDir string, messages codexStatusMessages) error {
 	rawHooks, ok := config["hooks"]
 	if !ok || rawHooks == nil {
 		rawHooks = map[string]any{}
@@ -821,7 +874,7 @@ func upsertCodexHooks(config map[string]any, hookDir string) error {
 					"command":       filepath.Join(hookDir, "session-start.sh"),
 					"timeout":       10,
 					"silent":        true,
-					"statusMessage": "Loading Kerebrom memory...",
+					"statusMessage": messages.sessionStart,
 				},
 			},
 		},
@@ -834,7 +887,7 @@ func upsertCodexHooks(config map[string]any, hookDir string) error {
 					"command":       filepath.Join(hookDir, "user-prompt-submit.sh"),
 					"timeout":       2,
 					"silent":        true,
-					"statusMessage": "Updating Kerebrom memory...",
+					"statusMessage": messages.userPromptSubmit,
 				},
 			},
 		},
@@ -847,7 +900,7 @@ func upsertCodexHooks(config map[string]any, hookDir string) error {
 					"command":       filepath.Join(hookDir, "session-stop.sh"),
 					"timeout":       5,
 					"silent":        true,
-					"statusMessage": "Closing Kerebrom session...",
+					"statusMessage": messages.stop,
 				},
 			},
 		},

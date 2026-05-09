@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,7 @@ func TestRunCodexSetupIsIdempotent(t *testing.T) {
 	configPath := filepath.Join(homeDir, ".codex", "config.toml")
 	agentsPath := filepath.Join(homeDir, ".codex", "AGENTS.md")
 	hooksPath := filepath.Join(homeDir, ".codex", "hooks.json")
+	globalStatePath := filepath.Join(homeDir, ".codex", ".codex-global-state.json")
 
 	mustWriteFile(t, configPath, `model = "gpt-5.4"
 
@@ -52,6 +54,7 @@ args = ["/path/to/tradingview.js"]
     ]
   }
 }`)
+	mustWriteFile(t, globalStatePath, `{"localeOverride":"en-US"}`)
 
 	result, err := Run("codex", Options{
 		HomeDir:    homeDir,
@@ -157,6 +160,69 @@ args = ["/path/to/tradingview.js"]
 	agentsContent = mustReadFile(t, agentsPath)
 	if strings.Contains(agentsContent, codexMemoryBlockStart) {
 		t.Fatalf("codex AGENTS should remain free of Kerebrom protocol blocks: %q", agentsContent)
+	}
+}
+
+func TestRunCodexSetupUsesSpanishHookStatusMessages(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+	globalStatePath := filepath.Join(homeDir, ".codex", ".codex-global-state.json")
+
+	mustWriteFile(t, configPath, `model = "gpt-5.4"`)
+	mustWriteFile(t, globalStatePath, `{"localeOverride":"es-GT"}`)
+
+	if _, err := Run("codex", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	}); err != nil {
+		t.Fatalf("run codex setup: %v", err)
+	}
+
+	hooksContent := mustReadFile(t, filepath.Join(homeDir, ".codex", "hooks.json"))
+	for _, statusMessage := range []string{
+		"Cargando memoria de Kerebrom...",
+		"Guardando prompt en Kerebrom...",
+		"Cerrando sesión de Kerebrom...",
+	} {
+		if !strings.Contains(hooksContent, statusMessage) {
+			t.Fatalf("missing Spanish Codex hook status message %q in %s", statusMessage, hooksContent)
+		}
+	}
+}
+
+func TestRunCodexSetupFallsBackToMacOSAppleLanguages(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS defaults fallback only applies on darwin")
+	}
+
+	homeDir := t.TempDir()
+	binaryPath := filepath.Join(homeDir, "bin", "kerebrom")
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+	binDir := filepath.Join(homeDir, "fake-bin")
+	defaultsPath := filepath.Join(binDir, "defaults")
+
+	mustWriteFile(t, configPath, `model = "gpt-5.4"`)
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("create fake bin dir: %v", err)
+	}
+	if err := os.WriteFile(defaultsPath, []byte("#!/bin/sh\nprintf '%s\\n' '(\"es-GT\")'\n"), 0o755); err != nil {
+		t.Fatalf("write fake defaults: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if _, err := Run("codex", Options{
+		HomeDir:    homeDir,
+		BinaryPath: binaryPath,
+	}); err != nil {
+		t.Fatalf("run codex setup: %v", err)
+	}
+
+	hooksContent := mustReadFile(t, filepath.Join(homeDir, ".codex", "hooks.json"))
+	if !strings.Contains(hooksContent, "Cargando memoria de Kerebrom...") {
+		t.Fatalf("missing Spanish Codex hook status from macOS fallback in %s", hooksContent)
 	}
 }
 

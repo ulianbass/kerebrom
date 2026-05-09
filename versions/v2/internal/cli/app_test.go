@@ -448,8 +448,50 @@ args = ["mcp", "--tools=agent"]
 
 	for _, check := range report.Checks {
 		if check.Name == "codex hook status messages" {
-			if check.Status != "WARN" || !strings.Contains(check.Detail, "Updating Kerebrom memory...") {
+			if check.Status != "WARN" || !strings.Contains(check.Detail, "UserPromptSubmit/user-prompt-submit.sh") {
 				t.Fatalf("unexpected hook status message check: %+v", check)
+			}
+			return
+		}
+	}
+	t.Fatalf("missing codex hook status message check: %+v", report.Checks)
+}
+
+func TestDoctorAcceptsSpanishCodexHookStatusMessages(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := filepath.Join(homeDir, ".codex", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("create codex dir: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`[features]
+codex_hooks = true
+
+[mcp_servers.kerebrom]
+command = "/tmp/kerebrom"
+args = ["mcp", "--tools=agent"]
+`), 0o600); err != nil {
+		t.Fatalf("write codex config: %v", err)
+	}
+	hooksPath := filepath.Join(homeDir, ".codex", "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte(`{
+		"hooks": {
+			"SessionStart": [{"hooks": [{"type": "command", "command": "/tmp/session-start.sh", "statusMessage": "Cargando memoria de Kerebrom...", "silent": true}]}],
+			"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/tmp/user-prompt-submit.sh", "statusMessage": "Guardando prompt en Kerebrom...", "silent": true}]}],
+			"Stop": [{"hooks": [{"type": "command", "command": "/tmp/session-stop.sh", "statusMessage": "Cerrando sesión de Kerebrom...", "silent": true}]}]
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	var report doctorReport
+	runAgentConfigDoctorChecks(homeDir, &report, "")
+
+	for _, check := range report.Checks {
+		if check.Name == "codex hook status messages" {
+			if check.Status != "PASS" {
+				t.Fatalf("expected Spanish hook status messages to pass, got %+v", check)
 			}
 			return
 		}
